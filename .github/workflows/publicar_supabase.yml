@@ -6,26 +6,22 @@ name: Publicar a Supabase
 # junto con el resto del repo "Sistema" (ver reglas_de_negocio.md de este
 # repo, sección "Separación de repos").
 #
-# IMPORTANTE — riesgo real que se acepta al estar en un repo separado: este
-# workflow y `descarga_diaria.yml` (en el OTRO repo) usan el MISMO login de
-# LightData vía Playwright. Antes compartían un `concurrency group` de
-# GitHub Actions que los encolaba entre sí — eso SOLO funciona dentro de un
-# mismo repo, así que ya no protege nada cruzando repos. La mitigación
-# elegida es de horario, no de software: este job dispara en minutos
-# DISTINTOS a los de descarga_diaria.yml (ver abajo), para minimizar que
-# coincidan. Es "best effort", no una garantía — si alguna corrida falla
-# con un timeout de Playwright esperando un campo de login/filtro, es la
-# causa más probable (ver histórico real del 2026-11-16 en el otro repo,
-# antes de la separación).
+# Cuenta de LightData PROPIA y distinta (2026-11-16, decisión del
+# usuario): este workflow NO usa la misma cuenta que `descarga_diaria.yml`
+# del otro repo — por eso los secrets LIGHTDATA_USER/LIGHTDATA_PASS de
+# ESTE repo tienen que cargarse con un login de LightData dedicado a este
+# pipeline, nunca copiando las credenciales de producción. Con cuentas
+# distintas, Playwright nunca comparte sesión entre los dos pipelines, así
+# que no hay riesgo real de que se pisen entre sí — no hace falta
+# coordinar horarios con el otro repo (antes, cuando compartían cuenta,
+# sí hacía falta; ver el historial en reglas_de_negocio.md de este repo).
 #
 # Disparo: workflow_dispatch vía cron-job.org (el `schedule:` nativo de
 # GitHub Actions llega con 4-5h de atraso, medido en el pipeline de
 # producción — no usar).
-# Configuración en cron-job.org: 1 job, cada 10 min, en minutos 5,15,25,
-# 35,45,55 (offset de 5' respecto de los jobs "Hoy" de descarga_diaria.yml,
-# que disparan en los minutos en punto) — SOLO en horario operativo
-# (11:00-21:00 ART = 14:00-24:00 UTC, lunes a sábado): de noche no entran
-# paquetes nuevos al depósito, correrlo igual solo suma riesgo de choque.
+# Configuración en cron-job.org: 1 job, cada 10 min, SOLO en horario
+# operativo (11:00-21:00 ART = 14:00-24:00 UTC, lunes a sábado) — de noche
+# no entran paquetes nuevos al depósito, correrlo igual no suma nada.
 #   URL:     https://api.github.com/repos/Mercadopacks/Sistema/actions/workflows/publicar_supabase.yml/dispatches
 #   Método:  POST
 #   Headers: Authorization: Bearer <PERSONAL_ACCESS_TOKEN>
@@ -34,8 +30,8 @@ name: Publicar a Supabase
 #   Body:    {"ref":"main","inputs":{}}
 #
 # Secrets que necesita este workflow en GitHub (Settings > Secrets and
-# variables > Actions de ESTE repo — no se heredan del otro):
-#   LIGHTDATA_USER / LIGHTDATA_PASS  - mismas credenciales que descarga_diaria.yml
+# variables > Actions de ESTE repo — son propios, no se heredan del otro):
+#   LIGHTDATA_USER / LIGHTDATA_PASS  - cuenta de LightData DEDICADA a este pipeline (no la de producción)
 #   SUPABASE_URL                     - URL del proyecto de Supabase
 #   SUPABASE_SERVICE_ROLE_KEY        - Service role key de ese proyecto
 #

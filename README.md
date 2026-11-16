@@ -13,10 +13,10 @@ completo de reglas de negocio, esquema de base de datos y arquitectura.
 - **`scripts/`**: ingesta de LightData -> Supabase
   (`publicar_supabase.py`), más `descargar_lightdata.py`/
   `fecha_descarga.py`/`generar_reporte.py` — **copias deliberadas** del
-  repo de producción, no un submódulo. Ver `reglas_de_negocio.md` sección
-  0 para por qué están duplicadas y el riesgo que eso acepta (los dos
-  pipelines comparten el mismo login de LightData, sin coordinación
-  automática entre repos).
+  repo de producción, no un submódulo. Usa una **cuenta de LightData
+  propia** (`LIGHTDATA_USER`/`LIGHTDATA_PASS` de este repo), distinta de
+  la de producción — así los dos pipelines nunca se cruzan. Ver
+  `reglas_de_negocio.md` sección 0 para el detalle.
 - **`scripts/migraciones/`**: SQL para correr a mano en el SQL Editor de
   Supabase (no hay migraciones automáticas todavía).
 - **`supabase/functions/crear-usuario/`**: Edge Function que crea la

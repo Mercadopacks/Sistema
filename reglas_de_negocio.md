@@ -27,24 +27,22 @@ el pipeline de producción (Firestore). Se separaron en dos repos:
 **Por qué importa esto para el día a día:** `descargar_lightdata.py`,
 `fecha_descarga.py` y `generar_reporte.py` de la carpeta `scripts/` de
 este repo son **copias deliberadas** de los mismos archivos del otro
-repo — no un submódulo, no un paquete compartido. Los dos pipelines
-inician sesión en la MISMA cuenta de LightData por su cuenta, cada uno
-con su propia copia del scraper.
+repo — no un submódulo, no un paquete compartido. Cada repo tiene su
+propia copia del scraper.
 
-**Riesgo real que esto acepta (leído con el usuario, 2026-11-16):** antes
-de separar los repos, un `concurrency group` de GitHub Actions evitaba
-que las dos corridas (esta y `descarga_diaria.yml`) chocaran entre sí
-logueándose al mismo tiempo en LightData (hubo un timeout real de
-Playwright por esto, documentado en el otro repo). Ese mecanismo es
-**por repo** — separar los repos lo rompe, y no hay forma de
-reemplazarlo 1 a 1 sin agregar infraestructura nueva (un lock externo,
-por ejemplo). La mitigación que se eligió en su lugar es de **horario**:
-los cron jobs de cron-job.org de este repo disparan en minutos
-*distintos* a los del otro repo (ver `.github/workflows/publicar_supabase.yml`
-para los minutos exactos). Es "best effort", no una garantía — si
-`descargar_lightdata.py` falla con un timeout de Playwright esperando un
-campo de login o de fecha, esta es la causa más probable a revisar
-primero, antes de sospechar de LightData.
+**Cuentas de LightData separadas (2026-11-16, decisión del usuario):**
+este pipeline usa una cuenta de LightData **propia y distinta** de la
+que usa `descarga_diaria.yml` en el otro repo — los secrets
+`LIGHTDATA_USER`/`LIGHTDATA_PASS` de este repo tienen que cargarse con
+ese login dedicado, nunca con las credenciales de producción. Antes de
+esto, los dos pipelines compartían la misma cuenta y un `concurrency
+group` de GitHub Actions (que solo funciona dentro de un mismo repo)
+evitaba que se pisaran logueándose al mismo tiempo — al separar los
+repos ese mecanismo dejó de servir, y hubo un timeout real de Playwright
+por esto (documentado en el otro repo, antes de la separación). Con
+cuentas distintas, ese riesgo queda eliminado de raíz: cada sesión de
+Playwright es independiente, no hay sesión compartida que se pueda pisar
+— no hace falta coordinar horarios entre los dos repos.
 
 **Si LightData cambia el formato del export, el flujo de login, o
 cualquier selector de Playwright**, el fix hay que aplicarlo a mano en
@@ -284,3 +282,4 @@ Reglas de negocio confirmadas con el usuario (2026-11-16):
 | 2026-11-16 | Fix genérico en `abrirModalAbm`: ya no se cierra ni pierde los datos cargados cuando falla una validación o un guardado (afecta a los 13 modales del sistema). |
 | 2026-11-16 | `publicar_supabase.yml` pasa de disparo manual a automatizado (cron-job.org, cada 10 min en horario operativo). |
 | 2026-11-16 | Separación de repos: dashboard + scripts de ingesta pasan del repo de producción a este repo (`Mercadopacks/Sistema`), ver sección 0. |
+| 2026-11-16 | Cuenta de LightData propia y distinta de la de producción — elimina de raíz el riesgo de choque de Playwright entre los dos pipelines (ver sección 0). |
