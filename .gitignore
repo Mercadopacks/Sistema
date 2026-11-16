@@ -1,0 +1,28 @@
+# Exports crudos de LightData: contienen datos personales reales
+# (nombre, teléfono, email del destinatario).
+datos_crudos/*.xls
+datos_crudos/*.xlsx
+!datos_crudos/.gitkeep
+
+# Captura de pantalla que genera descargar_lightdata.py si falla (debug local)
+scripts/error_descarga.png
+
+# Entorno virtual de Python, si se crea uno local
+scripts/.venv/
+__pycache__/
+*.pyc
+
+# Credenciales locales (service role key de Supabase, LightData) para
+# corridas manuales — nunca se versionan.
+.env
+.env.*
+scripts/.env
+scripts/.env.*
+
+# Caché local del Supabase CLI (metadata de `supabase link`, versiones,
+# etc.) — se regenera sola.
+supabase/.temp/
+
+# Sistema operativo / editor
+.DS_Store
+Thumbs.db

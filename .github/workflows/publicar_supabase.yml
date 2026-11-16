@@ -1,0 +1,116 @@
+name: Publicar a Supabase
+
+# Automatiza la ingesta de LightData -> Supabase para Mercadopacks Sistema.
+# Hasta 2026-11-16 este workflow vivía en el repo
+# mercadopacks-metricas-diarias (production, Firestore) — se separó acá
+# junto con el resto del repo "Sistema" (ver reglas_de_negocio.md de este
+# repo, sección "Separación de repos").
+#
+# IMPORTANTE — riesgo real que se acepta al estar en un repo separado: este
+# workflow y `descarga_diaria.yml` (en el OTRO repo) usan el MISMO login de
+# LightData vía Playwright. Antes compartían un `concurrency group` de
+# GitHub Actions que los encolaba entre sí — eso SOLO funciona dentro de un
+# mismo repo, así que ya no protege nada cruzando repos. La mitigación
+# elegida es de horario, no de software: este job dispara en minutos
+# DISTINTOS a los de descarga_diaria.yml (ver abajo), para minimizar que
+# coincidan. Es "best effort", no una garantía — si alguna corrida falla
+# con un timeout de Playwright esperando un campo de login/filtro, es la
+# causa más probable (ver histórico real del 2026-11-16 en el otro repo,
+# antes de la separación).
+#
+# Disparo: workflow_dispatch vía cron-job.org (el `schedule:` nativo de
+# GitHub Actions llega con 4-5h de atraso, medido en el pipeline de
+# producción — no usar).
+# Configuración en cron-job.org: 1 job, cada 10 min, en minutos 5,15,25,
+# 35,45,55 (offset de 5' respecto de los jobs "Hoy" de descarga_diaria.yml,
+# que disparan en los minutos en punto) — SOLO en horario operativo
+# (11:00-21:00 ART = 14:00-24:00 UTC, lunes a sábado): de noche no entran
+# paquetes nuevos al depósito, correrlo igual solo suma riesgo de choque.
+#   URL:     https://api.github.com/repos/Mercadopacks/Sistema/actions/workflows/publicar_supabase.yml/dispatches
+#   Método:  POST
+#   Headers: Authorization: Bearer <PERSONAL_ACCESS_TOKEN>
+#            Accept: application/vnd.github+json
+#            Content-Type: application/json
+#   Body:    {"ref":"main","inputs":{}}
+#
+# Secrets que necesita este workflow en GitHub (Settings > Secrets and
+# variables > Actions de ESTE repo — no se heredan del otro):
+#   LIGHTDATA_USER / LIGHTDATA_PASS  - mismas credenciales que descarga_diaria.yml
+#   SUPABASE_URL                     - URL del proyecto de Supabase
+#   SUPABASE_SERVICE_ROLE_KEY        - Service role key de ese proyecto
+#
+# También se puede disparar a mano: pestaña "Actions" de este repo >
+# "Publicar a Supabase" > "Run workflow". "Fecha" vacío = hoy (ART).
+
+on:
+  workflow_dispatch:
+    inputs:
+      fecha:
+        description: 'Fecha a descargar y subir (YYYY-MM-DD). Vacío = hoy (ART).'
+        required: false
+        default: ''
+
+# Encola corridas de ESTE workflow entre sí (ej. una corrida atrasada +
+# un disparo manual al mismo tiempo) — ya NO protege contra
+# descarga_diaria.yml del otro repo, ver nota arriba.
+concurrency:
+  group: publicar-supabase
+  cancel-in-progress: false
+
+jobs:
+  descargar-y-publicar:
+    runs-on: ubuntu-latest
+    # Reusa la imagen de CI del repo de producción (Python + Playwright/
+    # Chromium + LibreOffice + requirements.txt ya instalados) en vez de
+    # mantener un Dockerfile/build propio duplicado — es infraestructura
+    # de build genérica, no lógica de negocio, así que no hace falta
+    # separarla. Si falla el pull por permisos de paquete (packages
+    # privados no siempre son visibles cruzando repos aunque sea el mismo
+    # org), hay que poner el paquete como público en
+    # github.com/orgs/Mercadopacks/packages.
+    container:
+      image: ghcr.io/mercadopacks/mercadopacks-metricas-diarias/ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Descargar repo
+        uses: actions/checkout@v4
+
+      # supabase/python-dotenv no están en la imagen base (son solo de
+      # este pipeline) — se instalan aparte en cada corrida.
+      - name: Instalar dependencias extra (supabase, python-dotenv)
+        working-directory: scripts
+        run: pip install -r requirements_supabase.txt
+
+      - name: Descargar de LightData y publicar a Supabase
+        working-directory: scripts
+        env:
+          LIGHTDATA_USER: ${{ secrets.LIGHTDATA_USER }}
+          LIGHTDATA_PASS: ${{ secrets.LIGHTDATA_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FECHA_INPUT: ${{ github.event.inputs.fecha }}
+        run: |
+          set -e
+          if [ -n "$FECHA_INPUT" ]; then
+            FECHA_DESCARGA="$FECHA_INPUT"
+          else
+            FECHA_DESCARGA=$(date -u -d "-3 hours" +%F)  # ART = UTC-3
+          fi
+          export FECHA_DESCARGA
+          SALIDA=$(python3 descargar_lightdata.py)
+          echo "$SALIDA"
+          RUTA=$(echo "$SALIDA" | tail -n1 | sed 's/^Archivo descargado: //')
+          python3 publicar_supabase.py "$RUTA"
+
+      - name: Subir captura de pantalla si falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-publicar-supabase
+          path: scripts/error_descarga.png
+          if-no-files-found: ignore

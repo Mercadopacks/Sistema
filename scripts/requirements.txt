@@ -1,0 +1,7 @@
+pandas
+numpy
+openpyxl
+xlrd
+playwright==1.62.0
+firebase-admin
+requests
