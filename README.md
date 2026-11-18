@@ -17,6 +17,11 @@ completo de reglas de negocio, esquema de base de datos y arquitectura.
   propia** (`LIGHTDATA_USER`/`LIGHTDATA_PASS` de este repo), distinta de
   la de producción — así los dos pipelines nunca se cruzan. Ver
   `reglas_de_negocio.md` sección 0 para el detalle.
+- **`scripts/sincronizar_lightdata.py`**: trae el listado de usuarios de
+  Lightdata (`--live`, pega directo al endpoint interno vía Playwright;
+  o un .xlsx exportado a mano como respaldo) y lo usa para crear/vincular
+  repartidores en `choferes_roster` automáticamente. Ver
+  `integracion_usuarios_lightdata.md` (raíz del repo).
 - **`scripts/migraciones/`**: SQL para correr a mano en el SQL Editor de
   Supabase (no hay migraciones automáticas todavía).
 - **`supabase/functions/crear-usuario/`**: Edge Function que crea la

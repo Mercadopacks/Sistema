@@ -131,8 +131,14 @@
   .nav-item svg{width:16px; height:16px; flex-shrink:0;}
   .nav-item:hover{background:#1e1e1e; color:#fff;}
   .nav-item.activo{background:var(--dorado); color:var(--negro);}
-  .sidebar.colapsado .nav-item{justify-content:center; padding:12px 0;}
+  .sidebar.colapsado .nav-item{justify-content:center; padding:12px 0; position:relative;}
   .sidebar.colapsado .nav-item .texto{display:none;}
+  /* Colapsado, el contador pasa a ser un puntito en la esquina del ícono
+     en vez de un pill con número al lado del texto (que no existe más). */
+  .sidebar.colapsado .nav-item .nav-contador{
+    position:absolute; top:6px; right:6px; margin-left:0;
+    min-width:8px; height:8px; padding:0; font-size:0; border-radius:50%;
+  }
 
   .nav-group-label{
     display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:8px;
@@ -384,6 +390,8 @@
   .badge.rojo{background:#fdecea; color:#c0392b;}
   .badge.naranja{background:#fff1e0; color:#b85c00;}
   .badge.gris{background:#f0efe9; color:#777;}
+  .nav-contador{background:#c0392b; color:#fff; font-size:11px; font-weight:700; line-height:1; padding:2px 6px; border-radius:10px; margin-left:auto;}
+  .fila-pendiente-completar{background:#fff9ee;}
   .mini-dot.azul{background:#4a90d9;}
   .mini-dot.naranja{background:#f2994a;}
   .mini-dot.gris{background:#aaa;}
@@ -632,6 +640,7 @@
            (pedido 2026-11-16, ver .config-sidebar más abajo). -->
       <button class="nav-item" data-vista="admin">
         <i data-lucide="settings"></i><span class="texto">Configuración</span>
+        <span class="nav-contador" id="contador-choferes-pendientes" hidden>0</span>
       </button>
     </nav>
   </div>
@@ -674,7 +683,7 @@
           <button class="chip activo" data-tab="horas">Entregas por hora</button>
           <button class="chip" data-tab="cruce">Cruce por hora de entrega</button>
           <button class="chip" data-tab="zona">Por zona</button>
-          <button class="chip" data-tab="ranking">Ranking de choferes</button>
+          <button class="chip" data-tab="ranking">Ranking de repartidores</button>
         </div>
 
         <div class="card" id="panel-horas">
@@ -710,8 +719,8 @@
         </div>
 
         <div class="card" id="panel-ranking" hidden>
-          <h3 style="margin-top:0;">Ranking de choferes</h3>
-          <input id="buscar-chofer" class="buscador" placeholder="Buscar chofer…" />
+          <h3 style="margin-top:0;">Ranking de repartidores</h3>
+          <input id="buscar-chofer" class="buscador" placeholder="Buscar repartidor…" />
           <div class="tabla-scroll">
             <table>
               <thead>
@@ -777,7 +786,7 @@
             </div>
           </div>
           <div class="buscar-mas-filtrar" id="fallidos-buscar-wrap">
-            <input id="buscar-fallidos" class="buscador" placeholder="Buscar por chofer, cliente, localidad o tracking…" />
+            <input id="buscar-fallidos" class="buscador" placeholder="Buscar por repartidor, cliente, localidad o tracking…" />
             <div class="combo-filtro" id="popover-filtros-fallidos">
               <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
                 <i data-lucide="sliders-horizontal"></i>Filtrar
@@ -825,7 +834,7 @@
                   <th>Tracking</th>
                   <th>Cliente</th>
                   <th>Localidad</th>
-                  <th>Chofer</th>
+                  <th>Repartidor</th>
                   <th>Origen</th>
                   <th>Estado</th>
                   <th>Tipo</th>
@@ -848,7 +857,7 @@
           <input id="buscar-duplicado-fallidos" class="buscador" placeholder="Buscar envío…" />
           <div class="tabla-scroll tabla-scroll-chica">
             <table>
-              <thead><tr><th>Tracking</th><th>Cliente</th><th>Localidad</th><th>Chofer</th><th>Estado</th><th></th></tr></thead>
+              <thead><tr><th>Tracking</th><th>Cliente</th><th>Localidad</th><th>Repartidor</th><th>Estado</th><th></th></tr></thead>
               <tbody id="tabla-buscar-duplicado"></tbody>
             </table>
           </div>
@@ -891,9 +900,9 @@
           </div>
 
           <div class="card">
-            <h3 style="margin-top:0;">Choferes en ruta</h3>
+            <h3 style="margin-top:0;">Repartidores en ruta</h3>
             <div class="buscar-mas-filtrar">
-              <input id="buscar-ruta" class="buscador" placeholder="Buscar chofer…" style="margin-bottom:0;" />
+              <input id="buscar-ruta" class="buscador" placeholder="Buscar repartidor…" style="margin-bottom:0;" />
               <div class="combo-filtro" id="popover-filtros-ruta">
                 <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
                   <i data-lucide="sliders-horizontal"></i>Filtrar
@@ -932,7 +941,7 @@
               <table>
                 <thead>
                   <tr>
-                    <th class="ordenable" data-sort="cadete">Chofer<span class="flecha">↕</span></th>
+                    <th class="ordenable" data-sort="cadete">Repartidor<span class="flecha">↕</span></th>
                     <th class="ordenable" data-sort="zona">Zona<span class="flecha">↕</span></th>
                     <th class="ordenable" data-sort="progreso">Progreso<span class="flecha">↕</span></th>
                     <th class="ordenable" data-sort="rendimiento">Rendimiento<span class="flecha">↕</span>
@@ -945,7 +954,7 @@
                       <span class="mini-info" tabindex="0" role="img" data-tip="Hora del último movimiento registrado (entrega o gestión de un pendiente). Solo se muestra cuando el recorrido ya terminó."><i data-lucide="info"></i></span>
                     </th>
                     <th class="ordenable" data-sort="sinResolver">Pendientes<span class="flecha">↕</span>
-                      <span class="mini-info" tabindex="0" role="img" data-tip="Sin resolver: el chofer no fue o no cerró el estado — hay que preguntarle qué pasó.&#10;Gestionados: Nadie, Reprogramado, Rechazado, Cancelado, No entregado — cuenta como recorrido cerrado."><i data-lucide="info"></i></span>
+                      <span class="mini-info" tabindex="0" role="img" data-tip="Sin resolver: el repartidor no fue o no cerró el estado — hay que preguntarle qué pasó.&#10;Gestionados: Nadie, Reprogramado, Rechazado, Cancelado, No entregado — cuenta como recorrido cerrado."><i data-lucide="info"></i></span>
                     </th>
                   </tr>
                 </thead>
@@ -1001,13 +1010,13 @@
               </div>
             </div>
             <div class="acciones-icono">
-              <button type="button" class="btn-icono-chico" id="btn-cargar-manana" title="Cargar choferes de mañana"><i data-lucide="calendar-plus"></i></button>
+              <button type="button" class="btn-icono-chico" id="btn-cargar-manana" title="Cargar repartidores de mañana"><i data-lucide="calendar-plus"></i></button>
               <button type="button" class="btn-icono-chico" id="btn-imprimir-rutas" title="Imprimir hojas de ruta pendientes"><i data-lucide="printer"></i></button>
-              <button type="button" class="btn-icono-chico" id="btn-agregar-chofer" title="Agregar chofer"><i data-lucide="plus"></i></button>
+              <button type="button" class="btn-icono-chico" id="btn-agregar-chofer" title="Agregar repartidor"><i data-lucide="plus"></i></button>
             </div>
           </div>
           <div class="buscar-mas-filtrar">
-            <input id="buscar-asistencia" class="buscador" placeholder="Buscar chofer…" />
+            <input id="buscar-asistencia" class="buscador" placeholder="Buscar repartidor…" />
             <div class="combo-filtro" id="popover-filtros-asistencia">
               <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
                 <i data-lucide="sliders-horizontal"></i>Filtrar
@@ -1063,7 +1072,7 @@
             <table id="tabla-asistencia-el">
               <thead>
                 <tr>
-                  <th class="ordenable" data-sort="nombre">Chofer<span class="flecha">↕</span></th>
+                  <th class="ordenable" data-sort="nombre">Repartidor<span class="flecha">↕</span></th>
                   <th class="ordenable" data-col="tipo_vehiculo" data-sort="tipo_vehiculo">Vehículo<span class="flecha">↕</span></th>
                   <th class="ordenable" data-col="turno" data-sort="turno">Turno<span class="flecha">↕</span></th>
                   <th class="ordenable" data-col="zona" data-sort="zona">Zona<span class="flecha">↕</span></th>
@@ -1078,7 +1087,7 @@
                   <th class="paso deposito" data-col="pallet_retirado_deposito">Pallet<br>retirado<span class="quien">Depósito</span></th>
                   <th class="ordenable col-estado-asist" data-sort="estado">
                     Estado<span class="flecha">↕</span>
-                    <span class="mini-info" tabindex="0" role="img" data-tip="✅ Retirado / en ruta.&#10;📦 Pallet listo para retirar (ya llegó al depósito).&#10;🚪 Llegó al depósito, sin pallet todavía.&#10;🚚 En camino al depósito.&#10;📦 Pallet listo, esperando al chofer.&#10;✔️ Asistencia confirmada (recién empieza el proceso).&#10;⚬ Sin confirmar / no asiste.&#10;⚠️ Alerta: no asiste con pallet armado, o tiene fallidos sin recibir."><i data-lucide="info"></i></span>
+                    <span class="mini-info" tabindex="0" role="img" data-tip="✅ Retirado / en ruta.&#10;📦 Pallet listo para retirar (ya llegó al depósito).&#10;🚪 Llegó al depósito, sin pallet todavía.&#10;🚚 En camino al depósito.&#10;📦 Pallet listo, esperando al repartidor.&#10;✔️ Asistencia confirmada (recién empieza el proceso).&#10;⚬ Sin confirmar / no asiste.&#10;⚠️ Alerta: no asiste con pallet armado, o tiene fallidos sin recibir."><i data-lucide="info"></i></span>
                   </th>
                   <th class="col-opciones">Opciones</th>
                 </tr>
@@ -1098,7 +1107,7 @@
         </div>
 
         <div class="card">
-          <h3 style="margin-top:0;">Choferes por zona</h3>
+          <h3 style="margin-top:0;">Repartidores por zona</h3>
           <div class="zonas-vivo" id="zonas-vivo"></div>
         </div>
       </div>
@@ -1110,7 +1119,7 @@
              elija una sección (ver seleccionarModoAdmin()). -->
         <div class="config-layout">
           <aside class="config-sidebar">
-            <button class="config-nav-item" data-modo-admin-link="choferes"><i data-lucide="users"></i><span>Choferes</span></button>
+            <button class="config-nav-item" data-modo-admin-link="choferes"><i data-lucide="users"></i><span>Repartidores</span><span class="nav-contador" id="contador-choferes-pendientes-submenu" hidden>0</span></button>
             <button class="config-nav-item" data-modo-admin-link="vehiculos"><i data-lucide="car"></i><span>Vehículos</span></button>
             <button class="config-nav-item" data-modo-admin-link="zonas"><i data-lucide="map"></i><span>Zonas</span></button>
             <button class="config-nav-item" data-modo-admin-link="turnos"><i data-lucide="clock"></i><span>Turnos</span></button>
@@ -1123,7 +1132,7 @@
         <div id="admin-bienvenida" class="card">
           <h3 style="margin-top:0;">Configuración</h3>
           <p class="texto-muted" style="font-size:14px; line-height:1.6;">
-            Acá se administran los datos base del sistema: el roster de choferes y sus vehículos/turnos/zonas,
+            Acá se administran los datos base del sistema: el roster de repartidores y sus vehículos/turnos/zonas,
             las localidades y zonas que usa el resto del dashboard para filtrar, los umbrales de alerta
             (cuántos minutos/días antes de mostrar una demora como urgente), el mapeo de qué Estado de Lightdata
             cuenta como Fallido o Cambio, y los usuarios que pueden entrar al sistema junto con qué vistas
@@ -1133,10 +1142,19 @@
         </div>
 
         <div id="admin-choferes" hidden>
+          <div class="card" id="aviso-choferes-pendientes" hidden style="background:#fff9ee; border-color:#f0c56a;">
+            <div style="display:flex; align-items:center; gap:10px; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <i data-lucide="alert-triangle" style="color:#b9700a;"></i>
+                <span><strong id="aviso-choferes-pendientes-texto"></strong> se dieron de alta automáticamente desde Lightdata y les falta vehículo, zona, turno y/o localidad.</span>
+              </div>
+              <button type="button" class="btn-filtrar" id="btn-ver-solo-pendientes"><i data-lucide="filter"></i>Ver solo pendientes</button>
+            </div>
+          </div>
           <div class="card">
             <div class="buscar-mas-filtrar">
-              <input id="buscar-admin-choferes" class="buscador" placeholder="Buscar chofer…" />
-              <button type="button" class="btn-filtrar" id="btn-agregar-chofer-roster"><i data-lucide="plus"></i>Agregar chofer</button>
+              <input id="buscar-admin-choferes" class="buscador" placeholder="Buscar repartidor…" />
+              <button type="button" class="btn-filtrar" id="btn-agregar-chofer-roster"><i data-lucide="plus"></i>Agregar repartidor</button>
             </div>
             <div class="tabla-scroll">
               <table>
@@ -1227,7 +1245,7 @@
               <input id="buscar-admin-fallidos-mapeo" class="buscador" placeholder="Buscar estado…" />
               <button type="button" class="btn-filtrar" id="btn-agregar-fallidos-mapeo"><i data-lucide="plus"></i>Agregar estado</button>
             </div>
-            <p class="mini-sub">Qué significa cada "Estado" que trae Lightdata para los Fallidos: si vuelve a salir o se devuelve a la tienda. Los Cambios NO se detectan por este mapeo — entran solos a la lista cuando Lightdata trae algo cargado en "Logistica Inversa" o la palabra "cambio" en "Observaciones", sin importar el Estado (el Estado describe el paquete nuevo entregado, no si el chofer ya devolvió el original).</p>
+            <p class="mini-sub">Qué significa cada "Estado" que trae Lightdata para los Fallidos: si vuelve a salir o se devuelve a la tienda. Los Cambios NO se detectan por este mapeo — entran solos a la lista cuando Lightdata trae algo cargado en "Logistica Inversa" o la palabra "cambio" en "Observaciones", sin importar el Estado (el Estado describe el paquete nuevo entregado, no si el repartidor ya devolvió el original).</p>
             <div class="tabla-scroll">
               <table>
                 <thead><tr><th>Estado (Lightdata)</th><th>Tipo</th><th>Destino</th><th class="col-opciones">Opciones</th></tr></thead>
@@ -1890,7 +1908,7 @@
       </tr>
     `).join("") + (!texto && data.sin_chofer_total ? `
       <tr>
-        <td class="sin-datos">(sin chofer asignado)</td>
+        <td class="sin-datos">(sin repartidor asignado)</td>
         <td>${data.sin_chofer_total}</td>
         <td class="sin-datos">—</td>
         <td class="sin-datos">—</td>
@@ -1952,7 +1970,7 @@
     pendiente: "Pendiente",
     devuelto_tienda: "Devuelto a tienda",
     recibido_planta: "Recibido en planta",
-    descontar: "Descontar al chofer",
+    descontar: "Descontar al repartidor",
     cerrado_manual: "Cerrado",
   };
 
@@ -2110,7 +2128,7 @@
     const pendientes = stateFallidos.filas.filter(f => f.estatus === "pendiente");
     const porChofer = {};
     pendientes.forEach(f => {
-      const nombre = f.envio.cadete || "Sin chofer";
+      const nombre = f.envio.cadete || "Sin repartidor";
       const g = porChofer[nombre] || (porChofer[nombre] = { nombre, fallidos: 0, cambios: 0, diasMax: 0 });
       if(f.tipo === "Cambio") g.cambios++; else g.fallidos++;
       if(f.dias !== null && f.dias > g.diasMax) g.diasMax = f.dias;
@@ -2181,7 +2199,7 @@
     if(stateFallidos.modo === "repartidor"){
       // Detalle de un repartidor: siempre sus casos pendientes, sin los
       // filtros de Tipo/Destino/Estatus de la pestaña "Todos".
-      filas = filas.filter(f => (f.envio.cadete || "Sin chofer") === stateFallidos.choferSeleccionado && f.estatus === "pendiente");
+      filas = filas.filter(f => (f.envio.cadete || "Sin repartidor") === stateFallidos.choferSeleccionado && f.estatus === "pendiente");
     } else {
       if(stateFallidos.tipo !== "todos") filas = filas.filter(f => f.tipo === stateFallidos.tipo);
       if(stateFallidos.destino) filas = filas.filter(f => f.destino === stateFallidos.destino);
@@ -3105,7 +3123,7 @@
 
     const tbody = document.getElementById("tabla-ruta");
     if(!filas.length){
-      tbody.innerHTML = `<tr><td colspan="7" class="sin-datos">Sin choferes para este filtro.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="sin-datos">Sin repartidores para este filtro.</td></tr>`;
       return;
     }
     tbody.innerHTML = filas.map(f => {
@@ -3118,7 +3136,7 @@
         celdaPendientes = `<button type="button" class="btn-pendientes gestionado" data-chofer="${f.cadete}">Gestionados: ${f.pendientes}</button>`;
       }
       const tipRendimiento = (f.rendimiento.label === "Sin actividad"
-        ? `Sin ningún movimiento hace ${Math.round(f.minutosSinActividad)} min — consultar al chofer qué pasó.\n\n`
+        ? `Sin ningún movimiento hace ${Math.round(f.minutosSinActividad)} min — consultar al repartidor qué pasó.\n\n`
         : "")
         + `Min. entre entregas: ${f.minEntreEntregas === null ? "—" : f.minEntreEntregas.toFixed(1) + " min"}\n`
         + `Hora 1ª entrega: ${f.horaPrimeraEntregaTxt}\n`
@@ -3144,7 +3162,7 @@
       .sort((a, b) => (b.minEntreEntregas ?? -1) - (a.minEntreEntregas ?? -1));
     const cont = document.getElementById("ruta-alertas-lista");
     if(!demorados.length){
-      cont.innerHTML = `<p class="sin-datos">Ningún chofer está demorado ni sin actividad en este filtro.</p>`;
+      cont.innerHTML = `<p class="sin-datos">Ningún repartidor está demorado ni sin actividad en este filtro.</p>`;
       return;
     }
     cont.innerHTML = demorados.map(f => `
@@ -3250,18 +3268,18 @@
     const sinResolverTotal = filas.reduce((s, f) => s + f.sinResolver, 0);
 
     const tarjetas = [
-      { label: "Choferes en ruta", valor: total,
-        info: "Cantidad de choferes que entran en el filtro de zona y búsqueda actual (no el total de la operación)." },
+      { label: "Repartidores en ruta", valor: total,
+        info: "Cantidad de repartidores que entran en el filtro de zona y búsqueda actual (no el total de la operación)." },
       { label: "% dentro de ritmo", valor: pctDentroRitmo === null ? "—" : _fmtPct(pctDentroRitmo),
-        info: 'Porcentaje con rendimiento "Óptimo" o "A tiempo" (hasta 20 min entre una entrega y la siguiente), sobre los choferes que ya tienen al menos 2 entregas (el resto todavía no tiene ritmo medible).' },
+        info: 'Porcentaje con rendimiento "Óptimo" o "A tiempo" (hasta 20 min entre una entrega y la siguiente), sobre los repartidores que ya tienen al menos 2 entregas (el resto todavía no tiene ritmo medible).' },
       { label: "Demorados / sin actividad", valor: demorados,
-        info: 'Choferes en estado "Demorado" (más de 20 min entre entregas) o "Sin actividad" (más de 45 min sin ningún movimiento).' },
+        info: 'Repartidores en estado "Demorado" (más de 20 min entre entregas) o "Sin actividad" (más de 45 min sin ningún movimiento).' },
       { label: "Velocidad promedio (paq/h)", valor: velocidadProm === null ? "—" : velocidadProm.toFixed(1),
-        info: "Paquetes por hora promedio de los choferes con al menos 2 entregas (60 ÷ minutos entre entregas de cada chofer)." },
+        info: "Paquetes por hora promedio de los repartidores con al menos 2 entregas (60 ÷ minutos entre entregas de cada repartidor)." },
       { label: "Paquetes pendientes", valor: pendientesTotal,
         info: "Suma de paquetes sin entregar de todas las hojas de ruta de este filtro (asignados − entregados)." },
       { label: "Sin resolver", valor: sinResolverTotal,
-        info: "Suma de pendientes que todavía no tienen una gestión cerrada — hay que preguntarle al chofer qué pasó." },
+        info: "Suma de pendientes que todavía no tienen una gestión cerrada — hay que preguntarle al repartidor qué pasó." },
     ];
     document.getElementById("kpis-ruta").innerHTML = tarjetas.map(t => `
       <div class="kpi-ruta">
@@ -3397,7 +3415,7 @@
     }
     else if(f.confirma_retiro_soporte){ base = "En camino al depósito"; color = "azul"; icono = "truck"; }
     else if(f.pallet_listo_deposito){
-      if(f.asiste_soporte){ base = "Pallet listo - esperando chofer"; color = "amarillo"; icono = "package"; }
+      if(f.asiste_soporte){ base = "Pallet listo - esperando repartidor"; color = "amarillo"; icono = "package"; }
       else { base = "No asiste - pallet armado"; color = "rojo"; icono = "alert-triangle"; }
     }
     else if(f.asiste_soporte){ base = "Asistencia confirmada"; color = "amarillo"; icono = "check"; }
@@ -3457,7 +3475,7 @@
 
     const tbody = document.getElementById("tabla-asistencia");
     if(!filas.length){
-      tbody.innerHTML = `<tr><td colspan="15" class="sin-datos">Sin choferes cargados para esta fecha. Usá "Agregar chofer" para empezar.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="15" class="sin-datos">Sin repartidores cargados para esta fecha. Usá "Agregar repartidor" para empezar.</td></tr>`;
       return;
     }
 
@@ -3479,7 +3497,7 @@
       html += `<td style="text-align:center;" data-col="pallet_retirado_deposito"><input type="checkbox" class="cel-input" data-campo="pallet_retirado_deposito" ${f.pallet_retirado_deposito ? "checked" : ""} /></td>`;
       html += `<td class="col-estado-asist"><span class="estado-icono-fila ${estado.color}" tabindex="0" role="img" data-tip="${estado.label.replace(/"/g, "&quot;")}"><i data-lucide="${estado.icono}"></i></span></td>`;
       html += `<td class="col-opciones"><span class="opciones-fila">`;
-      html += `<button type="button" class="btn-icono-chico editar" title="Editar datos del chofer" data-id="${f.id}"><i data-lucide="pencil"></i></button>`;
+      html += `<button type="button" class="btn-icono-chico editar" title="Editar datos del repartidor" data-id="${f.id}"><i data-lucide="pencil"></i></button>`;
       html += `<button type="button" class="btn-icono-chico detalle" title="Ver detalle (horas, impreso)" data-id="${f.id}"><i data-lucide="list"></i></button>`;
       html += `<button type="button" class="btn-icono-chico borrar" title="Borrar fila" data-id="${f.id}"><i data-lucide="trash-2"></i></button>`;
       html += `</span></td>`;
@@ -3570,7 +3588,7 @@
   function abrirEditarChoferAsistencia(id){
     const f = stateAsistencia.filas.find(x => x.id === id);
     if(!f) return;
-    abrirModalAbm("Editar chofer", [
+    abrirModalAbm("Editar repartidor", [
       { clave: "nombre", label: "Nombre", tipo: "texto" },
       { clave: "tipo_vehiculo", label: "Vehículo", tipo: "select", opciones: abmVehiculos.obtenerActivos() },
       { clave: "turno", label: "Turno", tipo: "select", opciones: abmTurnos.obtenerActivos() },
@@ -3712,7 +3730,7 @@
 
   document.getElementById("btn-imprimir-rutas").addEventListener("click", async ()=>{
     const pendientes = stateAsistencia.filas.filter(f => f.asiste_soporte && !f.impreso);
-    if(!pendientes.length){ await mostrarAviso("No hay asignaciones de ruta pendientes de imprimir (todos los choferes que asisten ya tienen la suya impresa — podés reimprimir una puntual desde su ícono de Detalle)."); return; }
+    if(!pendientes.length){ await mostrarAviso("No hay asignaciones de ruta pendientes de imprimir (todos los repartidores que asisten ya tienen la suya impresa — podés reimprimir una puntual desde su ícono de Detalle)."); return; }
     if(!(await mostrarConfirmacion(`¿Imprimir las ${pendientes.length} asignación(es) de ruta pendientes? Al terminar de imprimir se marcan automáticamente como "Impreso".`))) return;
     await imprimirAsignacionesDeRuta(pendientes);
   });
@@ -3731,9 +3749,9 @@
     const query = sb.from("choferes_roster").select("nombre,tipo_vehiculo,turno,zona,localidades,asiste_sabado,es_backup").eq("activo", true);
     const { data: roster, error } = diaSemana === 6 ? await query.eq("asiste_sabado", true) : await query;
     if(error){ console.error("Error cargando choferes_roster:", error); await mostrarAviso("No se pudo cargar el roster."); return; }
-    if(!roster || !roster.length){ await mostrarAviso("No hay choferes activos en el roster para cargar."); return; }
+    if(!roster || !roster.length){ await mostrarAviso("No hay repartidores activos en el roster para cargar."); return; }
 
-    if(!(await mostrarConfirmacion(`¿Cargar ${roster.length} chofer(es) del roster para mañana (${manana.split("-").reverse().join("/")})? Los que ya estén cargados para esa fecha no se duplican.`))) return;
+    if(!(await mostrarConfirmacion(`¿Cargar ${roster.length} repartidor(es) del roster para mañana (${manana.split("-").reverse().join("/")})? Los que ya estén cargados para esa fecha no se duplican.`))) return;
 
     const filasNuevas = roster
       .slice()
@@ -3748,9 +3766,9 @@
 
     const { error: errorInsert } = await sb.from("asistencia_diaria")
       .upsert(filasNuevas, { onConflict: "fecha,nombre,turno", ignoreDuplicates: true });
-    if(errorInsert){ console.error("Error cargando choferes de mañana:", errorInsert); await mostrarAviso("No se pudo cargar a los choferes de mañana."); return; }
+    if(errorInsert){ console.error("Error cargando choferes de mañana:", errorInsert); await mostrarAviso("No se pudo cargar a los repartidores de mañana."); return; }
 
-    await mostrarAviso(`Listo. Se cargaron los choferes del roster para el ${manana.split("-").reverse().join("/")}. Cambiá la fecha de arriba a "Elegir fecha…" para verlos.`);
+    await mostrarAviso(`Listo. Se cargaron los repartidores del roster para el ${manana.split("-").reverse().join("/")}. Cambiá la fecha de arriba a "Elegir fecha…" para verlos.`);
   });
 
   // ======================================================================
@@ -3805,7 +3823,7 @@
     });
     const zonasEl = document.getElementById("zonas-vivo");
     if(!zonasMap.size){
-      zonasEl.innerHTML = `<p class="sin-datos">Sin choferes cargados para hoy.</p>`;
+      zonasEl.innerHTML = `<p class="sin-datos">Sin repartidores cargados para hoy.</p>`;
     } else {
       zonasEl.innerHTML = [...zonasMap.entries()].map(([zona, z]) => `
         <div class="zona-card-vivo">
@@ -3852,24 +3870,36 @@
     lucide.createIcons();
   }
 
+  // "Agregar repartidor" en Asistencia: SOLO elige un repartidor que ya
+  // existe en el roster (Configuración → Repartidores) — no se puede
+  // tipear un nombre nuevo acá. Si el repartidor que necesitás no está en
+  // el roster, primero hay que darlo de alta ahí (pedido 2026-11-17: el
+  // roster es la única fuente de verdad, nunca un alta manual suelta).
   document.getElementById("btn-agregar-chofer").addEventListener("click", async ()=>{
-    abrirModalAbm("Agregar chofer", [
-      { clave: "nombre", label: "Nombre", tipo: "texto" },
-      { clave: "tipo_vehiculo", label: "Vehículo", tipo: "select", opciones: abmVehiculos.obtenerActivos() },
-      { clave: "turno", label: "Turno", tipo: "select", opciones: abmTurnos.obtenerActivos() },
-      { clave: "zona", label: "Zona", tipo: "select", opciones: abmZonas.obtenerActivos() },
-      { clave: "localidades", label: "Localidades", tipo: "multiselect", opciones: abmLocalidades.obtenerActivos() },
+    const { data: roster, error: errorRoster } = await sb.from("choferes_roster")
+      .select("id,nombre,tipo_vehiculo,turno,zona,localidades")
+      .eq("activo", true)
+      .order("nombre");
+    if(errorRoster){ console.error("Error cargando choferes_roster:", errorRoster); await mostrarAviso("No se pudo cargar el roster."); return; }
+    if(!roster || !roster.length){ await mostrarAviso("No hay repartidores activos en el roster. Dalos de alta primero en Configuración → Repartidores."); return; }
+
+    const yaCargados = new Set(stateAsistencia.filas.map(f => f.nombre));
+    const opciones = roster.filter(r => !yaCargados.has(r.nombre)).map(r => ({ valor: String(r.id), texto: r.nombre }));
+    if(!opciones.length){ await mostrarAviso("Todos los repartidores activos del roster ya están cargados para esta fecha."); return; }
+
+    abrirModalAbm("Agregar repartidor", [
+      { clave: "chofer_roster_id", label: "Repartidor (del roster)", tipo: "select", opciones },
     ], {}, async (vals)=>{
-      if(!vals.nombre){ await mostrarAviso("El nombre es obligatorio."); return false; }
-      if(vals.turno === "") vals.turno = null;
+      if(!vals.chofer_roster_id){ await mostrarAviso("Elegí un repartidor."); return false; }
+      const r = roster.find(x => String(x.id) === vals.chofer_roster_id);
       const fecha = fechaAsistenciaActual();
       const { data, error } = await sb.from("asistencia_diaria")
-        .insert({ fecha, ...vals })
+        .insert({ fecha, nombre: r.nombre, tipo_vehiculo: r.tipo_vehiculo, turno: r.turno, zona: r.zona, localidades: r.localidades })
         .select()
         .single();
       if(error){
-        console.error("Error agregando chofer:", error);
-        await mostrarAviso("No se pudo agregar (¿ya existe ese chofer para esta fecha y turno vacío?).");
+        console.error("Error agregando repartidor:", error);
+        await mostrarAviso("No se pudo agregar (¿ya existe ese repartidor para esta fecha y turno vacío?).");
         return false;
       }
       stateAsistencia.filas.push(data);
@@ -4184,6 +4214,7 @@
   // ----- Choferes (roster): más campos, con combos de Vehículo/Zona referenciando sus propios ABM -----
   let adminChoferesData = [];
   let adminChoferesSearch = "";
+  let adminChoferesSoloPendientes = false;
 
   async function cargarAdminChoferes(){
     const [{ data, error }] = await Promise.all([
@@ -4193,19 +4224,37 @@
     if(error){ console.error("Error cargando choferes_roster:", error); return; }
     adminChoferesData = data || [];
     renderAdminChoferes();
+    actualizarAvisoChoferesPendientes();
+  }
+
+  // Choferes que se dieron de alta automáticamente desde Lightdata
+  // (sincronizar_lightdata.py, ver integracion_usuarios_lightdata.md) y
+  // todavía no tienen vehículo/zona/turno/localidad propios.
+  function actualizarAvisoChoferesPendientes(){
+    const pendientes = adminChoferesData.filter(f => f.pendiente_completar).length;
+    const aviso = document.getElementById("aviso-choferes-pendientes");
+    aviso.hidden = pendientes === 0;
+    document.getElementById("aviso-choferes-pendientes-texto").textContent =
+      `${pendientes} repartidor${pendientes === 1 ? "" : "es"} pendiente${pendientes === 1 ? "" : "s"} de completar`;
+    for(const id of ["contador-choferes-pendientes", "contador-choferes-pendientes-submenu"]){
+      const el = document.getElementById(id);
+      el.hidden = pendientes === 0;
+      el.textContent = pendientes;
+    }
   }
 
   function renderAdminChoferes(){
     let filas = adminChoferesData;
     if(adminChoferesSearch) filas = filas.filter(f => (f.nombre || "").toLowerCase().includes(adminChoferesSearch));
+    if(adminChoferesSoloPendientes) filas = filas.filter(f => f.pendiente_completar);
     const tbody = document.getElementById("tabla-admin-choferes");
     if(!filas.length){
-      tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">Sin choferes. Usá "Agregar chofer" para empezar.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">Sin repartidores. Usá "Agregar repartidor" para empezar.</td></tr>`;
       return;
     }
     tbody.innerHTML = filas.map(f => `
-      <tr class="${f.activo ? "" : "fila-inactiva"}" data-id="${f.id}">
-        <td>${f.nombre}${f.es_backup ? ' <span class="texto-muted">(backup)</span>' : ""}</td>
+      <tr class="${f.activo ? "" : "fila-inactiva"} ${f.pendiente_completar ? "fila-pendiente-completar" : ""}" data-id="${f.id}">
+        <td>${f.nombre}${f.es_backup ? ' <span class="texto-muted">(backup)</span>' : ""}${f.pendiente_completar ? ' <span class="badge amarillo">Pendiente</span>' : ""}</td>
         <td>${f.tipo_vehiculo || "—"}</td>
         <td>${f.turno ? f.turno.slice(0,5) : "—"}</td>
         <td>${f.zona || "—"}</td>
@@ -4223,6 +4272,16 @@
     `).join("");
     lucide.createIcons();
   }
+
+  document.getElementById("btn-ver-solo-pendientes").addEventListener("click", (e)=>{
+    adminChoferesSoloPendientes = !adminChoferesSoloPendientes;
+    e.currentTarget.setAttribute("aria-expanded", String(adminChoferesSoloPendientes));
+    e.currentTarget.innerHTML = adminChoferesSoloPendientes
+      ? '<i data-lucide="x"></i>Ver todos'
+      : '<i data-lucide="filter"></i>Ver solo pendientes';
+    lucide.createIcons();
+    renderAdminChoferes();
+  });
 
   document.getElementById("buscar-admin-choferes").addEventListener("input", (e)=>{
     adminChoferesSearch = e.target.value.toLowerCase();
@@ -4244,7 +4303,7 @@
   }
 
   document.getElementById("btn-agregar-chofer-roster").addEventListener("click", ()=>{
-    abrirFormularioChofer("Agregar chofer", { activo: true }, async (vals)=>{
+    abrirFormularioChofer("Agregar repartidor", { activo: true }, async (vals)=>{
       if(!vals.nombre){ await mostrarAviso("El nombre es obligatorio."); return false; }
       if(vals.turno === "") vals.turno = null;
       const { data, error } = await sb.from("choferes_roster").insert(vals).select().single();
@@ -4260,22 +4319,30 @@
     if(btnEditar){
       const id = Number(btnEditar.dataset.id);
       const fila = adminChoferesData.find(f => f.id === id);
-      abrirFormularioChofer("Editar chofer", { ...fila, turno: fila.turno ? fila.turno.slice(0,5) : "" }, async (vals)=>{
+      abrirFormularioChofer("Editar repartidor", { ...fila, turno: fila.turno ? fila.turno.slice(0,5) : "" }, async (vals)=>{
         if(!vals.nombre){ await mostrarAviso("El nombre es obligatorio."); return false; }
         if(vals.turno === "") vals.turno = null;
+        // Si vino pendiente de completar (alta automática desde Lightdata,
+        // ver integracion_usuarios_lightdata.md) y ya se cargaron los datos
+        // que faltaban, se destraba sola — no hace falta un botón aparte.
+        if(fila.pendiente_completar && vals.tipo_vehiculo && vals.zona && vals.localidades && vals.localidades.length){
+          vals.pendiente_completar = false;
+        }
         const { error } = await sb.from("choferes_roster").update(vals).eq("id", id);
         if(error){ await mostrarAviso("No se pudo guardar."); return false; }
         Object.assign(fila, vals);
         renderAdminChoferes();
+        actualizarAvisoChoferesPendientes();
       });
     }
     if(btnBorrar){
       const id = Number(btnBorrar.dataset.id);
-      if(!(await mostrarConfirmacion("¿Borrar este chofer del roster? No se puede deshacer."))) return;
+      if(!(await mostrarConfirmacion("¿Borrar este repartidor del roster? No se puede deshacer."))) return;
       const { error } = await sb.from("choferes_roster").delete().eq("id", id);
       if(error){ await mostrarAviso("No se pudo borrar."); return; }
       adminChoferesData = adminChoferesData.filter(f => f.id !== id);
       renderAdminChoferes();
+      actualizarAvisoChoferesPendientes();
     }
   });
 
