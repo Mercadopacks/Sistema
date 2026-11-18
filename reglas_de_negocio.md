@@ -100,6 +100,27 @@ borrado) sigue esto:
     propio ni nada con una lista/panel adentro (un click dentro de un
     `<label>` se reenvía automáticamente a su primer control "labelable",
     así que clickear una opción del combo reabre la lista).
+13. **Todo `const`/`let` que use una función compartida (ej. un registro,
+    un cache, un singleton) se declara ARRIBA DE TODO el `<script>`**, no
+    "justo antes" de la función que lo usa — un `const` no se "hoistea"
+    con valor como una función declarada (`function foo(){}` sí queda
+    disponible desde el principio del script, pero el `const` de arriba
+    suyo no se inicializa hasta que esa línea corre). Si otro módulo más
+    arriba en el archivo ya llama a esa función antes de llegar a esa
+    línea, explota con `ReferenceError: Cannot access '...' before
+    initialization` **apenas carga la página, cortando TODO el `<script>`
+    sin ejecutarse** — no es un error aislado de un módulo, rompe TODA la
+    app (bug real 2026-11-18: `registroCombos` declarado junto a
+    `crearComboGenerico`, pero Fallidos ya la llamaba más arriba en el
+    archivo).
+14. **Antes de dar un cambio de JS por terminado, hay que EJECUTARLO de
+    verdad, no solo chequear que no tenga errores de sintaxis** (`new
+    Function(codigo)` solo parsea, no corre nada, y no detecta este tipo
+    de bug). Correr el script completo con jsdom (navegador simulado) y
+    mocks mínimos de `supabase`/`lucide`, confirmando que llega al final
+    sin tirar una excepción top-level — es la única forma de agarrar este
+    tipo de error antes de que lo vea el usuario. Ver el changelog
+    2026-11-18 para un ejemplo concreto del comando.
 
 **Excepción explícita — pantallas operativas "en vivo"** (ej. una
 pantalla tipo "Asistencia de hoy" donde varias personas van tildando
@@ -286,3 +307,10 @@ Reglas de negocio confirmadas con el usuario (2026-11-16):
 | 2026-11-17 | El alta de repartidores queda centralizada en el ABM (Configuración → Repartidores): el botón "Agregar chofer" de Asistencia ya no deja tipear un nombre nuevo, solo elegir uno existente del roster. |
 | 2026-11-17 | Estandarización de nombres: toda la UI dice "Repartidor" en vez de "Chofer" (los nombres internos de tabla/función — `choferes_roster`, etc. — no cambiaron, solo el texto visible). |
 | 2026-11-17 | `sincronizar_lightdata.py`: nueva integración (ver `integracion_usuarios_lightdata.md`) que trae el listado de usuarios de Lightdata y crea/vincula repartidores en `choferes_roster` automáticamente, marcando `pendiente_completar` a los que faltan datos propios (vehículo/zona/turno/localidad). Dos modos: `--live` (pega al endpoint interno de Lightdata vía Playwright, corre como paso extra de `publicar_supabase.yml` con `continue-on-error` porque es un endpoint no oficial) o un .xlsx manual de respaldo. Matching por nombre normalizado, nunca por nombre exacto — ver sección 4.3 del .md de integración. |
+| 2026-11-18 | Borrado de datos de prueba: ~4100 envíos (+ su `envios_historial`/`fallidos_seguimiento`) con `fecha_mercadopacks` anterior al último mes, para probar Fallidos y Cambios con un dataset acotado. De paso, mismo fix de `GRANT` que `perfiles_usuario` (sección 2) pero en `fallidos_seguimiento`, que nunca lo tuvo para `service_role`. |
+| 2026-11-18 | Fallidos y Cambios → "Por repartidor": el detalle de un repartidor pasa a ser un modal (`#modal-detalle-fallidos`) en vez de reemplazar la pantalla — antes se mezclaba visualmente con la pestaña "Todos" porque compartían la misma tarjeta/tabla. |
+| 2026-11-18 | Escaneo por pistola QR/código de barras en el detalle de un repartidor: marca "Recibido en planta" al instante. Reusa la misma extracción de ID que el sector de Picking (Google Apps Script) — `did` → Directo/`id_interno`, `tracking_number`/`id` → Mercadolibre/`tracking`. |
+| 2026-11-18 | Botón global "Limpiar filtros" en cualquier `.panel-filtros-ruta` que tenga combos adentro (`crearPopoverGenerico`/`agregarLimpiarFiltros` — ver sección 1, regla 13 sobre el bug de orden de declaración que esto mismo introdujo y cómo evitarlo). |
+| 2026-11-18 | Buscador automático en cualquier combo con más de `UMBRAL_BUSCADOR_COMBO` (8) opciones — global, no hay que activarlo por módulo (ver `crearComboGenerico`). |
+| 2026-11-18 | "Tiene fallidos"/"Fallidos recibidos" de Asistencia dejaron de ser checkboxes manuales: se calculan en vivo contra los pendientes de Fallidos y Cambios de ese repartidor (`contarFallidosPendientesPorRepartidor`). |
+| 2026-11-18 | **Cruzar repartidores por ID de Lightdata, no por nombre** (bug real: "Fiorella  Souza" con doble espacio en `envios.cadete` no matcheaba contra "Fiorella Souza" del roster/Asistencia). Ver `lightdata_api_envios.md` (endpoint de envíos, trae `didcadete`) y `scripts/vincular_choferes_envios.py` (completa `envios.chofer_lightdata_id` — mismo ID que `lightdata_usuarios.lightdata_id`/`choferes_roster.lightdata_id`). `asistencia_diaria.lightdata_id` se copia del roster al cargar un repartidor para un día. El frontend cruza por ID cuando está disponible en los dos lados (`claveRepartidorEnvio`/`claveRepartidorAsistencia`) y cae a nombre normalizado solo como respaldo para datos de antes de este cambio (no se hizo backfill histórico todavía, queda pendiente para una migración posterior). |

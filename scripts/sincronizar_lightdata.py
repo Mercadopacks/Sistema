@@ -148,7 +148,7 @@ def obtener_usuarios_en_vivo(usuario, clave):
     usuario, con las claves did/nombre/apellido/usuario/perfil/habilitado/
     bloqueado/codigo_empleado).
     """
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
@@ -160,7 +160,18 @@ def obtener_usuarios_en_vivo(usuario, clave):
             page.get_by_role("textbox", name="Username").fill(usuario)
             page.get_by_role("textbox", name="Password").fill(clave)
             page.get_by_text("Ingresar").click()
-            page.wait_for_load_state("networkidle")
+            # Ni "networkidle" ni "load" son confiables acá (bug real
+            # 2026-11-18: el login es por AJAX, no navegación de página — el
+            # "load" dispara para la pantalla de login, antes de que la
+            # sesión quede armada). Mismo patrón que ya usa
+            # descargar_lightdata.py: esperar un diálogo opcional de sesión
+            # previa, y después un elemento real de la pantalla ya logueada
+            # (el auto-wait de Playwright hace el resto).
+            try:
+                page.get_by_role("button", name="OK").click(timeout=5000)
+            except PlaywrightTimeoutError:
+                pass
+            page.get_by_role("link", name="local_shipping Envios").wait_for()
 
             payload = {
                 "cantxpagina": 5000,
@@ -190,6 +201,12 @@ def obtener_usuarios_en_vivo(usuario, clave):
             filas = cuerpo.get("rows")
             if filas is None:
                 raise RuntimeError(f"La respuesta no tiene 'rows' — Lightdata puede haber cambiado el formato. Respuesta: {cuerpo!r}")
+            # Ver nota en vincular_choferes_envios.py: PHP puede serializar
+            # un array no contiguo como objeto JSON (claves "0","1",...) en
+            # vez de lista — no pasó acá todavía (una sola página, 5000 por
+            # página), pero es la misma API, mismo riesgo.
+            if isinstance(filas, dict):
+                filas = list(filas.values())
             return filas
         finally:
             context.close()

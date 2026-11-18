@@ -288,6 +288,14 @@
   .combo-filtro-lista li:focus{outline:2px solid var(--dorado); outline-offset:-2px; background:var(--fondo);}
   /* Si no hay espacio abajo, se abre hacia arriba — ver posicionarListaCombo(). */
   .combo-filtro-lista.abre-arriba{top:auto; bottom:calc(100% + 4px);}
+  /* Buscador automático dentro de un combo con muchas opciones (pedido
+     2026-11-18, ver UMBRAL_BUSCADOR_COMBO) — sticky para que no se pierda
+     de vista al scrollear una lista larga. */
+  .buscador-combo-lista{
+    position:sticky; top:0; z-index:1; display:block; width:100%; box-sizing:border-box;
+    margin-bottom:4px; padding:6px 8px; font-size:12.5px; white-space:normal;
+    border:1px solid var(--borde); border-radius:6px; background:#fff; color:var(--negro);
+  }
   .panel-filtros-ruta.abre-arriba{top:auto; bottom:calc(100% + 6px);}
   .texto-muted{color:#777; font-size:12px;}
   /* Fila de tabla que lleva a un detalle al clickear (ej. repartidor en
@@ -392,6 +400,13 @@
   .badge.gris{background:#f0efe9; color:#777;}
   .nav-contador{background:#c0392b; color:#fff; font-size:11px; font-weight:700; line-height:1; padding:2px 6px; border-radius:10px; margin-left:auto;}
   .fila-pendiente-completar{background:#fff9ee;}
+  /* Punto "pendiente de completar" (pedido 2026-11-17: antes era un badge
+     grande al lado del nombre, ahora un punto chico con el detalle en el
+     hover/focus, vía el mismo mecanismo de .mini-info/data-tip). */
+  .punto-pendiente{
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:#b9700a; margin-right:6px; vertical-align:middle; cursor:help;
+  }
   .mini-dot.azul{background:#4a90d9;}
   .mini-dot.naranja{background:#f2994a;}
   .mini-dot.gris{background:#aaa;}
@@ -521,6 +536,12 @@
   .alerta-item-vivo.amarillo{color:#b9700a;} .alerta-item-vivo.amarillo svg{color:#b9700a;}
   .alerta-item-vivo .nombre-chofer{font-weight:700; color:var(--negro);}
   #modal-detalle-asistencia .modal-card{max-width:380px;}
+  /* Modal de detalle de Fallidos por repartidor (pedido 2026-11-18): ancho
+     a la medida de la tabla (sin scroll horizontal) y tope de ~6 filas
+     visibles con SU PROPIO scroll vertical — la pantalla de atrás y el
+     overlay del modal no deberían necesitar scroll aparte si esto alcanza. */
+  #modal-detalle-fallidos .modal-card{max-width:1300px; width:96vw;}
+  #modal-detalle-fallidos .tabla-scroll{max-height:320px;}
   .linea-detalle-asist{display:flex; justify-content:space-between; font-size:13px; padding:7px 0; border-bottom:1px solid var(--borde); gap:10px;}
   .linea-detalle-asist:last-child{border-bottom:none;}
   .linea-detalle-asist .hora-detalle{color:#888; white-space:nowrap;}
@@ -572,6 +593,15 @@
      control que de verdad le pertenece (un checkbox, un <input> de
      texto) — nunca un combo propio ni nada con una lista adentro. */
   .panel-filtros-ruta-campo{font-size:12px; color:#555; font-weight:600; display:flex; flex-direction:column; gap:5px;}
+  /* Botón "Limpiar filtros", global para cualquier panel-filtros-ruta que
+     tenga combos adentro (pedido 2026-11-18) — ver agregarLimpiarFiltros(). */
+  .btn-limpiar-filtros{
+    display:inline-flex; align-items:center; gap:5px; align-self:flex-start;
+    background:transparent; border:none; color:#888; font-size:12px; font-weight:700;
+    padding:0; cursor:pointer;
+  }
+  .btn-limpiar-filtros:hover{color:var(--negro);}
+  .btn-limpiar-filtros svg{width:13px; height:13px;}
   .btn-pendientes.sin-resolver{background:#fdecea; color:#c0392b;}
   .btn-pendientes.gestionado{background:#f0efe9; color:#777;}
   .ruta-alerta-fila{
@@ -737,7 +767,7 @@
         <div class="mini-kpis" id="mini-kpis-fallidos"></div>
         <div class="chips" id="modo-fallidos">
           <button class="chip activo" data-modo-fallidos="repartidor">Por repartidor</button>
-          <button class="chip" data-modo-fallidos="todos">Todos</button>
+          <button class="chip" data-modo-fallidos="todos">Por Envíos</button>
         </div>
 
         <!-- Modo "Por repartidor" (default) — pantalla principal pedida
@@ -746,13 +776,25 @@
              detalle de un repartidor clickeando su fila (ver
              tabla-fallidos-por-chofer más abajo). -->
         <div class="card" id="fallidos-chofer-lista-card">
-          <div class="chips" id="fallidos-repartidor-tipo-toolbar">
-            <button class="chip activo" data-tipo-fallido-repa="todos">Todos</button>
-            <button class="chip" data-tipo-fallido-repa="Fallido">Con fallidos</button>
-            <button class="chip" data-tipo-fallido-repa="Cambio">Con cambios</button>
-          </div>
           <div class="buscar-mas-filtrar">
             <input id="buscar-fallidos-repartidor" class="buscador" placeholder="Buscar repartidor…" />
+            <div class="combo-filtro" id="popover-filtros-fallidos-repartidor">
+              <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                <i data-lucide="sliders-horizontal"></i>Filtrar
+              </button>
+              <div class="panel-filtros-ruta" hidden>
+                <div class="panel-filtros-ruta-campo">Tipo
+                  <div class="combo-filtro" id="combo-tipo-fallidos-repartidor">
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                    <ul class="combo-filtro-lista" role="listbox" hidden>
+                      <li data-valor="todos" aria-selected="true">Todos</li>
+                      <li data-valor="Fallido">Con fallidos</li>
+                      <li data-valor="Cambio">Con cambios</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="tabla-scroll">
             <table>
@@ -771,20 +813,6 @@
         </div>
 
         <div class="card" id="fallidos-card-principal">
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;" id="fallidos-detalle-header" hidden>
-            <button type="button" class="btn-icono-chico" id="btn-volver-fallidos-chofer" title="Volver"><i data-lucide="arrow-left"></i></button>
-            <h3 id="fallidos-detalle-titulo" style="margin:0;"></h3>
-          </div>
-          <div class="card-header-acciones" id="fallidos-tipo-toolbar-wrap">
-            <div class="chips" id="fallidos-tipo-toolbar">
-              <button class="chip activo" data-tipo-fallido="todos">Todos</button>
-              <button class="chip" data-tipo-fallido="Fallido">Fallidos</button>
-              <button class="chip" data-tipo-fallido="Cambio">Cambios</button>
-            </div>
-            <div class="acciones-icono">
-              <button type="button" class="btn-filtrar" id="btn-agregar-duplicado"><i data-lucide="copy-plus"></i>Marcar duplicado</button>
-            </div>
-          </div>
           <div class="buscar-mas-filtrar" id="fallidos-buscar-wrap">
             <input id="buscar-fallidos" class="buscador" placeholder="Buscar por repartidor, cliente, localidad o tracking…" />
             <div class="combo-filtro" id="popover-filtros-fallidos">
@@ -792,6 +820,16 @@
                 <i data-lucide="sliders-horizontal"></i>Filtrar
               </button>
               <div class="panel-filtros-ruta" hidden>
+                <div class="panel-filtros-ruta-campo">Tipo
+                  <div class="combo-filtro" id="combo-tipo-fallidos">
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                    <ul class="combo-filtro-lista" role="listbox" hidden>
+                      <li data-valor="todos" aria-selected="true">Todos</li>
+                      <li data-valor="Fallido">Fallidos</li>
+                      <li data-valor="Cambio">Cambios</li>
+                    </ul>
+                  </div>
+                </div>
                 <div class="panel-filtros-ruta-campo">Destino
                   <div class="combo-filtro" id="combo-destino-fallidos">
                     <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
@@ -824,6 +862,7 @@
                 </div>
               </div>
             </div>
+            <button type="button" class="btn-filtrar" id="btn-agregar-duplicado"><i data-lucide="copy-plus"></i>Marcar duplicado</button>
           </div>
           <div class="tabla-scroll" id="tabla-fallidos-scroll">
             <table>
@@ -1059,8 +1098,6 @@
                 <label class="check-columna"><input type="checkbox" data-col="localidades" checked /> Localidades</label>
                 <label class="check-columna"><input type="checkbox" data-col="observaciones" checked /> Observaciones</label>
                 <label class="check-columna"><input type="checkbox" data-col="asiste_soporte" checked /> Asiste</label>
-                <label class="check-columna"><input type="checkbox" data-col="tiene_fallidos_soporte" checked /> Tiene fallidos</label>
-                <label class="check-columna"><input type="checkbox" data-col="fallidos_recibidos_deposito" checked /> Fallidos recibidos</label>
                 <label class="check-columna"><input type="checkbox" data-col="pallet_listo_deposito" checked /> Pallet listo</label>
                 <label class="check-columna"><input type="checkbox" data-col="confirma_retiro_soporte" checked /> Confirma retiro</label>
                 <label class="check-columna"><input type="checkbox" data-col="llego_deposito" checked /> Llegó a depósito</label>
@@ -1079,8 +1116,6 @@
                   <th data-col="localidades">Localidades</th>
                   <th data-col="observaciones">Observaciones</th>
                   <th class="paso soporte" data-col="asiste_soporte">Asiste<span class="quien">Soporte</span></th>
-                  <th class="paso soporte" data-col="tiene_fallidos_soporte">Tiene<br>fallidos<span class="quien">Soporte</span></th>
-                  <th class="paso deposito" data-col="fallidos_recibidos_deposito">Fallidos<br>recibidos<span class="quien">Depósito</span></th>
                   <th class="paso deposito" data-col="pallet_listo_deposito">Pallet<br>listo<span class="quien">Depósito</span></th>
                   <th class="paso soporte" data-col="confirma_retiro_soporte">Confirma<br>retiro<span class="quien">Soporte</span></th>
                   <th class="paso deposito" data-col="llego_deposito">Llegó a<br>depósito<span class="quien">Depósito</span></th>
@@ -1154,15 +1189,65 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-choferes" class="buscador" placeholder="Buscar repartidor…" />
+              <div class="combo-filtro" id="popover-filtros-choferes">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Vehículo
+                    <div class="combo-filtro" id="combo-vehiculo-choferes">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Turno
+                    <div class="combo-filtro" id="combo-turno-choferes">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Zona
+                    <div class="combo-filtro" id="combo-zona-choferes">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todas</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todas</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Activo
+                    <div class="combo-filtro" id="combo-activo-choferes">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Asiste sábado
+                    <div class="combo-filtro" id="combo-sabado-choferes">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-chofer-roster"><i data-lucide="plus"></i>Agregar repartidor</button>
             </div>
             <div class="tabla-scroll">
               <table>
                 <thead>
                   <tr>
-                    <th>Nombre</th><th>Vehículo</th><th>Turno</th>
-                    <th>Zona</th><th>Localidades</th><th>Observaciones</th>
-                    <th>Activo</th><th>Asiste sábado</th><th class="col-opciones">Opciones</th>
+                    <th>Nombre</th><th>Usuario</th><th>Vehículo</th><th>Turno</th>
+                    <th>Zona</th><th>Activo</th><th>Asiste sábado</th><th class="col-opciones">Opciones</th>
                   </tr>
                 </thead>
                 <tbody id="tabla-admin-choferes"></tbody>
@@ -1314,6 +1399,51 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-detalle-fallidos" hidden style="z-index:999;">
+  <div class="modal-card">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+      <h3 id="modal-fallidos-titulo" style="margin:0;"></h3>
+      <button type="button" class="btn-icono-chico" id="modal-fallidos-cerrar" title="Cerrar"><i data-lucide="x"></i></button>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <i data-lucide="scan-line"></i>
+      <input type="text" id="fallidos-scan-input" class="buscador" placeholder="Escanear código del paquete (pistola)…" autocomplete="off" style="max-width:320px; margin-bottom:0;" />
+      <span id="fallidos-scan-feedback" style="font-size:13px; font-weight:700;"></span>
+    </div>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Antigüedad</th>
+            <th>Fecha MercadoPacks</th>
+            <th>Tracking</th>
+            <th>Cliente</th>
+            <th>Localidad</th>
+            <th>Origen</th>
+            <th>Estado</th>
+            <th>Tipo</th>
+            <th>Destino</th>
+            <th>Estatus</th>
+            <th>Observaciones</th>
+            <th class="col-opciones">Opciones</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-fallidos-detalle"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-detalle-repartidor" hidden>
+  <div class="modal-card">
+    <h3 id="modal-detalle-repartidor-titulo" style="margin-top:0;"></h3>
+    <div id="modal-detalle-repartidor-cuerpo"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+      <button type="button" class="btn-secundario-modal" id="modal-detalle-repartidor-cerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-detalle-asistencia" hidden>
   <div class="modal-card">
     <h3 id="modal-detalle-asistencia-titulo" style="margin-top:0;"></h3>
@@ -1328,6 +1458,26 @@
 <script>
 (function(){
   "use strict";
+
+  // Registro de combos creados por crearComboGenerico (definida más abajo),
+  // para poder resetearlos todos de una vez desde el botón "Limpiar
+  // filtros" del popover que los contiene (ver crearPopoverGenerico) —
+  // global para cualquier pantalla, no una solución puntual de un módulo.
+  // OJO: tiene que declararse ACÁ, antes que cualquier módulo llame a
+  // crearComboGenerico (Fallidos lo hace primero en el script) — un
+  // `const` no se "hoistea" con valor como una función declarada, así que
+  // declararlo más abajo revienta con "Cannot access before initialization"
+  // apenas corre la primera llamada (bug real, visto en pruebas).
+  const registroCombos = new Map();
+
+  // A partir de cuántas opciones un combo se arma con buscador adentro
+  // (pedido 2026-11-18, global para toda la app: con el roster de
+  // repartidores creciendo, elegir uno de una lista larga sin poder
+  // escribir para filtrar era impracticable). Automático: ningún módulo
+  // tiene que pedirlo a propósito, cualquier combo con más opciones que
+  // esto lo tiene solo. Declarado ACÁ arriba por la misma razón que
+  // registroCombos (ver regla 13 en reglas_de_negocio.md).
+  const UMBRAL_BUSCADOR_COMBO = 8;
 
   // Publishable key: pensada para ir expuesta en el navegador. La
   // protección real la dan las políticas RLS de Supabase (solo usuarios
@@ -1979,11 +2129,43 @@
     // con un repartidor por fila y, al clickear uno, el detalle de sus
     // casos pendientes ordenados por antigüedad. modo "todos": el listado
     // plano de siempre, con los chips Fallido/Cambio para filtrar.
-    modo: "repartidor", choferSeleccionado: null, searchRepartidor: "", tipoRepartidor: "todos",
+    modo: "repartidor", choferSeleccionado: null, choferSeleccionadoNombre: null, searchRepartidor: "", tipoRepartidor: "todos",
     sortChofer: { key: "diasMax", dir: "desc" },
     tipo: "todos", destino: "", estatus: "pendiente", rangoDias: 30, search: "",
     mapeo: {}, umbrales: { pedir: 2, prioridad: 3, revisar: 5 }, filas: [],
   };
+
+  // Lightdata a veces carga el nombre del repartidor con espacios de más
+  // (ej. "Fiorella  Souza", doble espacio entre nombre y apellido) —
+  // distinto al nombre cargado a mano en el roster/Asistencia. Sin esto,
+  // una comparación exacta de texto nunca matchea y el repartidor queda
+  // "sin fallidos" aunque sí tenga (bug real 2026-11-18, caso Fiorella
+  // Souza). Se usa en TODO cruce entre envios.cadete y
+  // choferes_roster/asistencia_diaria.nombre — trim + colapsar espacios,
+  // sin tocar mayúsculas/acentos (acá solo es para que matchee, no para
+  // mostrarlo).
+  function normEspaciosNombre(s){
+    return (s || "").replace(/\s+/g, " ").trim();
+  }
+
+  // Cruzar repartidores por ID de Lightdata, no por nombre (pedido
+  // 2026-11-18, ver lightdata_api_envios.md): `envios.chofer_lightdata_id`
+  // se completa con `didcadete` (scripts/vincular_choferes_envios.py), el
+  // mismo ID que `lightdata_usuarios.lightdata_id` / `choferes_roster.
+  // lightdata_id` / `asistencia_diaria.lightdata_id`. Si todavía no está
+  // completado (envíos/asistencias de antes de este cambio, o que el
+  // vinculador aún no procesó), cae al nombre normalizado como respaldo —
+  // nunca rompe, solo deja de ser 100% confiable para esos casos viejos.
+  function claveRepartidorEnvio(envio){
+    return envio.chofer_lightdata_id != null
+      ? `ld:${envio.chofer_lightdata_id}`
+      : `nombre:${normEspaciosNombre(envio.cadete) || "Sin repartidor"}`;
+  }
+  function claveRepartidorAsistencia(f){
+    return f.lightdata_id != null
+      ? `ld:${f.lightdata_id}`
+      : `nombre:${normEspaciosNombre(f.nombre)}`;
+  }
 
   function diasDesde(fechaISO){
     if(!fechaISO) return null;
@@ -1996,7 +2178,7 @@
   // tal cual lo trae Lightdata — no está promovido a columna propia como
   // logistica_inversa/observaciones porque acá solo se muestra, no se
   // filtra ni se usa para clasificar.
-  const COLUMNAS_ENVIO_FALLIDOS = "id_interno,tracking,cliente,localidad,cadete,estado,fecha_mercadopacks,logistica_inversa,observaciones,raw";
+  const COLUMNAS_ENVIO_FALLIDOS = "id_interno,tracking,cliente,localidad,cadete,chofer_lightdata_id,estado,fecha_mercadopacks,logistica_inversa,observaciones,raw";
 
   // El Estado de Lightdata NO define un Cambio (describe el paquete NUEVO
   // que se entrega, no si el chofer ya devolvió el producto ORIGINAL) — la
@@ -2046,20 +2228,28 @@
     // Query A: candidatos por Estado (fallidos clásicos).
     let qA = sb.from("envios").select(COLUMNAS_ENVIO_FALLIDOS).in("estado", estados);
     if(cutoff) qA = qA.gte("fecha_mercadopacks", cutoff);
-    const { data: enviosA, error: errA } = await qA;
-    if(errA){ console.error("Error cargando envíos fallidos:", errA); stateFallidos.filas = []; renderFallidos(); return; }
 
     // Query D: candidatos por señal de Cambio (Logistica Inversa /
     // Observaciones), independiente del Estado — ver determinarTipoDestinoFallido().
     let qD = sb.from("envios").select(COLUMNAS_ENVIO_FALLIDOS)
       .or("logistica_inversa.not.is.null,observaciones.ilike.%cambio%");
     if(cutoff) qD = qD.gte("fecha_mercadopacks", cutoff);
-    const { data: enviosD, error: errD } = await qD;
-    if(errD) console.error("Error cargando envíos con señal de cambio:", errD);
 
     let qB = sb.from("fallidos_seguimiento").select("*");
     if(cutoff) qB = qB.gte("created_at", cutoff + "T00:00:00Z");
-    const { data: seguimiento, error: errB } = await qB;
+
+    // Las 3 son independientes entre sí — antes se esperaban una por una
+    // (la suma de sus tiempos), ahora corren en paralelo (el tiempo total
+    // pasa a ser el de la más lenta). Ver reglas_de_negocio.md, changelog
+    // 2026-11-18, para la medición real que mostró esto.
+    const [
+      { data: enviosA, error: errA },
+      { data: enviosD, error: errD },
+      { data: seguimiento, error: errB },
+    ] = await Promise.all([qA, qD, qB]);
+
+    if(errA){ console.error("Error cargando envíos fallidos:", errA); stateFallidos.filas = []; renderFallidos(); return; }
+    if(errD) console.error("Error cargando envíos con señal de cambio:", errD);
     if(errB){ console.error("Error cargando fallidos_seguimiento:", errB); }
     const seguimientoRows = seguimiento || [];
 
@@ -2128,8 +2318,9 @@
     const pendientes = stateFallidos.filas.filter(f => f.estatus === "pendiente");
     const porChofer = {};
     pendientes.forEach(f => {
-      const nombre = f.envio.cadete || "Sin repartidor";
-      const g = porChofer[nombre] || (porChofer[nombre] = { nombre, fallidos: 0, cambios: 0, diasMax: 0 });
+      const clave = claveRepartidorEnvio(f.envio);
+      const nombre = normEspaciosNombre(f.envio.cadete) || "Sin repartidor";
+      const g = porChofer[clave] || (porChofer[clave] = { clave, nombre, fallidos: 0, cambios: 0, diasMax: 0 });
       if(f.tipo === "Cambio") g.cambios++; else g.fallidos++;
       if(f.dias !== null && f.dias > g.diasMax) g.diasMax = f.dias;
     });
@@ -2162,7 +2353,7 @@
     tbody.innerHTML = grupos.map(g => {
       const alerta = alertaDiasFallido(g.diasMax);
       return `
-      <tr class="fila-clicable" data-chofer="${g.nombre.replace(/"/g, "&quot;")}">
+      <tr class="fila-clicable" data-chofer="${g.clave.replace(/"/g, "&quot;")}" data-chofer-nombre="${g.nombre.replace(/"/g, "&quot;")}">
         <td>${g.nombre}</td>
         <td>${g.fallidos}</td>
         <td>${g.cambios}</td>
@@ -2174,55 +2365,121 @@
 
   // Muestra/oculta las tarjetas según el modo actual y si hay un
   // repartidor seleccionado — ver stateFallidos.modo/choferSeleccionado.
+  // El detalle por repartidor es un MODAL aparte (pedido 2026-11-18: antes
+  // reusaba la misma tarjeta/tabla que "Todos", cambiando de pantalla y
+  // mezclando el estado de los filtros de una vista con la otra). Ahora
+  // "Por repartidor"/"Todos" son las dos únicas pantallas de esta vista;
+  // el detalle de un repartidor se abre arriba de la que esté activa, sin
+  // tocarla, y al cerrarlo se vuelve exactamente a donde se estaba.
   function aplicarModoFallidos(){
     const enRepartidor = stateFallidos.modo === "repartidor";
-    const detalle = enRepartidor && stateFallidos.choferSeleccionado;
-    document.getElementById("fallidos-chofer-lista-card").hidden = !enRepartidor || !!detalle;
-    document.getElementById("fallidos-card-principal").hidden = enRepartidor && !detalle;
-    document.getElementById("fallidos-detalle-header").hidden = !detalle;
-    document.getElementById("fallidos-tipo-toolbar-wrap").hidden = !!detalle;
-    document.getElementById("fallidos-buscar-wrap").hidden = !!detalle;
+    const detalle = enRepartidor && !!stateFallidos.choferSeleccionado;
+    document.getElementById("fallidos-chofer-lista-card").hidden = !enRepartidor;
+    document.getElementById("fallidos-card-principal").hidden = enRepartidor;
+    const yaEstabaAbierto = !document.getElementById("modal-detalle-fallidos").hidden;
+    document.getElementById("modal-detalle-fallidos").hidden = !detalle;
     if(detalle){
-      document.getElementById("fallidos-detalle-titulo").textContent = stateFallidos.choferSeleccionado;
+      document.getElementById("modal-fallidos-titulo").textContent = stateFallidos.choferSeleccionadoNombre || stateFallidos.choferSeleccionado;
+      // Si se acaba de ABRIR (no estaba abierto antes) limpia el feedback y
+      // el input del escaneo anterior — si no, al entrar a otro repartidor
+      // quedaba pegado el resultado ("✓ tracking → Recibido en planta") del
+      // último escaneo hecho en el repartidor anterior (bug 2026-11-18).
+      if(!yaEstabaAbierto){
+        document.getElementById("fallidos-scan-feedback").textContent = "";
+        document.getElementById("fallidos-scan-input").value = "";
+      }
+      document.getElementById("fallidos-scan-input").focus();
     }
   }
 
-  function renderFallidos(){
-    aplicarModoFallidos();
-    if(stateFallidos.modo === "repartidor" && !stateFallidos.choferSeleccionado){
-      renderKpisFallidos(stateFallidos.filas);
-      renderFallidosPorChofer();
+  function cerrarDetalleFallidosRepartidor(){
+    stateFallidos.choferSeleccionado = null;
+    renderFallidos(); // no solo aplicarModoFallidos(): "Por repartidor" tiene
+    // que refrescar sus conteos/pendientes con lo que se gestionó adentro
+    // del modal (bug 2026-11-18: quedaba desactualizado hasta F5).
+  }
+  document.getElementById("modal-fallidos-cerrar").addEventListener("click", cerrarDetalleFallidosRepartidor);
+  document.getElementById("modal-detalle-fallidos").addEventListener("click", (e)=>{
+    if(e.target.id === "modal-detalle-fallidos") cerrarDetalleFallidosRepartidor();
+  });
+
+  // Escaneo por pistola QR/código de barras en el detalle de un repartidor
+  // (pedido 2026-11-18): misma lógica de extracción de ID que ya usa el
+  // sector de Picking (Google Apps Script) — el código trae un payload
+  // tipo JSON con "did" (envío Directo, matchea contra id_interno) o
+  // "tracking_number"/"id" (Mercadolibre, matchea contra tracking). Al
+  // encontrar el pendiente correspondiente, lo marca "Recibido en planta"
+  // sin abrir el modal, para procesar varios paquetes seguidos rápido.
+  function extraerIdDeCodigoEscaneado(raw){
+    const matchDid = raw.match(/(?:^|[^a-zA-Z0-9_])"?did"?\s*:\s*"([^"{}\n\r]+)"/i);
+    const matchTracking = raw.match(/(?:^|[^a-zA-Z0-9_])"?tracking_number"?\s*:\s*"([^"{}\n\r]+)"/i);
+    const matchId = raw.match(/(?:^|[^a-zA-Z0-9_])"?[iï]d"?\s*:\s*"([^"{}\n\r]+)"/i);
+    if(matchDid) return { valor: matchDid[1].trim(), campo: "id_interno" };
+    if(matchTracking) return { valor: matchTracking[1].trim(), campo: "tracking" };
+    if(matchId) return { valor: matchId[1].trim(), campo: "tracking" };
+    return null;
+  }
+
+  async function procesarEscaneoFallido(raw){
+    const feedback = document.getElementById("fallidos-scan-feedback");
+    const extraido = extraerIdDeCodigoEscaneado(raw);
+    if(!extraido){
+      feedback.style.color = "#c0392b";
+      feedback.textContent = `Código no reconocido: "${raw.slice(0, 40)}"`;
       return;
     }
-
-    let filas = stateFallidos.filas;
-    if(stateFallidos.modo === "repartidor"){
-      // Detalle de un repartidor: siempre sus casos pendientes, sin los
-      // filtros de Tipo/Destino/Estatus de la pestaña "Todos".
-      filas = filas.filter(f => (f.envio.cadete || "Sin repartidor") === stateFallidos.choferSeleccionado && f.estatus === "pendiente");
+    const pendientesRepa = stateFallidos.filas.filter(f =>
+      claveRepartidorEnvio(f.envio) === stateFallidos.choferSeleccionado && f.estatus === "pendiente"
+    );
+    const fila = pendientesRepa.find(f => String(f.envio[extraido.campo] || "").trim() === extraido.valor);
+    if(!fila){
+      feedback.style.color = "#c0392b";
+      feedback.textContent = `No se encontró "${extraido.valor}" entre los pendientes de este repartidor.`;
+      return;
+    }
+    const payload = {
+      estatus: "recibido_planta",
+      precio_descuento: fila.seguimiento ? fila.seguimiento.precio_descuento : null,
+      motivo_cierre: fila.seguimiento ? fila.seguimiento.motivo_cierre : null,
+      observaciones: fila.seguimiento ? fila.seguimiento.observaciones : null,
+      fecha_cierre: fechaART(0),
+    };
+    let error;
+    if(fila.seguimiento){
+      ({ error } = await sb.from("fallidos_seguimiento").update(payload).eq("id", fila.seguimiento.id));
     } else {
-      if(stateFallidos.tipo !== "todos") filas = filas.filter(f => f.tipo === stateFallidos.tipo);
-      if(stateFallidos.destino) filas = filas.filter(f => f.destino === stateFallidos.destino);
-      if(stateFallidos.estatus === "pendiente") filas = filas.filter(f => f.estatus === "pendiente");
-      else if(stateFallidos.estatus === "cerrados") filas = filas.filter(f => f.estatus !== "pendiente");
+      ({ error } = await sb.from("fallidos_seguimiento").insert({ id_interno: fila.envio.id_interno, duplicado: fila.duplicado, ...payload }));
     }
-
-    renderKpisFallidos(stateFallidos.filas);
-
-    const q = stateFallidos.modo === "repartidor" ? "" : stateFallidos.search;
-    if(q){
-      filas = filas.filter(f =>
-        (f.envio.cadete || "").toLowerCase().includes(q) ||
-        (f.envio.cliente || "").toLowerCase().includes(q) ||
-        (f.envio.localidad || "").toLowerCase().includes(q) ||
-        (f.envio.tracking || "").toLowerCase().includes(q)
-      );
+    if(error){
+      console.error("Error marcando recibido en planta por escaneo:", error);
+      feedback.style.color = "#c0392b";
+      feedback.textContent = "No se pudo guardar.";
+      return;
     }
-    filas = [...filas].sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
+    feedback.style.color = "#1e7e3c";
+    feedback.textContent = `✓ ${fila.envio.tracking || fila.envio.id_interno} → Recibido en planta.`;
+    await cargarFallidos();
+    document.getElementById("fallidos-scan-input").focus();
+  }
 
-    const tbody = document.getElementById("tabla-fallidos");
+  document.getElementById("fallidos-scan-input").addEventListener("keydown", (e)=>{
+    if(e.key !== "Enter") return;
+    e.preventDefault();
+    const valor = e.target.value.trim();
+    e.target.value = "";
+    if(!valor) return;
+    procesarEscaneoFallido(valor);
+  });
+
+  // Arma las filas de la tabla de Fallidos — compartida entre "Todos"
+  // (#tabla-fallidos) y el modal de detalle por repartidor
+  // (#tabla-fallidos-detalle, sin columna Repartidor porque ya está en el
+  // título del modal). `colspanVacio` tiene que matchear la cantidad de
+  // columnas de cada thead (13 en Todos, 12 en el modal).
+  function renderTablaFallidos(filas, tbodyId, { incluirRepartidor, colspanVacio }){
+    const tbody = document.getElementById(tbodyId);
     if(!filas.length){
-      tbody.innerHTML = `<tr><td colspan="13" class="sin-datos">Sin casos en este filtro.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colspanVacio}" class="sin-datos">Sin casos en este filtro.</td></tr>`;
       return;
     }
     tbody.innerHTML = filas.map(f => {
@@ -2237,7 +2494,7 @@
         <td>${f.envio.tracking || "—"}</td>
         <td>${f.envio.cliente || "—"}</td>
         <td>${f.envio.localidad || "—"}</td>
-        <td>${f.envio.cadete || "—"}</td>
+        ${incluirRepartidor ? `<td>${f.envio.cadete || "—"}</td>` : ""}
         <td>${origen}</td>
         <td>${f.envio.estado || "—"}${f.duplicado ? ' <span class="badge gris">Duplicado</span>' : ""}</td>
         <td>${f.tipo}</td>
@@ -2252,13 +2509,49 @@
     lucide.createIcons();
   }
 
-  document.querySelectorAll("#fallidos-tipo-toolbar .chip").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      document.querySelectorAll("#fallidos-tipo-toolbar .chip").forEach(b=>b.classList.toggle("activo", b===btn));
-      stateFallidos.tipo = btn.dataset.tipoFallido;
-      renderFallidos();
-    });
-  });
+  function renderFallidos(){
+    aplicarModoFallidos();
+    if(stateFallidos.modo === "repartidor" && !stateFallidos.choferSeleccionado){
+      renderKpisFallidos(stateFallidos.filas);
+      renderFallidosPorChofer();
+      return;
+    }
+
+    if(stateFallidos.modo === "repartidor" && stateFallidos.choferSeleccionado){
+      // Modal de detalle: siempre los pendientes del repartidor elegido,
+      // sin los filtros de Tipo/Destino/Estatus/Búsqueda de "Todos" (son
+      // pantallas separadas, no comparten estado).
+      let filas = stateFallidos.filas.filter(f =>
+        claveRepartidorEnvio(f.envio) === stateFallidos.choferSeleccionado && f.estatus === "pendiente"
+      );
+      filas = [...filas].sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
+      renderKpisFallidos(stateFallidos.filas);
+      renderTablaFallidos(filas, "tabla-fallidos-detalle", { incluirRepartidor: false, colspanVacio: 12 });
+      return;
+    }
+
+    // modo "todos"
+    let filas = stateFallidos.filas;
+    if(stateFallidos.tipo !== "todos") filas = filas.filter(f => f.tipo === stateFallidos.tipo);
+    if(stateFallidos.destino) filas = filas.filter(f => f.destino === stateFallidos.destino);
+    if(stateFallidos.estatus === "pendiente") filas = filas.filter(f => f.estatus === "pendiente");
+    else if(stateFallidos.estatus === "cerrados") filas = filas.filter(f => f.estatus !== "pendiente");
+
+    renderKpisFallidos(stateFallidos.filas);
+
+    const q = stateFallidos.search;
+    if(q){
+      filas = filas.filter(f =>
+        (f.envio.cadete || "").toLowerCase().includes(q) ||
+        (f.envio.cliente || "").toLowerCase().includes(q) ||
+        (f.envio.localidad || "").toLowerCase().includes(q) ||
+        (f.envio.tracking || "").toLowerCase().includes(q)
+      );
+    }
+    filas = [...filas].sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
+    renderTablaFallidos(filas, "tabla-fallidos", { incluirRepartidor: true, colspanVacio: 13 });
+  }
+
   document.querySelectorAll("#modo-fallidos .chip").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       document.querySelectorAll("#modo-fallidos .chip").forEach(b=>b.classList.toggle("activo", b===btn));
@@ -2272,13 +2565,8 @@
     stateFallidos.searchRepartidor = e.target.value.trim().toLowerCase();
     renderFallidosPorChofer();
   });
-  document.querySelectorAll("#fallidos-repartidor-tipo-toolbar .chip").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      document.querySelectorAll("#fallidos-repartidor-tipo-toolbar .chip").forEach(b=>b.classList.toggle("activo", b===btn));
-      stateFallidos.tipoRepartidor = btn.dataset.tipoFallidoRepa;
-      renderFallidosPorChofer();
-    });
-  });
+  crearPopoverGenerico("popover-filtros-fallidos-repartidor");
+  crearComboGenerico("combo-tipo-fallidos-repartidor", (valor)=>{ stateFallidos.tipoRepartidor = valor; renderFallidosPorChofer(); });
   document.querySelectorAll("#fallidos-chofer-lista-card th.ordenable").forEach(th=>{
     th.addEventListener("click", ()=>{
       const key = th.dataset.sort;
@@ -2291,11 +2579,7 @@
     const fila = e.target.closest("tr[data-chofer]");
     if(!fila) return;
     stateFallidos.choferSeleccionado = fila.dataset.chofer;
-    aplicarModoFallidos();
-    renderFallidos();
-  });
-  document.getElementById("btn-volver-fallidos-chofer").addEventListener("click", ()=>{
-    stateFallidos.choferSeleccionado = null;
+    stateFallidos.choferSeleccionadoNombre = fila.dataset.choferNombre;
     aplicarModoFallidos();
     renderFallidos();
   });
@@ -2304,6 +2588,7 @@
     renderFallidos();
   });
   crearPopoverGenerico("popover-filtros-fallidos");
+  crearComboGenerico("combo-tipo-fallidos", (valor)=>{ stateFallidos.tipo = valor; renderFallidos(); });
   crearComboGenerico("combo-destino-fallidos", (valor)=>{ stateFallidos.destino = valor; renderFallidos(); });
   crearComboGenerico("combo-estatus-fallidos", (valor)=>{ stateFallidos.estatus = valor; renderFallidos(); });
   crearComboGenerico("combo-rango-fallidos", (valor)=>{ stateFallidos.rangoDias = Number(valor); cargarFallidos(); });
@@ -2337,6 +2622,10 @@
     });
   }
   document.getElementById("tabla-fallidos").addEventListener("click", (e)=>{
+    const btn = e.target.closest(".btn-icono-chico.editar");
+    if(btn) abrirEdicionFallido(btn.dataset.idInterno, btn.dataset.idSeg);
+  });
+  document.getElementById("tabla-fallidos-detalle").addEventListener("click", (e)=>{
     const btn = e.target.closest(".btn-icono-chico.editar");
     if(btn) abrirEdicionFallido(btn.dataset.idInterno, btn.dataset.idSeg);
   });
@@ -2868,6 +3157,28 @@
     const btn = cont.querySelector(".combo-filtro-btn");
     const lista = cont.querySelector(".combo-filtro-lista");
     const items = () => Array.from(lista.querySelectorAll("li"));
+    // El default es el <li aria-selected="true"> tal como está en el HTML
+    // al crearse el combo (antes de que el usuario elija nada) — se fija acá
+    // porque una vez que se selecciona otra cosa, aria-selected se mueve.
+    const liPorDefecto = items().find(li => li.getAttribute("aria-selected") === "true") || items()[0];
+
+    // Buscador opcional adentro del combo: filtra los <li> por texto, sin
+    // tocar items() (que sigue viendo TODOS, para selección/registro/reset)
+    // — itemsVisibles() es la que usa la navegación por teclado.
+    let buscador = null;
+    if(items().length > UMBRAL_BUSCADOR_COMBO){
+      buscador = document.createElement("input");
+      buscador.type = "text";
+      buscador.className = "buscador-combo-lista";
+      buscador.placeholder = "Buscar…";
+      buscador.addEventListener("click", (e)=> e.stopPropagation());
+      buscador.addEventListener("input", ()=>{
+        const q = buscador.value.trim().toLowerCase();
+        items().forEach(li => { li.hidden = q !== "" && !li.textContent.toLowerCase().includes(q); });
+      });
+      lista.insertBefore(buscador, lista.firstChild);
+    }
+    const itemsVisibles = () => items().filter(li => !li.hidden);
 
     function cerrar(){
       lista.hidden = true;
@@ -2877,12 +3188,17 @@
     }
     function abrir(){
       lista.hidden = false;
+      if(buscador){ buscador.value = ""; items().forEach(li => { li.hidden = false; }); }
       posicionarListaCombo(btn, lista);
       btn.setAttribute("aria-expanded", "true");
       abrirEnPila(cont, lista, cerrar);
-      const activa = items().find(li => li.getAttribute("aria-selected") === "true") || items()[0];
-      items().forEach(li => li.tabIndex = -1);
-      if(activa){ activa.tabIndex = 0; activa.focus(); }
+      if(buscador){
+        buscador.focus();
+      } else {
+        const activa = items().find(li => li.getAttribute("aria-selected") === "true") || items()[0];
+        items().forEach(li => li.tabIndex = -1);
+        if(activa){ activa.tabIndex = 0; activa.focus(); }
+      }
     }
     function seleccionar(li){
       if(!li) return;
@@ -2906,18 +3222,39 @@
         if(lista.hidden) abrir();
       }
     });
+    if(buscador){
+      buscador.addEventListener("keydown", (e)=>{
+        const lis = itemsVisibles();
+        if(e.key === "ArrowDown"){ e.preventDefault(); if(lis[0]){ lis[0].tabIndex = 0; lis[0].focus(); } }
+        else if(e.key === "Enter"){ e.preventDefault(); if(lis[0]) seleccionar(lis[0]); }
+        else if(e.key === "Escape"){ e.preventDefault(); cerrar(); cerrarDeLaPila(lista); btn.focus(); }
+      });
+    }
     items().forEach(li=>{
       li.addEventListener("click", (e)=>{ e.stopPropagation(); seleccionar(li); });
       li.addEventListener("keydown", (e)=>{
-        const lis = items();
+        const lis = itemsVisibles();
         const i = lis.indexOf(li);
-        if(e.key === "ArrowDown"){ e.preventDefault(); const sig = lis[Math.min(i + 1, lis.length - 1)]; sig.tabIndex = 0; li.tabIndex = -1; sig.focus(); }
-        else if(e.key === "ArrowUp"){ e.preventDefault(); const ant = lis[Math.max(i - 1, 0)]; ant.tabIndex = 0; li.tabIndex = -1; ant.focus(); }
-        else if(e.key === "Home"){ e.preventDefault(); const primero = lis[0]; primero.tabIndex = 0; li.tabIndex = -1; primero.focus(); }
-        else if(e.key === "End"){ e.preventDefault(); const ultimo = lis[lis.length - 1]; ultimo.tabIndex = 0; li.tabIndex = -1; ultimo.focus(); }
+        if(e.key === "ArrowDown"){
+          e.preventDefault();
+          const sig = lis[Math.min(i + 1, lis.length - 1)];
+          if(sig){ sig.tabIndex = 0; li.tabIndex = -1; sig.focus(); }
+        }
+        else if(e.key === "ArrowUp"){
+          e.preventDefault();
+          if(i === 0 && buscador){ li.tabIndex = -1; buscador.focus(); }
+          else { const ant = lis[Math.max(i - 1, 0)]; if(ant){ ant.tabIndex = 0; li.tabIndex = -1; ant.focus(); } }
+        }
+        else if(e.key === "Home"){ e.preventDefault(); const primero = lis[0]; if(primero){ primero.tabIndex = 0; li.tabIndex = -1; primero.focus(); } }
+        else if(e.key === "End"){ e.preventDefault(); const ultimo = lis[lis.length - 1]; if(ultimo){ ultimo.tabIndex = 0; li.tabIndex = -1; ultimo.focus(); } }
         else if(e.key === "Enter" || e.key === " "){ e.preventDefault(); seleccionar(li); }
         else if(e.key === "Escape"){ e.preventDefault(); cerrar(); cerrarDeLaPila(lista); btn.focus(); }
       });
+    });
+
+    registroCombos.set(contenedorId, {
+      estaEnDefault: () => (items().find(li => li.getAttribute("aria-selected") === "true") || items()[0]) === liPorDefecto,
+      resetear: () => seleccionar(liPorDefecto),
     });
   }
 
@@ -2940,6 +3277,32 @@
         abrirEnPila(cont, panel, cerrar);
       }
     });
+    agregarLimpiarFiltros(panel);
+  }
+
+  // "Limpiar filtros" (pedido 2026-11-18): un único botón global que
+  // resetea TODOS los combos de un panel-filtros-ruta a su valor por
+  // defecto de una sola vez. Se agrega solo, solamente si el panel tiene
+  // combos adentro (un panel de "Columnas", por ejemplo, no) — nada que
+  // configurar por módulo. Los ids se leen al toque (no al crearse el
+  // popover) porque los combos de adentro suelen registrarse DESPUÉS de
+  // crearPopoverGenerico (ver orden real en, p.ej., Fallidos).
+  function agregarLimpiarFiltros(panel){
+    const idsCombo = Array.from(panel.querySelectorAll(".combo-filtro[id]")).map(el => el.id);
+    if(!idsCombo.length) return;
+    const btnLimpiar = document.createElement("button");
+    btnLimpiar.type = "button";
+    btnLimpiar.className = "btn-limpiar-filtros";
+    btnLimpiar.innerHTML = '<i data-lucide="x"></i>Limpiar filtros';
+    btnLimpiar.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      idsCombo.forEach(id=>{
+        const combo = registroCombos.get(id);
+        if(combo && !combo.estaEnDefault()) combo.resetear();
+      });
+    });
+    panel.insertBefore(btnLimpiar, panel.firstChild);
+    lucide.createIcons();
   }
 
   // Campo de selección múltiple para el modal ABM (p.ej. "Localidades" de
@@ -3365,10 +3728,17 @@
 
   async function cargarAsistencia(){
     const fecha = fechaAsistenciaActual();
-    const { data: filas, error } = await sb.from("asistencia_diaria").select("*").eq("fecha", fecha).order("id");
+    // cargarFallidos() en paralelo: calcularEstadoChofer() necesita
+    // stateFallidos.filas para "N fallidos pendientes" (ver
+    // contarFallidosPendientesPorRepartidor, pedido 2026-11-18) aunque
+    // nunca se haya entrado a la pantalla de Fallidos y Cambios.
+    const [{ data: filas, error }] = await Promise.all([
+      sb.from("asistencia_diaria").select("*").eq("fecha", fecha).order("id"),
+      cargarFallidos(),
+    ]);
     if(error){
       console.error("Error cargando asistencia_diaria:", error);
-      document.getElementById("tabla-asistencia").innerHTML = `<tr><td colspan="15" class="sin-datos">Error cargando los datos.</td></tr>`;
+      document.getElementById("tabla-asistencia").innerHTML = `<tr><td colspan="13" class="sin-datos">Error cargando los datos.</td></tr>`;
       return;
     }
     stateAsistencia.filas = filas || [];
@@ -3387,14 +3757,29 @@
   // vieja (J,L,M,O,Q,S,U) — ver reglas_de_negocio.md para el detalle del
   // flujo Soporte/Depósito.
   const COLUMNAS_BOOL_ASISTENCIA = [
-    "asiste_soporte", "tiene_fallidos_soporte", "fallidos_recibidos_deposito",
+    "asiste_soporte",
     "pallet_listo_deposito", "confirma_retiro_soporte", "llego_deposito",
     "pallet_retirado_deposito",
   ];
   const COLUMNAS_HORA_ASISTENCIA = [
-    "hora_aviso_soporte", "hora_fallidos_recibidos", "hora_pallet_listo",
+    "hora_aviso_soporte", "hora_pallet_listo",
     "hora_confirma_retiro", "hora_llegada", "hora_pallet_retirado",
   ];
+
+  // "Tiene fallidos"/"Fallidos recibidos" dejaron de ser checkboxes manuales
+  // acá (pedido 2026-11-18) — se calculan en vivo contra Fallidos y Cambios,
+  // que ya es la fuente real de esa información (incluido lo que marca el
+  // escaneo QR como "Recibido en planta"). Devuelve nombre -> cantidad de
+  // casos con Estatus "Pendiente" asignados a ese repartidor.
+  function contarFallidosPendientesPorRepartidor(){
+    const mapa = new Map();
+    for(const f of stateFallidos.filas){
+      if(f.estatus !== "pendiente") continue;
+      const clave = claveRepartidorEnvio(f.envio);
+      mapa.set(clave, (mapa.get(clave) || 0) + 1);
+    }
+    return mapa;
+  }
 
   // Réplica del ESTADO DEL CHOFER de la planilla (fórmula decodificada del
   // Sheet real) — es un valor calculado en el momento, no se guarda en la
@@ -3421,9 +3806,10 @@
     else if(f.asiste_soporte){ base = "Asistencia confirmada"; color = "amarillo"; icono = "check"; }
     else { base = "Sin confirmar / No asiste"; color = "gris"; icono = "circle-dashed"; }
 
-    if(f.tiene_fallidos_soporte){
-      base += f.fallidos_recibidos_deposito ? " · Fallidos recibidos" : " · Reportar fallidos";
-      if(!f.fallidos_recibidos_deposito && color !== "rojo") color = "amarillo";
+    const pendientes = contarFallidosPendientesPorRepartidor().get(claveRepartidorAsistencia(f)) || 0;
+    if(pendientes > 0){
+      base += ` · ${pendientes} fallido${pendientes === 1 ? "" : "s"} pendiente${pendientes === 1 ? "" : "s"}`;
+      if(color !== "rojo") color = "amarillo";
     }
     return { label: base, color, icono };
   }
@@ -3475,7 +3861,7 @@
 
     const tbody = document.getElementById("tabla-asistencia");
     if(!filas.length){
-      tbody.innerHTML = `<tr><td colspan="15" class="sin-datos">Sin repartidores cargados para esta fecha. Usá "Agregar repartidor" para empezar.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" class="sin-datos">Sin repartidores cargados para esta fecha. Usá "Agregar repartidor" para empezar.</td></tr>`;
       return;
     }
 
@@ -3489,8 +3875,6 @@
       html += `<td class="celda-texto-solo${f.localidades ? "" : " muted"}" data-col="localidades" title="${(f.localidades || "").replace(/"/g, "&quot;")}">${f.localidades || "—"}</td>`;
       html += `<td data-col="observaciones"><input class="cel-input ancho" data-campo="observaciones" placeholder="Ej: no asiste hoy" value="${(f.observaciones || "").replace(/"/g, "&quot;")}" /></td>`;
       html += `<td style="text-align:center;" data-col="asiste_soporte"><input type="checkbox" class="cel-input" data-campo="asiste_soporte" ${f.asiste_soporte ? "checked" : ""} /></td>`;
-      html += `<td style="text-align:center;" data-col="tiene_fallidos_soporte"><input type="checkbox" class="cel-input" data-campo="tiene_fallidos_soporte" ${f.tiene_fallidos_soporte ? "checked" : ""} /></td>`;
-      html += `<td style="text-align:center;" data-col="fallidos_recibidos_deposito"><input type="checkbox" class="cel-input" data-campo="fallidos_recibidos_deposito" ${f.fallidos_recibidos_deposito ? "checked" : ""} /></td>`;
       html += `<td style="text-align:center;" data-col="pallet_listo_deposito"><input type="checkbox" class="cel-input" data-campo="pallet_listo_deposito" ${f.pallet_listo_deposito ? "checked" : ""} /></td>`;
       html += `<td style="text-align:center;" data-col="confirma_retiro_soporte"><input type="checkbox" class="cel-input" data-campo="confirma_retiro_soporte" ${f.confirma_retiro_soporte ? "checked" : ""} /></td>`;
       html += `<td style="text-align:center;" data-col="llego_deposito"><input type="checkbox" class="cel-input" data-campo="llego_deposito" ${f.llego_deposito ? "checked" : ""} /></td>`;
@@ -3515,7 +3899,6 @@
   // acá, ya que son las que alimentan los indicadores.
   const CHECK_A_HORA = {
     asiste_soporte: "hora_aviso_soporte",
-    fallidos_recibidos_deposito: "hora_fallidos_recibidos",
     pallet_listo_deposito: "hora_pallet_listo",
     confirma_retiro_soporte: "hora_confirma_retiro",
     llego_deposito: "hora_llegada",
@@ -3639,8 +4022,7 @@
     document.getElementById("modal-detalle-asistencia-titulo").textContent = `Detalle — ${f.nombre || "(sin nombre)"}`;
     const lineas = [
       ["Aviso de asistencia (soporte)", f.hora_aviso_soporte],
-      ["Tiene fallidos", f.tiene_fallidos_soporte ? "Sí" : "No"],
-      ["Fallidos recibidos (depósito)", f.fallidos_recibidos_deposito ? f.hora_fallidos_recibidos : "—"],
+      ["Fallidos pendientes (Fallidos y Cambios)", contarFallidosPendientesPorRepartidor().get(claveRepartidorAsistencia(f)) || 0],
       ["Pallet listo (depósito)", f.pallet_listo_deposito ? f.hora_pallet_listo : "—"],
       ["Confirma retiro (soporte)", f.confirma_retiro_soporte ? f.hora_confirma_retiro : "—"],
       ["Llegó a depósito", f.llego_deposito ? f.hora_llegada : "—"],
@@ -3746,7 +4128,7 @@
     const diaSemana = diaDeSemanaAsistencia(manana);
     if(diaSemana === 0){ await mostrarAviso("Mañana es domingo: no hay operación, no se carga nada."); return; }
 
-    const query = sb.from("choferes_roster").select("nombre,tipo_vehiculo,turno,zona,localidades,asiste_sabado,es_backup").eq("activo", true);
+    const query = sb.from("choferes_roster").select("nombre,tipo_vehiculo,turno,zona,localidades,asiste_sabado,es_backup,lightdata_id").eq("activo", true);
     const { data: roster, error } = diaSemana === 6 ? await query.eq("asiste_sabado", true) : await query;
     if(error){ console.error("Error cargando choferes_roster:", error); await mostrarAviso("No se pudo cargar el roster."); return; }
     if(!roster || !roster.length){ await mostrarAviso("No hay repartidores activos en el roster para cargar."); return; }
@@ -3761,7 +4143,7 @@
       })
       .map(r => ({
         fecha: manana, nombre: r.nombre, tipo_vehiculo: r.tipo_vehiculo,
-        turno: r.turno, zona: r.zona, localidades: r.localidades,
+        turno: r.turno, zona: r.zona, localidades: r.localidades, lightdata_id: r.lightdata_id,
       }));
 
     const { error: errorInsert } = await sb.from("asistencia_diaria")
@@ -3779,7 +4161,10 @@
   // ======================================================================
   async function cargarOperacionVivo(){
     const fecha = fechaART(0);
-    const { data: filas, error } = await sb.from("asistencia_diaria").select("*").eq("fecha", fecha).order("zona");
+    const [{ data: filas, error }] = await Promise.all([
+      sb.from("asistencia_diaria").select("*").eq("fecha", fecha).order("zona"),
+      cargarFallidos(), // ver nota en cargarAsistencia()
+    ]);
     if(error){ console.error("Error cargando Operación en vivo:", error); return; }
     renderOperacionVivo(filas || []);
   }
@@ -3795,9 +4180,10 @@
       const turno = horaATimestamp(fecha, f.turno);
       return llegada !== null && turno !== null && llegada <= turno + TOLERANCIA_PUNTUALIDAD_MIN * 60000;
     });
+    const pendientesFallidosPorRepartidor = contarFallidosPendientesPorRepartidor();
     const alertas = filas.filter(f => {
       const estado = calcularEstadoChofer(f);
-      return estado.color === "rojo" || (f.tiene_fallidos_soporte && !f.fallidos_recibidos_deposito);
+      return estado.color === "rojo" || (pendientesFallidosPorRepartidor.get(claveRepartidorAsistencia(f)) || 0) > 0;
     });
 
     const tarjetas = [
@@ -3877,7 +4263,7 @@
   // roster es la única fuente de verdad, nunca un alta manual suelta).
   document.getElementById("btn-agregar-chofer").addEventListener("click", async ()=>{
     const { data: roster, error: errorRoster } = await sb.from("choferes_roster")
-      .select("id,nombre,tipo_vehiculo,turno,zona,localidades")
+      .select("id,nombre,tipo_vehiculo,turno,zona,localidades,lightdata_id")
       .eq("activo", true)
       .order("nombre");
     if(errorRoster){ console.error("Error cargando choferes_roster:", errorRoster); await mostrarAviso("No se pudo cargar el roster."); return; }
@@ -3894,7 +4280,7 @@
       const r = roster.find(x => String(x.id) === vals.chofer_roster_id);
       const fecha = fechaAsistenciaActual();
       const { data, error } = await sb.from("asistencia_diaria")
-        .insert({ fecha, nombre: r.nombre, tipo_vehiculo: r.tipo_vehiculo, turno: r.turno, zona: r.zona, localidades: r.localidades })
+        .insert({ fecha, nombre: r.nombre, tipo_vehiculo: r.tipo_vehiculo, turno: r.turno, zona: r.zona, localidades: r.localidades, lightdata_id: r.lightdata_id })
         .select()
         .single();
       if(error){
@@ -4213,8 +4599,10 @@
 
   // ----- Choferes (roster): más campos, con combos de Vehículo/Zona referenciando sus propios ABM -----
   let adminChoferesData = [];
+  let adminChoferesLightdataUsuarios = {}; // id -> usuario (de lightdata_usuarios), para la columna "Usuario"
   let adminChoferesSearch = "";
   let adminChoferesSoloPendientes = false;
+  let adminChoferesFiltros = { vehiculo: "", turno: "", zona: "", activo: "", sabado: "" };
 
   async function cargarAdminChoferes(){
     const [{ data, error }] = await Promise.all([
@@ -4223,8 +4611,47 @@
     ]);
     if(error){ console.error("Error cargando choferes_roster:", error); return; }
     adminChoferesData = data || [];
+
+    const idsLightdata = adminChoferesData.map(f => f.lightdata_id).filter(id => id != null);
+    adminChoferesLightdataUsuarios = {};
+    if(idsLightdata.length){
+      const { data: usuariosLd, error: errorLd } = await sb.from("lightdata_usuarios").select("lightdata_id,usuario").in("lightdata_id", idsLightdata);
+      if(errorLd){ console.error("Error cargando lightdata_usuarios:", errorLd); }
+      else for(const u of usuariosLd) adminChoferesLightdataUsuarios[u.lightdata_id] = u.usuario;
+    }
+
+    llenarFiltrosAdminChoferes();
     renderAdminChoferes();
     actualizarAvisoChoferesPendientes();
+  }
+
+  // Las opciones de los combos-filtro de Vehículo/Turno/Zona salen de los
+  // valores que realmente tienen los repartidores cargados (si no habría
+  // opciones sin ningún resultado). Los <li> se arman solo la primera vez
+  // (crearComboGenerico engancha los listeners sobre esos <li> puntuales —
+  // regla 7 del dashboard: lo que el <script> engancha tiene que existir
+  // antes, y acá además no hay que re-enganchar en cada recarga).
+  let adminChoferesFiltrosInicializados = false;
+
+  function llenarFiltrosAdminChoferes(){
+    const opciones = (campo, formatear) => [...new Set(adminChoferesData.map(f => f[campo]).filter(v => v != null && v !== ""))]
+      .sort()
+      .map(v => `<li data-valor="${v}">${formatear ? formatear(v) : v}</li>`)
+      .join("");
+
+    document.querySelector("#combo-vehiculo-choferes .combo-filtro-lista").innerHTML = `<li data-valor="" aria-selected="true">Todos</li>` + opciones("tipo_vehiculo");
+    document.querySelector("#combo-turno-choferes .combo-filtro-lista").innerHTML = `<li data-valor="" aria-selected="true">Todos</li>` + opciones("turno", v => v.slice(0,5));
+    document.querySelector("#combo-zona-choferes .combo-filtro-lista").innerHTML = `<li data-valor="" aria-selected="true">Todas</li>` + opciones("zona");
+
+    if(!adminChoferesFiltrosInicializados){
+      crearPopoverGenerico("popover-filtros-choferes");
+      crearComboGenerico("combo-vehiculo-choferes", (valor)=>{ adminChoferesFiltros.vehiculo = valor; renderAdminChoferes(); });
+      crearComboGenerico("combo-turno-choferes", (valor)=>{ adminChoferesFiltros.turno = valor; renderAdminChoferes(); });
+      crearComboGenerico("combo-zona-choferes", (valor)=>{ adminChoferesFiltros.zona = valor; renderAdminChoferes(); });
+      crearComboGenerico("combo-activo-choferes", (valor)=>{ adminChoferesFiltros.activo = valor; renderAdminChoferes(); });
+      crearComboGenerico("combo-sabado-choferes", (valor)=>{ adminChoferesFiltros.sabado = valor; renderAdminChoferes(); });
+      adminChoferesFiltrosInicializados = true;
+    }
   }
 
   // Choferes que se dieron de alta automáticamente desde Lightdata
@@ -4245,25 +4672,34 @@
 
   function renderAdminChoferes(){
     let filas = adminChoferesData;
-    if(adminChoferesSearch) filas = filas.filter(f => (f.nombre || "").toLowerCase().includes(adminChoferesSearch));
+    if(adminChoferesSearch) filas = filas.filter(f =>
+      (f.nombre || "").toLowerCase().includes(adminChoferesSearch) ||
+      (adminChoferesLightdataUsuarios[f.lightdata_id] || "").toLowerCase().includes(adminChoferesSearch)
+    );
     if(adminChoferesSoloPendientes) filas = filas.filter(f => f.pendiente_completar);
+    if(adminChoferesFiltros.vehiculo) filas = filas.filter(f => f.tipo_vehiculo === adminChoferesFiltros.vehiculo);
+    if(adminChoferesFiltros.turno) filas = filas.filter(f => f.turno === adminChoferesFiltros.turno);
+    if(adminChoferesFiltros.zona) filas = filas.filter(f => f.zona === adminChoferesFiltros.zona);
+    if(adminChoferesFiltros.activo) filas = filas.filter(f => !!f.activo === (adminChoferesFiltros.activo === "si"));
+    if(adminChoferesFiltros.sabado) filas = filas.filter(f => !!f.asiste_sabado === (adminChoferesFiltros.sabado === "si"));
+
     const tbody = document.getElementById("tabla-admin-choferes");
     if(!filas.length){
-      tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">Sin repartidores. Usá "Agregar repartidor" para empezar.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="sin-datos">Sin repartidores. Usá "Agregar repartidor" para empezar.</td></tr>`;
       return;
     }
     tbody.innerHTML = filas.map(f => `
       <tr class="${f.activo ? "" : "fila-inactiva"} ${f.pendiente_completar ? "fila-pendiente-completar" : ""}" data-id="${f.id}">
-        <td>${f.nombre}${f.es_backup ? ' <span class="texto-muted">(backup)</span>' : ""}${f.pendiente_completar ? ' <span class="badge amarillo">Pendiente</span>' : ""}</td>
+        <td>${f.pendiente_completar ? `<span class="punto-pendiente" tabindex="0" role="img" data-tip="Pendiente de completar: se dio de alta automáticamente desde Lightdata, todavía le falta vehículo/zona/turno/localidad."></span>` : ""}${f.nombre}${f.es_backup ? ' <span class="texto-muted">(backup)</span>' : ""}</td>
+        <td>${adminChoferesLightdataUsuarios[f.lightdata_id] || "—"}</td>
         <td>${f.tipo_vehiculo || "—"}</td>
         <td>${f.turno ? f.turno.slice(0,5) : "—"}</td>
         <td>${f.zona || "—"}</td>
-        <td>${f.localidades || "—"}</td>
-        <td>${f.observaciones || "—"}</td>
         <td>${f.activo ? "Sí" : "No"}</td>
         <td>${f.asiste_sabado ? "Sí" : "No"}</td>
         <td class="col-opciones">
           <span class="opciones-fila">
+            <button type="button" class="btn-icono-chico ver" data-id="${f.id}" title="Ver detalle"><i data-lucide="eye"></i></button>
             <button type="button" class="btn-icono-chico editar" data-id="${f.id}" title="Editar"><i data-lucide="pencil"></i></button>
             <button type="button" class="btn-icono-chico borrar" data-id="${f.id}" title="Borrar"><i data-lucide="trash-2"></i></button>
           </span>
@@ -4272,6 +4708,34 @@
     `).join("");
     lucide.createIcons();
   }
+
+  function abrirDetalleChofer(id){
+    const f = adminChoferesData.find(x => x.id === id);
+    if(!f) return;
+    document.getElementById("modal-detalle-repartidor-titulo").textContent = `Detalle — ${f.nombre}`;
+    const lineas = [
+      ["Usuario (Lightdata)", adminChoferesLightdataUsuarios[f.lightdata_id] || "—"],
+      ["Vehículo", f.tipo_vehiculo || "—"],
+      ["Turno", f.turno ? f.turno.slice(0,5) : "—"],
+      ["Es backup (sin turno fijo)", f.es_backup ? "Sí" : "No"],
+      ["Zona", f.zona || "—"],
+      ["Localidades", f.localidades || "—"],
+      ["Observaciones", f.observaciones || "—"],
+      ["Activo", f.activo ? "Sí" : "No"],
+      ["Asiste sábado", f.asiste_sabado ? "Sí" : "No"],
+      ["Pendiente de completar", f.pendiente_completar ? "Sí" : "No"],
+    ];
+    document.getElementById("modal-detalle-repartidor-cuerpo").innerHTML = lineas.map(([label, valor]) => `
+      <div class="linea-detalle-asist"><span>${label}</span><span class="hora-detalle">${valor}</span></div>
+    `).join("");
+    document.getElementById("modal-detalle-repartidor").hidden = false;
+  }
+  document.getElementById("modal-detalle-repartidor-cerrar").addEventListener("click", ()=>{
+    document.getElementById("modal-detalle-repartidor").hidden = true;
+  });
+  document.getElementById("modal-detalle-repartidor").addEventListener("click", (e)=>{
+    if(e.target.id === "modal-detalle-repartidor") document.getElementById("modal-detalle-repartidor").hidden = true;
+  });
 
   document.getElementById("btn-ver-solo-pendientes").addEventListener("click", (e)=>{
     adminChoferesSoloPendientes = !adminChoferesSoloPendientes;
@@ -4287,6 +4751,7 @@
     adminChoferesSearch = e.target.value.toLowerCase();
     renderAdminChoferes();
   });
+
 
   function abrirFormularioChofer(titulo, valores, onGuardar){
     abrirModalAbm(titulo, [
@@ -4314,8 +4779,12 @@
   });
 
   document.getElementById("tabla-admin-choferes").addEventListener("click", async (e)=>{
+    const btnVer = e.target.closest(".btn-icono-chico.ver");
     const btnEditar = e.target.closest(".btn-icono-chico.editar");
     const btnBorrar = e.target.closest(".btn-icono-chico.borrar");
+    if(btnVer){
+      abrirDetalleChofer(Number(btnVer.dataset.id));
+    }
     if(btnEditar){
       const id = Number(btnEditar.dataset.id);
       const fila = adminChoferesData.find(f => f.id === id);

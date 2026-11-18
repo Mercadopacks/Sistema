@@ -118,6 +118,29 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python3 sincronizar_lightdata.py --live
 
+      # Completa envios.chofer_lightdata_id con el ID real de Lightdata
+      # (didcadete, ver lightdata_api_envios.md) — cruzar por ID en vez de
+      # por nombre evita bugs como el de "Fiorella  Souza" (doble espacio
+      # en Lightdata) que no matcheaba contra el roster. `continue-on-error`
+      # por la misma razón que el paso de arriba: endpoint interno no
+      # oficial, nunca debe tumbar la publicación de envíos.
+      - name: Vincular choferes a envíos (por ID de Lightdata)
+        working-directory: scripts
+        continue-on-error: true
+        env:
+          LIGHTDATA_USER: ${{ secrets.LIGHTDATA_USER }}
+          LIGHTDATA_PASS: ${{ secrets.LIGHTDATA_PASS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FECHA_INPUT: ${{ github.event.inputs.fecha }}
+        run: |
+          if [ -n "$FECHA_INPUT" ]; then
+            export FECHA_DESCARGA="$FECHA_INPUT"
+          else
+            export FECHA_DESCARGA=$(date -u -d "-3 hours" +%F)  # ART = UTC-3
+          fi
+          python3 vincular_choferes_envios.py
+
       - name: Subir captura de pantalla si falló
         if: failure()
         uses: actions/upload-artifact@v4
