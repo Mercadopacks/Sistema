@@ -189,11 +189,15 @@ def main():
 
     for i in range(0, len(actualizaciones), LOTE):
         lote = actualizaciones[i:i + LOTE]
-        # upsert con on_conflict: solo pisa chofer_lightdata_id, nunca
-        # toca el resto de las columnas del envío (no vienen en el payload).
-        # Seguro acá porque ya filtramos a ids que EXISTEN (siempre toma el
-        # camino de UPDATE, nunca inserta una fila nueva incompleta).
-        sb.table("envios").upsert(lote, on_conflict="id_interno").execute()
+        # UPDATE real por RPC (ver migración 2026-11-19): un upsert parcial
+        # (solo id_interno + chofer_lightdata_id, sin el resto de columnas
+        # NOT NULL) le erraba al ON CONFLICT y terminaba intentando
+        # INSERTAR una fila incompleta — bug real, no una corrida con
+        # suerte. Este RPC hace un UPDATE de verdad, nunca inserta.
+        sb.rpc("actualizar_chofer_lightdata_id_lote", {
+            "ids": [a["id_interno"] for a in lote],
+            "valores": [a["chofer_lightdata_id"] for a in lote],
+        }).execute()
         print(f"  actualizados {min(i + LOTE, len(actualizaciones))}/{len(actualizaciones)}")
 
     print("Listo.")

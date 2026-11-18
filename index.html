@@ -557,7 +557,24 @@
   }
   .btn-secundario-modal:hover{background:var(--fondo);}
   .modal-abm-label{display:flex; flex-direction:column; gap:5px; font-size:13px; font-weight:600; color:#555;}
+  .modal-abm-label .label-con-icono, .modal-abm-check .label-con-icono{display:inline-flex; align-items:center; gap:6px;}
+  .modal-abm-label .label-con-icono svg, .modal-abm-check .label-con-icono svg{width:14px; height:14px; color:#999; flex-shrink:0;}
   .modal-abm-check{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:#555;}
+  /* Modal ABM en grilla (pedido 2026-11-19, opt-in vía opciones.grid de
+     abrirModalAbm) — el contenedor y la tarjeta usan estilo inline por
+     default, por eso el !important acá. */
+  #modal-abm .modal-card.modal-abm-card-ancha{max-width:720px !important;}
+  #modal-abm-campos.modal-abm-grid{display:grid !important; grid-template-columns:repeat(3, 1fr); gap:14px 18px;}
+  #modal-abm-campos.modal-abm-grid [data-campo-wrap].campo-span-completo{grid-column:1 / -1;}
+  @media (max-width:640px){ #modal-abm-campos.modal-abm-grid{grid-template-columns:1fr;} }
+  /* Detalle de repartidor en grilla compacta (mismo pedido) */
+  .grid-detalle-compacto{display:grid; grid-template-columns:repeat(3, 1fr); gap:16px 20px;}
+  .grid-detalle-compacto .campo-detalle{display:flex; flex-direction:column; gap:4px; min-width:0;}
+  .grid-detalle-compacto .campo-detalle.campo-span-completo{grid-column:1 / -1;}
+  .grid-detalle-compacto .campo-detalle-label{display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:#999; text-transform:uppercase; letter-spacing:.3px;}
+  .grid-detalle-compacto .campo-detalle-label svg{width:13px; height:13px; flex-shrink:0;}
+  .grid-detalle-compacto .campo-detalle-valor{font-size:13.5px; font-weight:600; color:var(--negro); word-break:break-word;}
+  @media (max-width:640px){ .grid-detalle-compacto{grid-template-columns:repeat(2, 1fr);} }
   th.col-opciones, td.col-opciones{text-align:right; padding-right:16px;}
   .opciones-fila{display:inline-flex; gap:4px; justify-content:flex-end;}
   .btn-icono-chico{
@@ -3771,12 +3788,24 @@
   // que ya es la fuente real de esa información (incluido lo que marca el
   // escaneo QR como "Recibido en planta"). Devuelve nombre -> cantidad de
   // casos con Estatus "Pendiente" asignados a ese repartidor.
+  // Indexa cada pendiente bajo las DOS claves posibles (por ID de
+  // Lightdata y por nombre normalizado), no solo la "mejor" — si no, un
+  // repartidor con el envío ya vinculado por ID pero cuya fila de
+  // asistencia_diaria todavía no tiene lightdata_id (filas de antes de
+  // este cambio, ver claveRepartidorAsistencia) nunca matchea aunque sea
+  // la misma persona (bug real 2026-11-19, caso Fiorella Souza: envíos
+  // con chofer_lightdata_id=1093, asistencia con lightdata_id=null).
   function contarFallidosPendientesPorRepartidor(){
     const mapa = new Map();
     for(const f of stateFallidos.filas){
       if(f.estatus !== "pendiente") continue;
-      const clave = claveRepartidorEnvio(f.envio);
-      mapa.set(clave, (mapa.get(clave) || 0) + 1);
+      const claves = new Set([
+        claveRepartidorEnvio(f.envio),
+        `nombre:${normEspaciosNombre(f.envio.cadete) || "Sin repartidor"}`,
+      ]);
+      for(const clave of claves){
+        mapa.set(clave, (mapa.get(clave) || 0) + 1);
+      }
     }
     return mapa;
   }
@@ -4323,9 +4352,19 @@
     return datos;
   }
 
-  function abrirModalAbm(titulo, campos, valores, onGuardar){
+  // `opciones.grid` (pedido 2026-11-19): algunos formularios con muchos
+  // campos quedaban como una lista larga hacia abajo con mucho scroll —
+  // en modo grilla los campos van de a 2-3 por fila (`c.icono` para el
+  // ícono del título, `c.span` para que uno ocupe todo el ancho, ej. un
+  // multiselect u observaciones). Opt-in: sin `opciones.grid`, todo se ve
+  // exactamente igual que siempre (ningún otro ABM del sistema lo usa
+  // todavía, así que no hay riesgo de romper nada existente).
+  function abrirModalAbm(titulo, campos, valores, onGuardar, opciones){
+    opciones = opciones || {};
     document.getElementById("modal-abm-titulo").textContent = titulo;
     const cont = document.getElementById("modal-abm-campos");
+    cont.classList.toggle("modal-abm-grid", !!opciones.grid);
+    document.querySelector("#modal-abm .modal-card").classList.toggle("modal-abm-card-ancha", !!opciones.grid);
     comboInstanciasModal.length = 0;
 
     // Campos con `mostrarSi(valoresActuales)` quedan ocultos hasta que esa
@@ -4341,10 +4380,13 @@
       });
     }
 
+    const labelConIcono = c => c.icono ? `<span class="label-con-icono"><i data-lucide="${c.icono}"></i>${c.label}</span>` : c.label;
+    const claseWrap = c => c.span ? `data-campo-wrap="${c.clave}" class="campo-span-completo"` : `data-campo-wrap="${c.clave}"`;
+
     cont.innerHTML = campos.map(c => {
       const val = (valores && valores[c.clave] != null) ? valores[c.clave] : "";
       if(c.tipo === "checkbox"){
-        return `<div data-campo-wrap="${c.clave}"><label class="modal-abm-check"><input type="checkbox" class="cel-input" data-campo="${c.clave}" ${val ? "checked" : ""} /> ${c.label}</label></div>`;
+        return `<div ${claseWrap(c)}><label class="modal-abm-check"><input type="checkbox" class="cel-input" data-campo="${c.clave}" ${val ? "checked" : ""} /> ${labelConIcono(c)}</label></div>`;
       }
       if(c.tipo === "select"){
         // Cada opción puede ser un string simple ("AUTO") o un par
@@ -4357,7 +4399,7 @@
         }).join("");
         const actual = (c.opciones || []).find(o => String((o && typeof o === "object") ? o.valor : o) === String(val));
         const textoActual = actual ? ((actual && typeof actual === "object") ? actual.texto : actual) : (val || "Elegir…");
-        return `<div data-campo-wrap="${c.clave}"><div class="modal-abm-label">${c.label}
+        return `<div ${claseWrap(c)}><div class="modal-abm-label">${labelConIcono(c)}
           <div class="combo-filtro" id="modal-campo-${c.clave}" data-valor-actual="${val || ""}">
             <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">${textoActual}</button>
             <ul class="combo-filtro-lista" role="listbox" hidden>${opciones}</ul>
@@ -4370,7 +4412,7 @@
           <label class="check-columna" data-texto="${o.toLowerCase().replace(/"/g, "&quot;")}"><input type="checkbox" value="${o}" ${seleccionados.has(o) ? "checked" : ""}/> ${o}</label>
         `).join("");
         const textoActual = seleccionados.size ? [...seleccionados].join(", ") : "Elegir…";
-        return `<div data-campo-wrap="${c.clave}"><div class="modal-abm-label">${c.label}
+        return `<div ${claseWrap(c)}><div class="modal-abm-label">${labelConIcono(c)}
           <div class="combo-filtro" id="modal-campo-${c.clave}" data-valor-actual="${[...seleccionados].join(", ")}">
             <button type="button" class="combo-filtro-btn" aria-haspopup="true" aria-expanded="false">${textoActual}</button>
             <div class="panel-filtros-ruta panel-multiselect" hidden>
@@ -4382,10 +4424,11 @@
         </div></div>`;
       }
       const tipoInput = c.tipo === "time" ? "time" : (c.tipo === "number" ? "number" : "text");
-      return `<div data-campo-wrap="${c.clave}"><label class="modal-abm-label">${c.label}
+      return `<div ${claseWrap(c)}><label class="modal-abm-label">${labelConIcono(c)}
         <input type="${tipoInput}" class="cel-input" data-campo="${c.clave}" value="${String(val).replace(/"/g, "&quot;")}" />
       </label></div>`;
     }).join("");
+    lucide.createIcons();
 
     campos.filter(c => c.tipo === "select").forEach(c=>{
       const contId = `modal-campo-${c.clave}`;
@@ -4713,21 +4756,32 @@
     const f = adminChoferesData.find(x => x.id === id);
     if(!f) return;
     document.getElementById("modal-detalle-repartidor-titulo").textContent = `Detalle — ${f.nombre}`;
-    const lineas = [
-      ["Usuario (Lightdata)", adminChoferesLightdataUsuarios[f.lightdata_id] || "—"],
-      ["Vehículo", f.tipo_vehiculo || "—"],
-      ["Turno", f.turno ? f.turno.slice(0,5) : "—"],
-      ["Es backup (sin turno fijo)", f.es_backup ? "Sí" : "No"],
-      ["Zona", f.zona || "—"],
-      ["Localidades", f.localidades || "—"],
-      ["Observaciones", f.observaciones || "—"],
-      ["Activo", f.activo ? "Sí" : "No"],
-      ["Asiste sábado", f.asiste_sabado ? "Sí" : "No"],
-      ["Pendiente de completar", f.pendiente_completar ? "Sí" : "No"],
+    // { icono, label, valor, span } — span para los campos de texto largo
+    // (Localidades/Observaciones), que no entran bien en una columna de 3.
+    const campos = [
+      { icono: "hash", label: "ID Lightdata", valor: f.lightdata_id ?? "—" },
+      { icono: "at-sign", label: "Usuario (Lightdata)", valor: adminChoferesLightdataUsuarios[f.lightdata_id] || "—" },
+      { icono: "car", label: "Vehículo", valor: f.tipo_vehiculo || "—" },
+      { icono: "clock", label: "Turno", valor: f.turno ? f.turno.slice(0,5) : "—" },
+      { icono: "map", label: "Zona", valor: f.zona || "—" },
+      { icono: "repeat", label: "Es backup", valor: f.es_backup ? "Sí" : "No" },
+      { icono: "check-circle-2", label: "Activo", valor: f.activo ? "Sí" : "No" },
+      { icono: "calendar", label: "Asiste sábado", valor: f.asiste_sabado ? "Sí" : "No" },
+      { icono: "alert-triangle", label: "Pendiente de completar", valor: f.pendiente_completar ? "Sí" : "No" },
+      { icono: "map-pinned", label: "Localidades", valor: f.localidades || "—", span: true },
+      { icono: "sticky-note", label: "Observaciones", valor: f.observaciones || "—", span: true },
     ];
-    document.getElementById("modal-detalle-repartidor-cuerpo").innerHTML = lineas.map(([label, valor]) => `
-      <div class="linea-detalle-asist"><span>${label}</span><span class="hora-detalle">${valor}</span></div>
-    `).join("");
+    document.getElementById("modal-detalle-repartidor-cuerpo").innerHTML = `
+      <div class="grid-detalle-compacto">
+        ${campos.map(c => `
+          <div class="campo-detalle${c.span ? " campo-span-completo" : ""}">
+            <span class="campo-detalle-label"><i data-lucide="${c.icono}"></i>${c.label}</span>
+            <span class="campo-detalle-valor">${c.valor}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    lucide.createIcons();
     document.getElementById("modal-detalle-repartidor").hidden = false;
   }
   document.getElementById("modal-detalle-repartidor-cerrar").addEventListener("click", ()=>{
@@ -4755,16 +4809,16 @@
 
   function abrirFormularioChofer(titulo, valores, onGuardar){
     abrirModalAbm(titulo, [
-      { clave: "nombre", label: "Nombre", tipo: "texto" },
-      { clave: "tipo_vehiculo", label: "Vehículo", tipo: "select", opciones: abmVehiculos.obtenerActivos() },
-      { clave: "turno", label: "Turno", tipo: "select", opciones: [{ valor: "", texto: "— Sin turno —" }, ...abmTurnos.obtenerActivos()] },
-      { clave: "es_backup", label: "Es backup (sin turno fijo)", tipo: "checkbox" },
-      { clave: "zona", label: "Zona", tipo: "select", opciones: abmZonas.obtenerActivos() },
-      { clave: "localidades", label: "Localidades", tipo: "multiselect", opciones: abmLocalidades.obtenerActivos() },
-      { clave: "observaciones", label: "Observaciones", tipo: "texto" },
-      { clave: "activo", label: "Activo", tipo: "checkbox" },
-      { clave: "asiste_sabado", label: "Asiste sábado", tipo: "checkbox" },
-    ], valores, onGuardar);
+      { clave: "nombre", label: "Nombre", tipo: "texto", icono: "user", span: true },
+      { clave: "tipo_vehiculo", label: "Vehículo", tipo: "select", opciones: abmVehiculos.obtenerActivos(), icono: "car" },
+      { clave: "turno", label: "Turno", tipo: "select", opciones: [{ valor: "", texto: "— Sin turno —" }, ...abmTurnos.obtenerActivos()], icono: "clock" },
+      { clave: "zona", label: "Zona", tipo: "select", opciones: abmZonas.obtenerActivos(), icono: "map" },
+      { clave: "localidades", label: "Localidades", tipo: "multiselect", opciones: abmLocalidades.obtenerActivos(), icono: "map-pinned", span: true },
+      { clave: "observaciones", label: "Observaciones", tipo: "texto", icono: "sticky-note", span: true },
+      { clave: "activo", label: "Activo", tipo: "checkbox", icono: "check-circle-2" },
+      { clave: "es_backup", label: "Es backup (sin turno fijo)", tipo: "checkbox", icono: "repeat" },
+      { clave: "asiste_sabado", label: "Asiste sábado", tipo: "checkbox", icono: "calendar" },
+    ], valores, onGuardar, { grid: true });
   }
 
   document.getElementById("btn-agregar-chofer-roster").addEventListener("click", ()=>{

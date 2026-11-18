@@ -163,15 +163,25 @@ producción, que no las usa):
   `ID (Interno)` del export de LightData — el `Número Tracking` NO es
   único, puede repetirse). Columnas tipadas para lo que se usa
   activamente (`tracking`, `cliente`, `localidad`, `zona`, `estado`,
-  `cadete`, `fecha_mercadopacks`, `fecha_estado`, `fecha_asignacion`,
-  `fecha_a_planta`, `logistica_inversa`, `observaciones`) + columna
-  `raw jsonb` con las columnas completas del export tal cual vienen
-  (incluye datos personales del destinatario — decisión del usuario: se
-  guardan, protegidos por RLS, a diferencia de Firestore donde se
-  excluyen).
-- **`envios_historial`**: se llena sola vía trigger
-  (`envios_log_historial()`) cada vez que cambia `estado` o `cadete` de
-  un envío — no se escribe a mano desde ningún script.
+  `cadete`, `chofer_lightdata_id`, `fecha_mercadopacks`, `fecha_estado`,
+  `fecha_asignacion`, `fecha_a_planta`, `logistica_inversa`,
+  `observaciones`) + columna `raw jsonb` con las columnas completas del
+  export tal cual vienen (incluye datos personales del destinatario —
+  decisión del usuario: se guardan, protegidos por RLS, a diferencia de
+  Firestore donde se excluyen). `chofer_lightdata_id` es el ID real del
+  repartidor en Lightdata (`didcadete`, ver `lightdata_api_envios.md`),
+  sin FK a propósito (no debe bloquear la publicación si todavía no
+  sincronizó ese repartidor) — se completa por `vincular_choferes_envios.py`
+  para envíos nuevos y se backfillea una vez para los viejos
+  (`scripts/backfill_chofer_lightdata_id.py`, por nombre normalizado, no
+  resuelve homónimos). ~46MB para ~24k filas (sobre todo por `raw`) y
+  sigue creciendo sin tope — no hay archivado/particionado todavía,
+  pendiente si en algún momento pesa en performance o costo.
+- **`envios_historial`**: existió pero se borró (auditoría 2026-11-19) —
+  tenía índices/FK/RLS armados pero nada en el código la leía ni escribía
+  nunca. Si en el futuro hace falta trazabilidad de cambios de estado/
+  cadete, hay que armarla de nuevo con un trigger real, no asumir que ya
+  existe.
 - **`perfiles_usuario`**: metadata de cada usuario del dashboard
   (nombre, apellido, email, sector, `es_admin`, `activo`,
   `vistas_permitidas text[]`), enlazada 1 a 1 con `auth.users` por
@@ -187,18 +197,53 @@ producción, que no las usa):
   una segunda fila con `duplicado=true` referenciando el mismo envío).
   Un envío fallido/cambio que nadie tocó todavía NO tiene fila acá — se
   cruza en vivo con `envios` filtrado por `parametros_fallidos_mapeo`
-  (ver sección 3).
+  (ver sección 3). Desde la auditoría 2026-11-19 tiene `updated_at`/
+  `actualizado_por` (trigger automático — queda registrado quién y
+  cuándo tocó un caso por última vez, incluido el escaneo QR).
 - **`parametros_fallidos_mapeo`** / **`parametros_alertas_fallidos`**:
   tablas de configuración editables desde Administración (ABM simple).
+- **`choferes_roster.nombre` es `UNIQUE`** — el nombre sigue siendo la
+  clave de identidad para el alta manual, aunque ya existe un
+  identificador real (`lightdata_id`). Es la razón de fondo por la que
+  `sincronizar_lightdata.py` tiene que tratar homónimos a mano en vez de
+  vincularlos solo. Deuda técnica documentada (auditoría 2026-11-19), no
+  se tocó todavía por el riesgo de habilitar altas duplicadas sin un
+  beneficio inmediato claro.
+- **Repartidores se cruzan por `lightdata_id`, no por nombre** (ver
+  sección 0 y el changelog 2026-11-18/19): `choferes_roster.lightdata_id`
+  (FK a `lightdata_usuarios`), `asistencia_diaria.lightdata_id` (FK
+  también desde 2026-11-19, se copia del roster al cargar un día) y
+  `envios.chofer_lightdata_id` (sin FK, ver arriba) son el mismo ID.
+  Cualquier cruce nuevo entre estas tablas tiene que usar este ID primero
+  y nombre normalizado (`normalizar`/`normEspaciosNombre`) solo como
+  respaldo — nunca comparar nombres a secas, Lightdata mete espacios
+  dobles/inconsistencias reales (caso "Fiorella  Souza").
 - RLS activado en todas las tablas desde que se creó cada una. Service
-  role (usado por `scripts/publicar_supabase.py` y la Edge Function)
-  tiene permiso total vía `GRANT` explícito — **ojo**: un `GRANT` de
-  tabla y una policy de RLS son dos cosas separadas; falta el `GRANT` a
-  un rol (incluido `service_role`) tira "permission denied" aunque la
-  policy ya esté bien (error real 2026-11-16 con `perfiles_usuario`).
-  El rol `authenticated` solo tiene los `GRANT`/policies que cada tabla
-  declara explícitamente en su migración — nunca asumir que hereda algo
-  de otra tabla.
+  role (usado por los scripts de `scripts/` y la Edge Function) tiene
+  permiso total vía `GRANT` explícito — **ojo**: un `GRANT` de tabla y
+  una policy de RLS son dos cosas separadas; falta el `GRANT` a un rol
+  (incluido `service_role`) tira "permission denied" aunque la policy ya
+  esté bien (error real 2026-11-16 con `perfiles_usuario`, repetido
+  2026-11-18 con `fallidos_seguimiento`/`parametros_fallidos_mapeo`/
+  `parametros_alertas_fallidos`). El rol `authenticated` solo tiene los
+  `GRANT`/policies que cada tabla declara explícitamente en su migración
+  — nunca asumir que hereda algo de otra tabla. `anon` no tiene ningún
+  privilegio en ninguna tabla (login 100% Supabase Auth, revocado
+  explícito en la auditoría 2026-11-19).
+- **RLS por vista, no solo por estar logueado** (desde la auditoría
+  2026-11-19): la función `tiene_permiso_vista(vista)` (replica exacto
+  `puedeVerVista()` del frontend — admin ve todo, sin perfil = fail-open)
+  gobierna la ESCRITURA de `parametros_*`/`choferes_roster` (vista
+  `admin`), `fallidos_seguimiento` (vista `fallidos`) y `asistencia_diaria`
+  (vista `repa-asistencia`). La LECTURA de esas mismas tablas se deja
+  abierta a cualquier `authenticated` donde hace falta para combos/
+  dropdowns de otras pantallas (ej. Asistencia necesita leer
+  `parametros_vehiculos` aunque el usuario no tenga la vista `admin`).
+  Antes de esto, `vistas_permitidas` era 100% cosmético: ocultaba el
+  menú, pero cualquier usuario logueado podía leer/escribir cualquier
+  tabla por API directa sin que la UI lo permitiera ver. Si se agrega una
+  tabla nueva con escritura sensible, replicar este patrón, no asumir
+  que "requiere login" alcanza.
 - Auth: registro público desactivado (`Allow new users to sign up`
   off). Login con email+contraseña.
 
@@ -314,3 +359,4 @@ Reglas de negocio confirmadas con el usuario (2026-11-16):
 | 2026-11-18 | Buscador automático en cualquier combo con más de `UMBRAL_BUSCADOR_COMBO` (8) opciones — global, no hay que activarlo por módulo (ver `crearComboGenerico`). |
 | 2026-11-18 | "Tiene fallidos"/"Fallidos recibidos" de Asistencia dejaron de ser checkboxes manuales: se calculan en vivo contra los pendientes de Fallidos y Cambios de ese repartidor (`contarFallidosPendientesPorRepartidor`). |
 | 2026-11-18 | **Cruzar repartidores por ID de Lightdata, no por nombre** (bug real: "Fiorella  Souza" con doble espacio en `envios.cadete` no matcheaba contra "Fiorella Souza" del roster/Asistencia). Ver `lightdata_api_envios.md` (endpoint de envíos, trae `didcadete`) y `scripts/vincular_choferes_envios.py` (completa `envios.chofer_lightdata_id` — mismo ID que `lightdata_usuarios.lightdata_id`/`choferes_roster.lightdata_id`). `asistencia_diaria.lightdata_id` se copia del roster al cargar un repartidor para un día. El frontend cruza por ID cuando está disponible en los dos lados (`claveRepartidorEnvio`/`claveRepartidorAsistencia`) y cae a nombre normalizado solo como respaldo para datos de antes de este cambio (no se hizo backfill histórico todavía, queda pendiente para una migración posterior). |
+| 2026-11-19 | **Auditoría completa de arquitectura de base de datos** (migración `2026-11-19_auditoria_arquitectura.sql`): (1) borrado un índice duplicado sobre `envios.fecha_mercadopacks` (bug propio del 18/11); (2) borradas `asistencia_diaria.estado_chofer`/`alertado` y la tabla `envios_historial` completa — nada en el código los usaba; (3) agregada FK `asistencia_diaria.lightdata_id` → `lightdata_usuarios.lightdata_id` (ya existía en `choferes_roster`, faltaba acá); (4) `fallidos_seguimiento` ahora tiene `updated_at`/`actualizado_por` (trigger automático, no depende del frontend) para poder auditar quién tocó un caso; (5) **RLS por vista real**: hasta ahora cualquier usuario logueado podía escribir en cualquier tabla vía API aunque `vistas_permitidas` no le diera esa vista — el permiso por vista era 100% cosmético (solo ocultaba el menú). La función `tiene_permiso_vista(vista)` replica exacto el criterio de `puedeVerVista()` del frontend (admin ve todo, sin perfil = fail-open) y ahora las policies de escritura de `parametros_*`/`choferes_roster` (vista `admin`), `fallidos_seguimiento` (vista `fallidos`) y `asistencia_diaria` (vista `repa-asistencia`) la usan de verdad; lectura se deja abierta a cualquier autenticado donde hacía falta para combos/dropdowns de otras pantallas; (6) revocados los privilegios por defecto de `anon` en todas las tablas (nunca se usa, login 100% Supabase Auth). Backfill de `chofer_lightdata_id` corrido sobre los ~22.600 envíos previos a la vinculación por ID: 19.578 resueltos por nombre normalizado (82,9%), el resto queda con homónimos ambiguos o sin cadete asignado (no se adivina). **Bug encontrado al hacer el backfill**: un upsert parcial de supabase-py (solo `id_interno` + `chofer_lightdata_id`, sin el resto de columnas NOT NULL) le erraba siempre al `ON CONFLICT` e intentaba insertar una fila incompleta — se reemplazó por la función `actualizar_chofer_lightdata_id_lote(ids, valores)` (UPDATE real vía `unnest`, un solo viaje por lote de 500), usada ahora tanto en `vincular_choferes_envios.py` como en `scripts/backfill_chofer_lightdata_id.py`. Decisión explícita: NO se relajó el `UNIQUE` de `choferes_roster.nombre` (es la causa de fondo de por qué `sincronizar_lightdata.py` tiene que tratar homónimos a mano) — queda como deuda técnica documentada, no se tocó por el riesgo de habilitar altas manuales duplicadas sin un beneficio inmediato claro. |
