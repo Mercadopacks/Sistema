@@ -159,6 +159,25 @@ producción, que no las usa):
 
 ## 2. Base de datos (Supabase, proyecto separado del de producción)
 
+**Antes de borrar CUALQUIER tabla/columna por "no tiene uso"**: un `grep`
+sobre `index.html`/`scripts/*.py` SOLO confirma que la aplicación no la
+usa — no dice nada sobre si hay un **trigger o función de Postgres**
+escribiendo ahí. Bug real 2026-11-19: `envios_historial` se borró en la
+auditoría de arquitectura asumiendo que estaba muerta (grep limpio), pero
+tenía un trigger real en `envios` que la alimentaba en cada
+insert/update — rompió TODA la publicación de envíos en producción hasta
+que se detectó y se borró el trigger (no hacía falta resucitar la tabla,
+nada la leía). Antes de un `drop table`/`drop column`, correr esto en el
+SQL Editor y confirmar que no aparece nada:
+
+```sql
+select event_object_table, trigger_name from information_schema.triggers
+where trigger_schema = 'public';
+
+select proname from pg_proc where pronamespace = 'public'::regnamespace
+  and prosrc ilike '%nombre_de_lo_que_vas_a_borrar%';
+```
+
 - **`envios`**: una fila por envío, clave real `id_interno` (columna
   `ID (Interno)` del export de LightData — el `Número Tracking` NO es
   único, puede repetirse). Columnas tipadas para lo que se usa
@@ -359,4 +378,5 @@ Reglas de negocio confirmadas con el usuario (2026-11-16):
 | 2026-11-18 | Buscador automático en cualquier combo con más de `UMBRAL_BUSCADOR_COMBO` (8) opciones — global, no hay que activarlo por módulo (ver `crearComboGenerico`). |
 | 2026-11-18 | "Tiene fallidos"/"Fallidos recibidos" de Asistencia dejaron de ser checkboxes manuales: se calculan en vivo contra los pendientes de Fallidos y Cambios de ese repartidor (`contarFallidosPendientesPorRepartidor`). |
 | 2026-11-18 | **Cruzar repartidores por ID de Lightdata, no por nombre** (bug real: "Fiorella  Souza" con doble espacio en `envios.cadete` no matcheaba contra "Fiorella Souza" del roster/Asistencia). Ver `lightdata_api_envios.md` (endpoint de envíos, trae `didcadete`) y `scripts/vincular_choferes_envios.py` (completa `envios.chofer_lightdata_id` — mismo ID que `lightdata_usuarios.lightdata_id`/`choferes_roster.lightdata_id`). `asistencia_diaria.lightdata_id` se copia del roster al cargar un repartidor para un día. El frontend cruza por ID cuando está disponible en los dos lados (`claveRepartidorEnvio`/`claveRepartidorAsistencia`) y cae a nombre normalizado solo como respaldo para datos de antes de este cambio (no se hizo backfill histórico todavía, queda pendiente para una migración posterior). |
+| 2026-11-19 | **Incidente en producción**: la auditoría de arquitectura (ver fila de abajo) borró `envios_historial` asumiendo que estaba muerta (confirmado por grep sobre el código, nunca sobre triggers de Postgres) — rompió `publicar_supabase.py` en todas las corridas ("relation envios_historial does not exist") porque un trigger real en `envios` escribía ahí. Fix: migración `2026-11-19b_fix_trigger_envios_historial.sql` (borra el trigger y la función, no resucita la tabla — confirmado que nada la leía). Verificado exhaustivo después del fix: `select * from information_schema.triggers where trigger_schema='public'` solo muestra las 2 de `updated_at` ya existentes (`asistencia_diaria`, `choferes_roster`) + la nueva de `fallidos_seguimiento`; ninguna función en `pg_proc` menciona `envios_historial`/`estado_chofer`/`alertado`. Lección agregada arriba (sección 2, antes de borrar cualquier cosa). |
 | 2026-11-19 | **Auditoría completa de arquitectura de base de datos** (migración `2026-11-19_auditoria_arquitectura.sql`): (1) borrado un índice duplicado sobre `envios.fecha_mercadopacks` (bug propio del 18/11); (2) borradas `asistencia_diaria.estado_chofer`/`alertado` y la tabla `envios_historial` completa — nada en el código los usaba; (3) agregada FK `asistencia_diaria.lightdata_id` → `lightdata_usuarios.lightdata_id` (ya existía en `choferes_roster`, faltaba acá); (4) `fallidos_seguimiento` ahora tiene `updated_at`/`actualizado_por` (trigger automático, no depende del frontend) para poder auditar quién tocó un caso; (5) **RLS por vista real**: hasta ahora cualquier usuario logueado podía escribir en cualquier tabla vía API aunque `vistas_permitidas` no le diera esa vista — el permiso por vista era 100% cosmético (solo ocultaba el menú). La función `tiene_permiso_vista(vista)` replica exacto el criterio de `puedeVerVista()` del frontend (admin ve todo, sin perfil = fail-open) y ahora las policies de escritura de `parametros_*`/`choferes_roster` (vista `admin`), `fallidos_seguimiento` (vista `fallidos`) y `asistencia_diaria` (vista `repa-asistencia`) la usan de verdad; lectura se deja abierta a cualquier autenticado donde hacía falta para combos/dropdowns de otras pantallas; (6) revocados los privilegios por defecto de `anon` en todas las tablas (nunca se usa, login 100% Supabase Auth). Backfill de `chofer_lightdata_id` corrido sobre los ~22.600 envíos previos a la vinculación por ID: 19.578 resueltos por nombre normalizado (82,9%), el resto queda con homónimos ambiguos o sin cadete asignado (no se adivina). **Bug encontrado al hacer el backfill**: un upsert parcial de supabase-py (solo `id_interno` + `chofer_lightdata_id`, sin el resto de columnas NOT NULL) le erraba siempre al `ON CONFLICT` e intentaba insertar una fila incompleta — se reemplazó por la función `actualizar_chofer_lightdata_id_lote(ids, valores)` (UPDATE real vía `unnest`, un solo viaje por lote de 500), usada ahora tanto en `vincular_choferes_envios.py` como en `scripts/backfill_chofer_lightdata_id.py`. Decisión explícita: NO se relajó el `UNIQUE` de `choferes_roster.nombre` (es la causa de fondo de por qué `sincronizar_lightdata.py` tiene que tratar homónimos a mano) — queda como deuda técnica documentada, no se tocó por el riesgo de habilitar altas manuales duplicadas sin un beneficio inmediato claro. |
