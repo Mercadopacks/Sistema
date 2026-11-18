@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sincronizar_lightdata import _jquery_param  # noqa: E402  (mismo serializador jQuery)
+from sincronizar_lightdata import _jquery_param, con_reintentos  # noqa: E402
 
 load_dotenv()
 
@@ -139,7 +139,7 @@ def main():
     fecha_ddmmyyyy = fecha.strftime("%d/%m/%Y")
 
     print(f"Lightdata: pidiendo envíos del {fecha_ddmmyyyy} (login por Playwright)...")
-    filas = obtener_envios_del_dia(usuario, clave, fecha_ddmmyyyy)
+    filas = con_reintentos(lambda: obtener_envios_del_dia(usuario, clave, fecha_ddmmyyyy))
     print(f"{len(filas)} envíos en el día.")
 
     actualizaciones = []

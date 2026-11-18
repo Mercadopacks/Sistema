@@ -28,6 +28,7 @@ SUPABASE_SERVICE_ROLE_KEY, y para --live también LIGHTDATA_USER/LIGHTDATA_PASS.
 import os
 import re
 import sys
+import time
 import unicodedata
 from urllib.parse import quote_plus
 
@@ -44,6 +45,27 @@ COLUMNAS_ESPERADAS = [
 LIGHTDATA_URL = "https://mercadopacks.lightdata.app/"
 LIGHTDATA_ENDPOINT_USUARIOS = LIGHTDATA_URL + "modules/system_users/listado/procesar_listado.php"
 TIMEOUT_MS = 20_000
+INTENTOS_LIGHTDATA = 3
+
+
+def con_reintentos(fn, intentos=INTENTOS_LIGHTDATA, espera_seg=10):
+    """
+    El flujo de LightData (login + navegación) es flaky — timeouts puntuales
+    que no se repiten al reintentar desde cero (visto real varias veces en
+    este pipeline). `fn` debe ser una función sin argumentos que arranca y
+    cierra su propio browser/context (como obtener_usuarios_en_vivo), así
+    que cada reintento parte de cero, sin arrastrar estado roto.
+    """
+    ultimo_error = None
+    for intento in range(1, intentos + 1):
+        try:
+            return fn()
+        except Exception as e:
+            ultimo_error = e
+            print(f"[REINTENTO] Intento {intento}/{intentos} falló: {e}")
+            if intento < intentos:
+                time.sleep(espera_seg)
+    raise ultimo_error
 
 
 def normalizar(texto):
@@ -362,7 +384,7 @@ def main():
         if not usuario or not clave:
             sys.exit("Faltan las variables de entorno LIGHTDATA_USER / LIGHTDATA_PASS.")
         print("Lightdata: pidiendo el listado de usuarios en vivo (login por Playwright)...")
-        registros = cargar_en_vivo(usuario, clave)
+        registros = con_reintentos(lambda: cargar_en_vivo(usuario, clave))
     else:
         registros = cargar_excel(rutas[0])
 

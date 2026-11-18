@@ -57,6 +57,7 @@ actualizar los selectores de abajo (ver README de la carpeta scripts/).
 
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -353,8 +354,25 @@ def main():
 
     modo_fecha = os.environ.get("MODO_FECHA", "").strip().lower()
 
-    destino = descargar(usuario, clave, fecha_objetivo, modo_fecha)
-    print(f"Archivo descargado: {destino}")
+    # Reintentos con navegador nuevo en cada intento (pedido 2026-11-18): el
+    # flujo de LightData es flaky — timeouts puntuales de navegación/carga
+    # de página que no se repiten al volver a intentar desde cero (visto
+    # real varias veces en este pipeline). descargar() arranca y cierra su
+    # propio browser/context, así que cada reintento parte de cero, sin
+    # arrastrar estado roto del intento anterior.
+    INTENTOS = 3
+    ultimo_error = None
+    for intento in range(1, INTENTOS + 1):
+        try:
+            destino = descargar(usuario, clave, fecha_objetivo, modo_fecha)
+            print(f"Archivo descargado: {destino}")
+            return
+        except Exception as e:
+            ultimo_error = e
+            print(f"[REINTENTO] Intento {intento}/{INTENTOS} falló: {e}")
+            if intento < INTENTOS:
+                time.sleep(10)
+    raise ultimo_error
 
 
 if __name__ == "__main__":
