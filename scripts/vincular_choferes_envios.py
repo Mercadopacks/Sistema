@@ -24,12 +24,17 @@ disponible en el Excel que descarga publicar_supabase.py.
   envío (mismo vocabulario que la columna "Estado" del Excel de
   publicar_supabase.py: "Entregado", "No entregado", "Devuelto al
   cliente", "A retirar", etc., ver lightdata_api_envios.md §4.1). Bug real
-  2026-11-19: ya se pedía esta columna al endpoint pero nunca se
+  2026-11-19 (parte 1): ya se pedía esta columna al endpoint pero nunca se
   guardaba, así que `envios.estado` solo se refrescaba una vez por
   publicación de Excel en vez de cada 10 min como el resto de este
   script — un envío podía figurar "No Entregado" en Fallidos durante
   horas después de que Lightdata ya lo marcara "Entregado"/"Devuelto al
-  cliente".
+  cliente". Bug real 2026-11-19 (parte 2, detectado el mismo día al
+  revisar el fix anterior): este endpoint devuelve `estado_envio` como
+  CÓDIGO NUMÉRICO (ver CODIGOS_ESTADO más abajo), no como texto — se
+  guardaba el número crudo, pisando el texto correcto y rompiendo
+  cualquier comparación contra el estado (incluida la exclusión de "A
+  retirar" en Fallidos). Se traduce con `texto_estado()`.
 
 Trae SOLO el día de FECHA_DESCARGA (o el de hoy en ART si no se pasa) y
 actualiza nada más que esas 5 columnas, en un solo RPC por lote — no toca
@@ -79,12 +84,58 @@ COLUMNAS_DEFAULT = [
               "fechagestionar", "nombre", "cp", "zona", "namecadete", "estado_envio"]
 ]
 
+# `estado_envio` en este endpoint viene como CÓDIGO NUMÉRICO, no como texto
+# (bug real 2026-11-19: se guardaba el código crudo en envios.estado,
+# pisando el texto correcto — ej. "7" en vez de "A retirar" — lo que a su
+# vez rompía cualquier comparación de texto contra ese estado, incluida la
+# exclusión de "A retirar" en Fallidos). Tabla de códigos verificada en
+# lightdata_api_envios.md §4.1; para los que también aparecen en
+# parametros_fallidos_mapeo (migración 2026-11-16_fallidos_cambios.sql) se
+# usa esa misma grafía exacta porque es la que matchea con la
+# configuración real, aunque no sea 100% consistente entre sí (ej. "Nadie
+# 2da visita" en minúscula vs "Entregado 2DA visita" en mayúscula — así
+# está en los datos reales, no es un error de tipeo).
+CODIGOS_ESTADO = {
+    0: "Retirado",
+    1: "En planta de procesamiento",
+    2: "En camino al destinatario",
+    3: "Devolviendo a planta de procesamiento",
+    5: "Entregado",
+    6: "Nadie",
+    7: "A retirar",
+    8: "Cancelado",
+    9: "Entregado 2DA visita",
+    10: "Nadie 2da visita",
+    11: "En camino 2da visita",
+    12: "En camino reprogramado",
+    13: "No entregado",
+    14: "Devuelto al cliente",
+    15: "Rechazado por el comprador",
+    22: "Dirección incorrecta",
+    30: "Reprogramado por comprador",
+    31: "Reprogramado por meli",
+}
+
 
 def texto_o_none(valor):
     if valor is None:
         return None
     texto = str(valor).strip()
     return texto or None
+
+
+def texto_estado(valor):
+    """Como texto_o_none, pero traduce el código numérico de estado_envio
+    a su nombre real (ver CODIGOS_ESTADO). Si ya viene como texto (o un
+    código no mapeado), lo deja tal cual en vez de perderlo."""
+    texto = texto_o_none(valor)
+    if texto is None:
+        return None
+    try:
+        codigo = int(float(texto))
+    except ValueError:
+        return texto
+    return CODIGOS_ESTADO.get(codigo, texto)
 
 
 def entero_o_none(valor):
@@ -209,7 +260,7 @@ def main():
         fila_actualizada = {
             "id_interno": id_interno,
             "logistica_inversa_real": id_interno in dids_con_logistica,
-            "estado": texto_o_none(fila.get("estado_envio")),
+            "estado": texto_estado(fila.get("estado_envio")),
             "estado_ml": texto_o_none(fila.get("estadoml")),
             "did_cliente": entero_o_none(fila.get("didCliente")),
         }
