@@ -20,9 +20,19 @@ disponible en el Excel que descarga publicar_supabase.py.
 - `estado_ml` / `did_cliente`: campos `estadoml`/`didCliente` de la misma
   fila de la consulta "todos" — no cuestan una consulta extra, ya vienen
   en la respuesta, solo faltaba guardarlos (pedido 2026-11-19).
+- `estado`: el campo `estado_envio` de esa misma fila — el estado REAL del
+  envío (mismo vocabulario que la columna "Estado" del Excel de
+  publicar_supabase.py: "Entregado", "No entregado", "Devuelto al
+  cliente", "A retirar", etc., ver lightdata_api_envios.md §4.1). Bug real
+  2026-11-19: ya se pedía esta columna al endpoint pero nunca se
+  guardaba, así que `envios.estado` solo se refrescaba una vez por
+  publicación de Excel en vez de cada 10 min como el resto de este
+  script — un envío podía figurar "No Entregado" en Fallidos durante
+  horas después de que Lightdata ya lo marcara "Entregado"/"Devuelto al
+  cliente".
 
 Trae SOLO el día de FECHA_DESCARGA (o el de hoy en ART si no se pasa) y
-actualiza nada más que esas 4 columnas, en un solo RPC por lote — no toca
+actualiza nada más que esas 5 columnas, en un solo RPC por lote — no toca
 ningún otro campo del envío.
 
 Uso:
@@ -199,6 +209,7 @@ def main():
         fila_actualizada = {
             "id_interno": id_interno,
             "logistica_inversa_real": id_interno in dids_con_logistica,
+            "estado": texto_o_none(fila.get("estado_envio")),
             "estado_ml": texto_o_none(fila.get("estadoml")),
             "did_cliente": entero_o_none(fila.get("didCliente")),
         }

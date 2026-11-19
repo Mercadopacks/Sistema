@@ -2068,7 +2068,7 @@
 
     tbody.innerHTML = visibles.map(c => `
       <tr>
-        <td>${c.cadete}${c.total_asignados < MIN_MUESTRA ? '<span class="tag-chica">muestra chica</span>' : ""}</td>
+        <td>${tituloNombre(c.cadete)}${c.total_asignados < MIN_MUESTRA ? '<span class="tag-chica">muestra chica</span>' : ""}</td>
         <td>${c.total_asignados}</td>
         <td>${_fmtPct(_pct(c.entregas_efectivas, c.total_asignados - c.a_retirar))}</td>
         <td>${_fmtPct(_pct(c.antes_de_corte, c.entregas_efectivas))}</td>
@@ -2163,6 +2163,13 @@
   // mostrarlo).
   function normEspaciosNombre(s){
     return (s || "").replace(/\s+/g, " ").trim();
+  }
+
+  // Solo para MOSTRAR nombres de repartidores (Lightdata/choferes_roster
+  // traen una mezcla de MAYÚSCULAS, minúsculas y Mixto) — nunca se usa
+  // para matchear/agrupar, eso sigue siendo con el valor crudo.
+  function tituloNombre(s){
+    return (s || "").toLowerCase().replace(/(^|\s)\p{L}/gu, c => c.toUpperCase());
   }
 
   // Cruzar repartidores por ID de Lightdata, no por nombre (pedido
@@ -2316,7 +2323,11 @@
     const filas = [];
     Object.values(enviosById).forEach(envio => {
       const grupo = seguimientoPorEnvio[envio.id_interno] || [];
-      const clasif = determinarTipoDestinoFallido(envio);
+      // "A retirar" nunca es un fallido/cambio (el paquete está esperando
+      // que el cliente lo retire, no hubo intento fallido) — se excluye acá
+      // sin importar cómo esté configurado parametros_fallidos_mapeo, salvo
+      // que ya tenga un caso abierto a mano (grupo.length), que se respeta.
+      const clasif = (envio.estado === "A retirar" && !grupo.length) ? null : determinarTipoDestinoFallido(envio);
       if(!clasif && !grupo.length) return; // sin señal de fallido/cambio y nadie lo tocó a mano: no entra
       const tipo = clasif ? clasif.tipo : "—";
       const destino = clasif ? clasif.destino : "—";
@@ -2394,7 +2405,7 @@
       const alerta = alertaDiasFallido(g.diasMax);
       return `
       <tr class="fila-clicable" data-chofer="${g.clave.replace(/"/g, "&quot;")}" data-chofer-nombre="${g.nombre.replace(/"/g, "&quot;")}">
-        <td>${g.nombre}</td>
+        <td>${tituloNombre(g.nombre)}</td>
         <td>${g.fallidos}</td>
         <td>${g.cambios}</td>
         <td>${g.total}</td>
@@ -2534,7 +2545,7 @@
         <td>${f.envio.tracking || "—"}</td>
         <td>${f.envio.cliente || "—"}</td>
         <td>${f.envio.localidad || "—"}</td>
-        ${incluirRepartidor ? `<td>${f.envio.cadete || "—"}</td>` : ""}
+        ${incluirRepartidor ? `<td>${tituloNombre(f.envio.cadete) || "—"}</td>` : ""}
         <td>${origen}</td>
         <td>${f.envio.estado || "—"}${f.duplicado ? ' <span class="badge gris">Duplicado</span>' : ""}</td>
         <td>${f.tipo}</td>
@@ -2692,7 +2703,7 @@
         <td>${e.tracking || "—"}</td>
         <td>${e.cliente || "—"}</td>
         <td>${e.localidad || "—"}</td>
-        <td>${e.cadete || "—"}</td>
+        <td>${tituloNombre(e.cadete) || "—"}</td>
         <td>${e.estado || "—"}</td>
         <td><button type="button" class="btn-secundario-modal btn-marcar-duplicado" data-id-interno="${e.id_interno}">Marcar duplicado</button></td>
       </tr>`).join("");
@@ -3546,7 +3557,7 @@
         + `Paq./hora: ${f.velocidad === null ? "—" : f.velocidad.toFixed(1)}`;
       return `
       <tr>
-        <td>${f.cadete}</td>
+        <td>${tituloNombre(f.cadete)}</td>
         <td>${f.zona}</td>
         <td>
           <div class="ruta-progreso-txt">${f.entregados} de ${f.asignados} (${_fmtPct(f.progreso)})</div>
@@ -3570,7 +3581,7 @@
     }
     cont.innerHTML = demorados.map(f => `
       <div class="ruta-alerta-fila">
-        <span><strong>${f.cadete}</strong> <span class="texto-muted">(${f.zona})</span></span>
+        <span><strong>${tituloNombre(f.cadete)}</strong> <span class="texto-muted">(${f.zona})</span></span>
         <span style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <span class="texto-muted">${f.entregados}/${f.asignados} entregados · faltan ${f.pendientes}</span>
           <span class="badge ${f.rendimiento.color}">${f.rendimiento.label} · ${f.rendimiento.label === "Sin actividad" ? "hace " + Math.round(f.minutosSinActividad) + " min" : (f.minEntreEntregas === null ? "sin datos" : f.minEntreEntregas.toFixed(1) + " min/entrega")}</span>
@@ -4071,7 +4082,7 @@
   function abrirDetalleAsistencia(id){
     const f = stateAsistencia.filas.find(x => x.id === id);
     if(!f) return;
-    document.getElementById("modal-detalle-asistencia-titulo").textContent = `Detalle — ${f.nombre || "(sin nombre)"}`;
+    document.getElementById("modal-detalle-asistencia-titulo").textContent = `Detalle — ${tituloNombre(f.nombre) || "(sin nombre)"}`;
     const lineas = [
       ["Aviso de asistencia (soporte)", f.hora_aviso_soporte],
       ["Fallidos pendientes (Fallidos y Cambios)", contarFallidosPendientesPorRepartidor().get(claveRepartidorAsistencia(f)) || 0],
@@ -4112,7 +4123,7 @@
       <section class="hoja">
         <div class="marca"><span class="marca-mercado">Mercado</span><span class="marca-packs">Packs</span></div>
         <h1>Asignación de ruta — ${fechaHoja.split("-").reverse().join("/")}</h1>
-        <div class="fila-dato"><span class="etiqueta">Repartidor</span><span class="valor">${f.nombre || "—"}</span></div>
+        <div class="fila-dato"><span class="etiqueta">Repartidor</span><span class="valor">${tituloNombre(f.nombre) || "—"}</span></div>
         <div class="fila-dato"><span class="etiqueta">Vehículo</span><span class="valor">${f.tipo_vehiculo || "—"}</span></div>
         <div class="fila-dato"><span class="etiqueta">Turno</span><span class="valor">${f.turno ? f.turno.slice(0,5) : "—"}</span></div>
         <div class="fila-dato"><span class="etiqueta">Zona</span><span class="valor">${f.zona || "—"}</span></div>
@@ -4276,7 +4287,7 @@
                 <div class="zona-chofer-fila">
                   <div class="zc-fila-arriba">
                     <span class="estado-icono-fila chico ${estado.color}"><i data-lucide="${estado.icono}"></i></span>
-                    <span class="zc-nombre">${f.nombre || "(sin nombre)"}</span>
+                    <span class="zc-nombre">${tituloNombre(f.nombre) || "(sin nombre)"}</span>
                     <span class="zc-dato">${f.tipo_vehiculo || "—"}</span>
                     <span class="zc-dato">${f.turno ? f.turno.slice(0,5) : "—"}</span>
                   </div>
@@ -4300,7 +4311,7 @@
         return `
           <div class="alerta-item-vivo ${nivel}">
             <i data-lucide="${icono}"></i>
-            <span class="nombre-chofer">${f.nombre || "(sin nombre)"}</span>&nbsp;— ${estado.label}
+            <span class="nombre-chofer">${tituloNombre(f.nombre) || "(sin nombre)"}</span>&nbsp;— ${estado.label}
           </div>
         `;
       }).join("");
@@ -4756,7 +4767,7 @@
     }
     tbody.innerHTML = filas.map(f => `
       <tr class="${f.activo ? "" : "fila-inactiva"} ${f.pendiente_completar ? "fila-pendiente-completar" : ""}" data-id="${f.id}">
-        <td>${f.pendiente_completar ? `<span class="punto-pendiente" tabindex="0" role="img" data-tip="Pendiente de completar: se dio de alta automáticamente desde Lightdata, todavía le falta vehículo/zona/turno/localidad."></span>` : ""}${f.nombre}${f.es_backup ? ' <span class="texto-muted">(backup)</span>' : ""}</td>
+        <td>${f.pendiente_completar ? `<span class="punto-pendiente" tabindex="0" role="img" data-tip="Pendiente de completar: se dio de alta automáticamente desde Lightdata, todavía le falta vehículo/zona/turno/localidad."></span>` : ""}${tituloNombre(f.nombre)}${f.es_backup ? ' <span class="texto-muted">(backup)</span>' : ""}</td>
         <td>${adminChoferesLightdataUsuarios[f.lightdata_id] || "—"}</td>
         <td>${f.tipo_vehiculo || "—"}</td>
         <td>${f.turno ? f.turno.slice(0,5) : "—"}</td>
@@ -4778,7 +4789,7 @@
   function abrirDetalleChofer(id){
     const f = adminChoferesData.find(x => x.id === id);
     if(!f) return;
-    document.getElementById("modal-detalle-repartidor-titulo").textContent = `Detalle — ${f.nombre}`;
+    document.getElementById("modal-detalle-repartidor-titulo").textContent = `Detalle — ${tituloNombre(f.nombre)}`;
     // { icono, label, valor, span } — span para los campos de texto largo
     // (Localidades/Observaciones), que no entran bien en una columna de 3.
     const campos = [
