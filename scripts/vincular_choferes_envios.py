@@ -36,13 +36,40 @@ disponible en el Excel que descarga publicar_supabase.py.
   cualquier comparación contra el estado (incluida la exclusión de "A
   retirar" en Fallidos). Se traduce con `texto_estado()`.
 
-Trae SOLO el día de FECHA_DESCARGA (o el de hoy en ART si no se pasa) y
-actualiza nada más que esas 5 columnas, en un solo RPC por lote — no toca
-ningún otro campo del envío.
+Trae un RANGO de días (hoy en ART hacia atrás, RANGO_DIAS_LIVE días, default
+3) o el día puntual de FECHA_DESCARGA si se pasa, y actualiza nada más que
+esas 5 columnas, en un solo RPC por lote — no toca ningún otro campo del
+envío.
+
+Bug real 2026-11-19 (parte 3): hasta ahora este script solo traía el día
+de HOY, así que un envío dejaba de refrescarse en vivo apenas pasaba la
+medianoche (ART) — un caso de Fallidos que lleva 2+ días abierto quedaba
+con el `estado` congelado para siempre en lo que decía el último Excel del
+día que se generó, aunque Lightdata ya lo hubiera actualizado (caso real:
+tracking 48553756312, 2 días de antigüedad, estado real "Cancelado" en
+Lightdata pero el sistema seguía mostrando el estado viejo). Se amplía la
+consulta a un rango de `RANGO_DIAS_LIVE` días hacia atrás.
+
+**`RANGO_DIAS_LIVE=3` NO es arbitrario, está medido**: se probó en vivo
+contra Lightdata (dry-run real, no un test sintético) con 3/5/7 días.
+3 días: ~23s, 7.388 filas, anduvo bien. 5 y 7 días: colgado más de 8
+minutos sin responder ni tirar error — NO es un problema de nuestro
+timeout (se probó subiéndolo a 60s en `_pedir_todas_las_paginas` y pasó
+igual), el propio endpoint de Lightdata se degrada de forma no lineal
+pasado cierto rango de fechas (asumible: una consulta sin índice
+adecuado del lado de ellos para rangos amplios). Por eso el default queda
+en 3 días — cubre el umbral "pedir" completo (2 días,
+`parametros_alertas_fallidos`) y casi todo "prioridad" (3 días), pero NO
+"revisar" (5 días): un caso que llega a ese umbral sin resolverse deja de
+refrescarse en vivo igual. Si hace falta cubrir ese caso, la solución NO
+es subir este número (ya probado que rompe) — ver `qa_fallidos_estado.md`,
+sección "Alcance no cubierto", para la alternativa (consulta dirigida por
+tracking en vez de barrido por fecha).
 
 Uso:
     python vincular_choferes_envios.py [--dry-run]
     FECHA_DESCARGA=2026-11-18 python vincular_choferes_envios.py
+    RANGO_DIAS_LIVE=5 python vincular_choferes_envios.py  # NO USAR en el cron: colgado y probado, ver arriba
 
 Necesita: LIGHTDATA_USER, LIGHTDATA_PASS, SUPABASE_URL,
 SUPABASE_SERVICE_ROLE_KEY (entorno o scripts/.env).
@@ -50,6 +77,7 @@ SUPABASE_SERVICE_ROLE_KEY (entorno o scripts/.env).
 
 import os
 import sys
+import time
 from datetime import datetime, timezone, timedelta
 
 from dotenv import load_dotenv
@@ -161,6 +189,14 @@ def _pedir_todas_las_paginas(page, filtros):
             "filtros": filtros, "columnas": COLUMNAS_DEFAULT,
             "elim": 0, "historico": False,
         }
+        # `page.set_default_timeout` NO aplica a `page.request.*` (es un
+        # timeout de navegación/acciones de la página, el API request
+        # context tiene el suyo propio, 30s por defecto) — bug real
+        # 2026-11-19 encontrado al probar rangos de varios días: una página
+        # con más filas (por el rango más amplio) tardaba más de 30s en
+        # bajar y el request timeouteaba igual aunque TIMEOUT_MS=20_000
+        # pareciera decir otra cosa. Se pasa explícito acá, más alto que
+        # antes porque ahora las páginas pueden traer más filas.
         resp = page.request.post(
             LIGHTDATA_ENDPOINT_ENVIOS,
             data=_jquery_param(payload),
@@ -168,6 +204,7 @@ def _pedir_todas_las_paginas(page, filtros):
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "X-Requested-With": "XMLHttpRequest",
             },
+            timeout=60_000,
         )
         if not resp.ok:
             raise RuntimeError(f"Lightdata respondió {resp.status} al pedir el listado de envíos.")
@@ -187,13 +224,16 @@ def _pedir_todas_las_paginas(page, filtros):
     return filas
 
 
-def obtener_envios_del_dia(usuario, clave, fecha_ddmmyyyy):
+def obtener_envios_del_rango(usuario, clave, fecha_desde_ddmmyyyy, fecha_hasta_ddmmyyyy):
     """
-    Pagina el endpoint de envíos para un solo día (fecha_desde = fecha_hasta).
-    Devuelve (filas_todas, dids_con_logistica_inversa_real) — la segunda
-    consulta (mismo login, filtros.logisticaInversa="1") es la única forma
-    confiable de saber si un envío tiene logística inversa de verdad, ver
-    docstring del módulo.
+    Pagina el endpoint de envíos para un rango de fechas (fecha_desde puede
+    ser distinto de fecha_hasta — ver bug real 2026-11-19 parte 3 en el
+    docstring del módulo: antes era siempre un solo día, lo que dejaba sin
+    refrescar el estado de cualquier caso de Fallidos con más de un día de
+    antigüedad). Devuelve (filas_todas, dids_con_logistica_inversa_real) —
+    la segunda consulta (mismo login, filtros.logisticaInversa="1") es la
+    única forma confiable de saber si un envío tiene logística inversa de
+    verdad, ver docstring del módulo.
     """
     from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
@@ -216,7 +256,7 @@ def obtener_envios_del_dia(usuario, clave, fecha_ddmmyyyy):
                 pass
             page.get_by_role("link", name="local_shipping Envios").wait_for()
 
-            filtros_todos = {**FILTROS_DEFAULT, "fecha_desde": fecha_ddmmyyyy, "fecha_hasta": fecha_ddmmyyyy, "logisticaInversa": "2"}
+            filtros_todos = {**FILTROS_DEFAULT, "fecha_desde": fecha_desde_ddmmyyyy, "fecha_hasta": fecha_hasta_ddmmyyyy, "logisticaInversa": "2"}
             filas = _pedir_todas_las_paginas(page, filtros_todos)
 
             filtros_logistica = {**filtros_todos, "logisticaInversa": "1"}
@@ -239,14 +279,23 @@ def main():
 
     fecha_descarga = os.environ.get("FECHA_DESCARGA")
     if fecha_descarga:
-        fecha = datetime.strptime(fecha_descarga, "%Y-%m-%d").date()
+        # Día puntual (uso manual/backfill) — desde = hasta, igual que antes.
+        fecha_hasta = datetime.strptime(fecha_descarga, "%Y-%m-%d").date()
+        fecha_desde = fecha_hasta
     else:
-        fecha = _fecha_art_hoy()
-    fecha_ddmmyyyy = fecha.strftime("%d/%m/%Y")
+        fecha_hasta = _fecha_art_hoy()
+        rango_dias = int(os.environ.get("RANGO_DIAS_LIVE", "3"))
+        fecha_desde = fecha_hasta - timedelta(days=rango_dias - 1)
+    fecha_desde_ddmmyyyy = fecha_desde.strftime("%d/%m/%Y")
+    fecha_hasta_ddmmyyyy = fecha_hasta.strftime("%d/%m/%Y")
 
-    print(f"Lightdata: pidiendo envíos del {fecha_ddmmyyyy} (login por Playwright)...")
-    filas, dids_con_logistica = con_reintentos(lambda: obtener_envios_del_dia(usuario, clave, fecha_ddmmyyyy))
-    print(f"{len(filas)} envíos en el día. {len(dids_con_logistica)} con logística inversa real (Lightdata).")
+    print(f"Lightdata: pidiendo envíos del {fecha_desde_ddmmyyyy} al {fecha_hasta_ddmmyyyy} (login por Playwright)...")
+    inicio = time.monotonic()
+    filas, dids_con_logistica = con_reintentos(
+        lambda: obtener_envios_del_rango(usuario, clave, fecha_desde_ddmmyyyy, fecha_hasta_ddmmyyyy)
+    )
+    print(f"{len(filas)} envíos en el rango. {len(dids_con_logistica)} con logística inversa real (Lightdata). "
+          f"({time.monotonic() - inicio:.1f}s pidiendo a Lightdata)")
 
     actualizaciones = []
     sin_cadete = 0

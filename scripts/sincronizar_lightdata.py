@@ -62,7 +62,16 @@ def con_reintentos(fn, intentos=INTENTOS_LIGHTDATA, espera_seg=10):
             return fn()
         except Exception as e:
             ultimo_error = e
-            print(f"[REINTENTO] Intento {intento}/{intentos} falló: {e}")
+            # El mensaje de una excepción de Playwright puede traer
+            # caracteres (ej. flechas "→" del call log) que la consola de
+            # Windows (cp1252) no puede imprimir — bug real 2026-11-19:
+            # el print tiraba UnicodeEncodeError y eso MATABA el reintento
+            # entero en vez de loguear y seguir (en el runner de GitHub
+            # Actions, Ubuntu/UTF-8, no pasa, pero corriendo local en
+            # Windows para debug sí). encode/decode con reemplazo evita que
+            # el logueo del error rompa el mecanismo de reintento en sí.
+            mensaje = str(e).encode(sys.stdout.encoding or "utf-8", errors="replace").decode(sys.stdout.encoding or "utf-8", errors="replace")
+            print(f"[REINTENTO] Intento {intento}/{intentos} falló: {mensaje}")
             if intento < intentos:
                 time.sleep(espera_seg)
     raise ultimo_error
