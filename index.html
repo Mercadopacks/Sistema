@@ -879,17 +879,20 @@
                 </div>
               </div>
             </div>
+            <button type="button" class="btn-filtrar" id="btn-cerrar-seleccionados-fallidos" hidden><i data-lucide="check-check"></i>Cerrar seleccionados (<span id="fallidos-seleccionados-count">0</span>)</button>
             <button type="button" class="btn-filtrar" id="btn-agregar-duplicado"><i data-lucide="copy-plus"></i>Marcar duplicado</button>
           </div>
           <div class="tabla-scroll" id="tabla-fallidos-scroll">
             <table>
               <thead>
                 <tr>
+                  <th style="text-align:center;"><input type="checkbox" id="check-todos-fallidos" title="Seleccionar todos" /></th>
                   <th>Antigüedad</th>
                   <th>Fecha MercadoPacks</th>
                   <th>Tracking</th>
                   <th>Cliente</th>
                   <th>Localidad</th>
+                  <th>Dirección</th>
                   <th>Repartidor</th>
                   <th>Origen</th>
                   <th>Estado</th>
@@ -1426,16 +1429,19 @@
       <i data-lucide="scan-line"></i>
       <input type="text" id="fallidos-scan-input" class="buscador" placeholder="Escanear código del paquete (pistola)…" autocomplete="off" style="max-width:320px; margin-bottom:0;" />
       <span id="fallidos-scan-feedback" style="font-size:13px; font-weight:700;"></span>
+      <button type="button" class="btn-filtrar" id="btn-cerrar-seleccionados-fallidos-detalle" hidden><i data-lucide="check-check"></i>Cerrar seleccionados (<span id="fallidos-detalle-seleccionados-count">0</span>)</button>
     </div>
     <div class="tabla-scroll">
       <table>
         <thead>
           <tr>
+            <th style="text-align:center;"><input type="checkbox" id="check-todos-fallidos-detalle" title="Seleccionar todos" /></th>
             <th>Antigüedad</th>
             <th>Fecha MercadoPacks</th>
             <th>Tracking</th>
             <th>Cliente</th>
             <th>Localidad</th>
+            <th>Dirección</th>
             <th>Origen</th>
             <th>Estado</th>
             <th>Tipo</th>
@@ -2161,6 +2167,8 @@
     tipo: "todos", destino: "", estatus: "pendiente", rangoDias: 30, search: "",
     mapeo: {}, umbrales: { pedir: 2, prioridad: 3, revisar: 5 }, filas: [],
     nombresPorLightdataId: {}, // lightdata_id -> nombre (choferes_roster), ver cargarNombresPorLightdataId()
+    lightdataIdPorNombre: {}, // nombre normalizado -> lightdata_id (mapa inverso, mismo origen)
+    seleccionados: new Set(), // claves "id_interno::id_seguimiento" para cerrar masivamente (pedido 2026-11-19)
   };
 
   // Lightdata a veces carga el nombre del repartidor con espacios de más
@@ -2176,11 +2184,27 @@
     return (s || "").replace(/\s+/g, " ").trim();
   }
 
-  // Solo para MOSTRAR nombres de repartidores (Lightdata/choferes_roster
-  // traen una mezcla de MAYÚSCULAS, minúsculas y Mixto) — nunca se usa
-  // para matchear/agrupar, eso sigue siendo con el valor crudo.
-  function tituloNombre(s){
+  // Solo para MOSTRAR texto que viene de la base (Lightdata/choferes_roster
+  // traen una mezcla de MAYÚSCULAS, minúsculas y Mixto en nombres, clientes,
+  // localidades, etc.) — nunca se usa para matchear/agrupar/comparar, eso
+  // sigue siendo con el valor crudo. Regla de sistema (ver reglas_de_negocio.md,
+  // sección 1, regla 15): cualquier texto libre de la base que se muestre en
+  // pantalla pasa por acá. `tituloNombre` es un alias semántico para cuando
+  // específicamente es un nombre de persona.
+  function tituloTexto(s){
     return (s || "").toLowerCase().replace(/(^|\s)\p{L}/gu, c => c.toUpperCase());
+  }
+  function tituloNombre(s){ return tituloTexto(s); }
+
+  // Como normEspaciosNombre, pero además saca acentos y pasa a minúscula —
+  // para cruzar nombres contra el roster cuando chofer_lightdata_id no
+  // está disponible (ver claveRepartidorEnvio). Sin esto, diferencias de
+  // acentuación entre el Excel de Lightdata y el roster (no diferencias de
+  // ortografía real, como "Gonzales" vs "Gonzalez" — eso no se puede
+  // resolver acá, es un dato mal cargado) hacen fallar el cruce.
+  function normalizarParaMatch(s){
+    return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/\s+/g, " ").trim().toLowerCase();
   }
 
   // Cruzar repartidores por ID de Lightdata, no por nombre (pedido
@@ -2192,9 +2216,15 @@
   // vinculador aún no procesó), cae al nombre normalizado como respaldo —
   // nunca rompe, solo deja de ser 100% confiable para esos casos viejos.
   function claveRepartidorEnvio(envio){
-    return envio.chofer_lightdata_id != null
-      ? `ld:${envio.chofer_lightdata_id}`
-      : `nombre:${normEspaciosNombre(envio.cadete) || "Sin repartidor"}`;
+    if(envio.chofer_lightdata_id != null) return `ld:${envio.chofer_lightdata_id}`;
+    // Sin ID todavía (envío viejo que el vinculador no tocó) — antes de
+    // caer al nombre crudo como clave (que separa en un grupo aparte a un
+    // repartidor que en otras filas SÍ tiene ID, ej. bug real 2026-11-19
+    // "Cristian Casenave" apareciendo duplicado en "Por repartidor"), se
+    // intenta resolver el ID por nombre normalizado contra el roster.
+    const idPorNombre = stateFallidos.lightdataIdPorNombre[normalizarParaMatch(envio.cadete)];
+    if(idPorNombre != null) return `ld:${idPorNombre}`;
+    return `nombre:${normEspaciosNombre(envio.cadete) || "Sin repartidor"}`;
   }
   function claveRepartidorAsistencia(f){
     return f.lightdata_id != null
@@ -2211,7 +2241,12 @@
 
   // `origen` (Directo/ML/TNube/ML TURBO, ver diccionario_de_datos.md) ya es
   // columna propia de `envios` (ver reglas_de_negocio.md, rediseño sin `raw`).
-  const COLUMNAS_ENVIO_FALLIDOS = "id_interno,tracking,cliente,localidad,cadete,chofer_lightdata_id,estado,fecha_mercadopacks,logistica_inversa,logistica_inversa_real,observaciones,origen";
+  // `envios_contacto_destinatario(direccion)` es un embed por FK (ver
+  // migración 2026-11-19h) — PostgREST lo resuelve solo porque
+  // envios_contacto_destinatario.id_interno referencia a envios.id_interno.
+  // Sin la policy de esa migración esto devuelve [] en vez de la fila (RLS
+  // silenciosa, no error) para cualquiera sin la vista "fallidos".
+  const COLUMNAS_ENVIO_FALLIDOS = "id_interno,tracking,cliente,localidad,cadete,chofer_lightdata_id,estado,fecha_mercadopacks,logistica_inversa,logistica_inversa_real,observaciones,origen,envios_contacto_destinatario(direccion)";
 
   // El Estado de Lightdata NO define un Cambio (describe el paquete NUEVO
   // que se entrega, no si el chofer ya devolvió el producto ORIGINAL) — la
@@ -2279,20 +2314,32 @@
     const { data, error } = await sb.from("choferes_roster").select("nombre,lightdata_id").not("lightdata_id", "is", null);
     if(error){ console.error("Error cargando choferes_roster (nombres por lightdata_id):", error); return; }
     stateFallidos.nombresPorLightdataId = {};
-    (data || []).forEach(c => { stateFallidos.nombresPorLightdataId[c.lightdata_id] = c.nombre; });
+    stateFallidos.lightdataIdPorNombre = {};
+    (data || []).forEach(c => {
+      stateFallidos.nombresPorLightdataId[c.lightdata_id] = c.nombre;
+      stateFallidos.lightdataIdPorNombre[normalizarParaMatch(c.nombre)] = c.lightdata_id;
+    });
   }
 
+  // El ID de Lightdata manda sobre el texto de `cadete` (mismo criterio que
+  // claveRepartidorEnvio/lightdata_api_envios.md): si hay chofer_lightdata_id,
+  // se muestra el nombre del roster para ESE id, aunque el texto de `cadete`
+  // diga otra cosa — bug real 2026-11-19: un envío con cadete="Nahuel
+  // Gonzalez" pero chofer_lightdata_id=198 era en realidad de Ian Velez (el
+  // texto había quedado desactualizado tras una reasignación en Lightdata).
+  // Mostrar el texto crudo primero ocultaba ese tipo de error.
   function nombreRepartidorFallido(envio){
-    const nombreCadete = normEspaciosNombre(envio.cadete);
-    if(nombreCadete) return nombreCadete;
     if(envio.chofer_lightdata_id != null){
       const porId = stateFallidos.nombresPorLightdataId[envio.chofer_lightdata_id];
       if(porId) return porId;
     }
+    const nombreCadete = normEspaciosNombre(envio.cadete);
+    if(nombreCadete) return nombreCadete;
     return "Sin repartidor";
   }
 
   async function cargarFallidos(){
+    stateFallidos.seleccionados.clear(); // datos frescos: las filas viejas ya no son válidas
     await Promise.all([cargarMapeoFallidos(), cargarUmbralesFallidos(), cargarNombresPorLightdataId()]);
     const estados = Object.keys(stateFallidos.mapeo);
     if(!estados.length){
@@ -2558,15 +2605,31 @@
     procesarEscaneoFallido(valor);
   });
 
+  // La dirección vive en envios_contacto_destinatario (separada de envios
+  // a propósito, ver reglas_de_negocio.md) — se trae como embed por FK
+  // (ver COLUMNAS_ENVIO_FALLIDOS) y PostgREST la devuelve como objeto
+  // (relación 1 a 1) o null si no hay permiso/no existe la fila.
+  function direccionDe(envio){
+    const c = envio.envios_contacto_destinatario;
+    const fila = Array.isArray(c) ? c[0] : c;
+    return (fila && fila.direccion) ? tituloTexto(fila.direccion) : "—";
+  }
+
+  function claveSeleccionFallido(f){
+    return `${f.envio.id_interno}::${f.seguimiento ? f.seguimiento.id : ""}`;
+  }
+
   // Arma las filas de la tabla de Fallidos — compartida entre "Todos"
   // (#tabla-fallidos) y el modal de detalle por repartidor
   // (#tabla-fallidos-detalle, sin columna Repartidor porque ya está en el
   // título del modal). `colspanVacio` tiene que matchear la cantidad de
-  // columnas de cada thead (13 en Todos, 12 en el modal).
-  function renderTablaFallidos(filas, tbodyId, { incluirRepartidor, colspanVacio }){
+  // columnas de cada thead (15 en Todos, 14 en el modal — cuentan el
+  // checkbox de selección y Dirección, agregados 2026-11-19).
+  function renderTablaFallidos(filas, tbodyId, { incluirRepartidor, colspanVacio, checkTodosId, btnCerrarId, countId }){
     const tbody = document.getElementById(tbodyId);
     if(!filas.length){
       tbody.innerHTML = `<tr><td colspan="${colspanVacio}" class="sin-datos">Sin casos en este filtro.</td></tr>`;
+      actualizarToolbarSeleccionFallidos([], checkTodosId, btnCerrarId, countId);
       return;
     }
     tbody.innerHTML = filas.map(f => {
@@ -2574,16 +2637,19 @@
       const idSeg = f.seguimiento ? f.seguimiento.id : "";
       const idInterno = f.envio.id_interno;
       const origen = f.envio.origen || "—";
+      const clave = claveSeleccionFallido(f);
       return `
       <tr>
+        <td style="text-align:center;"><input type="checkbox" class="check-fila-fallido" data-clave="${clave}" ${stateFallidos.seleccionados.has(clave) ? "checked" : ""} /></td>
         <td><span class="badge ${alerta.color}">${f.dias === null ? "—" : f.dias + " d"} · ${alerta.label}</span></td>
         <td>${f.envio.fecha_mercadopacks || "—"}</td>
         <td>${f.envio.tracking || "—"}</td>
-        <td>${f.envio.cliente || "—"}</td>
-        <td>${f.envio.localidad || "—"}</td>
+        <td>${tituloTexto(f.envio.cliente) || "—"}</td>
+        <td>${tituloTexto(f.envio.localidad) || "—"}</td>
+        <td class="texto-muted">${direccionDe(f.envio)}</td>
         ${incluirRepartidor ? `<td>${tituloNombre(nombreRepartidorFallido(f.envio))}</td>` : ""}
-        <td>${origen}</td>
-        <td>${f.envio.estado || "—"}${f.duplicado ? ' <span class="badge gris">Duplicado</span>' : ""}</td>
+        <td>${tituloTexto(origen)}</td>
+        <td>${tituloTexto(f.envio.estado) || "—"}${f.duplicado ? ' <span class="badge gris">Duplicado</span>' : ""}</td>
         <td>${f.tipo}</td>
         <td>${f.destino}</td>
         <td><span class="badge ${f.estatus === "pendiente" ? "amarillo" : "verde"}">${ESTATUS_LABEL_FALLIDOS[f.estatus]}</span></td>
@@ -2594,7 +2660,85 @@
       </tr>`;
     }).join("");
     lucide.createIcons();
+    actualizarToolbarSeleccionFallidos(filas.map(claveSeleccionFallido), checkTodosId, btnCerrarId, countId);
   }
+
+  // Selección masiva para cerrar varios casos de una (pedido 2026-11-19).
+  // `stateFallidos.seleccionados` es compartido entre "Todos" y el modal
+  // de detalle, pero cada tabla solo ve/controla las claves que tiene
+  // renderizadas en ESE momento (`claves` acá abajo) — así alternar entre
+  // pantallas no arrastra selecciones de una tabla a los controles de la
+  // otra por error.
+  function actualizarToolbarSeleccionFallidos(claves, checkTodosId, btnCerrarId, countId){
+    if(!checkTodosId) return; // compatibilidad: llamada sin toolbar (no debería pasar, pero no rompe)
+    const seleccionadosEnVista = claves.filter(c => stateFallidos.seleccionados.has(c));
+    const checkTodos = document.getElementById(checkTodosId);
+    const btn = document.getElementById(btnCerrarId);
+    const count = document.getElementById(countId);
+    if(checkTodos){
+      checkTodos.checked = claves.length > 0 && seleccionadosEnVista.length === claves.length;
+      checkTodos.indeterminate = seleccionadosEnVista.length > 0 && seleccionadosEnVista.length < claves.length;
+      checkTodos.onchange = () => {
+        if(checkTodos.checked) claves.forEach(c => stateFallidos.seleccionados.add(c));
+        else claves.forEach(c => stateFallidos.seleccionados.delete(c));
+        renderFallidos();
+      };
+    }
+    if(btn) btn.hidden = seleccionadosEnVista.length === 0;
+    if(count) count.textContent = seleccionadosEnVista.length;
+  }
+
+  function wireSeleccionFilaFallidos(tbodyId, checkTodosId, btnCerrarId, countId){
+    document.getElementById(tbodyId).addEventListener("change", (e)=>{
+      const check = e.target.closest(".check-fila-fallido");
+      if(!check) return;
+      const clave = check.dataset.clave;
+      if(check.checked) stateFallidos.seleccionados.add(clave);
+      else stateFallidos.seleccionados.delete(clave);
+      const claves = [...document.getElementById(tbodyId).querySelectorAll(".check-fila-fallido")].map(c => c.dataset.clave);
+      actualizarToolbarSeleccionFallidos(claves, checkTodosId, btnCerrarId, countId);
+    });
+  }
+  wireSeleccionFilaFallidos("tabla-fallidos", "check-todos-fallidos", "btn-cerrar-seleccionados-fallidos", "fallidos-seleccionados-count");
+  wireSeleccionFilaFallidos("tabla-fallidos-detalle", "check-todos-fallidos-detalle", "btn-cerrar-seleccionados-fallidos-detalle", "fallidos-detalle-seleccionados-count");
+
+  async function cerrarCasosSeleccionados(claves){
+    if(!claves.length) return;
+    abrirModalAbm(`Cerrar ${claves.length} caso(s) seleccionados`, [
+      { clave: "estatus", label: "Estatus", tipo: "select", opciones: Object.entries(ESTATUS_LABEL_FALLIDOS).filter(([v]) => v !== "pendiente").map(([valor, texto]) => ({ valor, texto })) },
+      { clave: "precio_descuento", label: "Precio a descontar", tipo: "number", mostrarSi: (v) => v.estatus === "descontar" },
+      { clave: "motivo_cierre", label: "Motivo de cierre", tipo: "texto" },
+      { clave: "observaciones", label: "Observaciones", tipo: "texto" },
+    ], { estatus: "cerrado_manual" }, async (vals)=>{
+      if(!vals.estatus || vals.estatus === "pendiente"){ await mostrarAviso("Elegí un estatus para cerrar los casos."); return false; }
+      const payload = {
+        estatus: vals.estatus,
+        precio_descuento: vals.precio_descuento ? Number(vals.precio_descuento) : null,
+        motivo_cierre: vals.motivo_cierre || null,
+        observaciones: vals.observaciones || null,
+        fecha_cierre: fechaART(0),
+      };
+      for(const clave of claves){
+        const [idInterno, idSeg] = clave.split("::");
+        const fila = stateFallidos.filas.find(f => f.envio.id_interno === idInterno && (f.seguimiento ? f.seguimiento.id : "") === idSeg);
+        if(fila && fila.seguimiento){
+          await sb.from("fallidos_seguimiento").update(payload).eq("id", fila.seguimiento.id);
+        } else {
+          await sb.from("fallidos_seguimiento").insert({ id_interno: idInterno, duplicado: false, ...payload });
+        }
+      }
+      stateFallidos.seleccionados.clear();
+      cargarFallidos();
+    });
+  }
+  document.getElementById("btn-cerrar-seleccionados-fallidos").addEventListener("click", ()=>{
+    const claves = [...document.getElementById("tabla-fallidos").querySelectorAll(".check-fila-fallido:checked")].map(c => c.dataset.clave);
+    cerrarCasosSeleccionados(claves);
+  });
+  document.getElementById("btn-cerrar-seleccionados-fallidos-detalle").addEventListener("click", ()=>{
+    const claves = [...document.getElementById("tabla-fallidos-detalle").querySelectorAll(".check-fila-fallido:checked")].map(c => c.dataset.clave);
+    cerrarCasosSeleccionados(claves);
+  });
 
   function renderFallidos(){
     aplicarModoFallidos();
@@ -2613,7 +2757,7 @@
       );
       filas = [...filas].sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
       renderKpisFallidos(stateFallidos.filas);
-      renderTablaFallidos(filas, "tabla-fallidos-detalle", { incluirRepartidor: false, colspanVacio: 12 });
+      renderTablaFallidos(filas, "tabla-fallidos-detalle", { incluirRepartidor: false, colspanVacio: 14, checkTodosId: "check-todos-fallidos-detalle", btnCerrarId: "btn-cerrar-seleccionados-fallidos-detalle", countId: "fallidos-detalle-seleccionados-count" });
       return;
     }
 
@@ -2636,7 +2780,7 @@
       );
     }
     filas = [...filas].sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
-    renderTablaFallidos(filas, "tabla-fallidos", { incluirRepartidor: true, colspanVacio: 13 });
+    renderTablaFallidos(filas, "tabla-fallidos", { incluirRepartidor: true, colspanVacio: 15, checkTodosId: "check-todos-fallidos", btnCerrarId: "btn-cerrar-seleccionados-fallidos", countId: "fallidos-seleccionados-count" });
   }
 
   document.querySelectorAll("#modo-fallidos .chip").forEach(btn=>{
