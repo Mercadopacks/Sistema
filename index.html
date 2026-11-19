@@ -1379,7 +1379,7 @@
                 <thead>
                   <tr>
                     <th>Nombre</th><th>Apellido</th><th>Email</th><th>Sector</th>
-                    <th>Admin</th><th>Activo</th><th>Vistas permitidas</th>
+                    <th>Admin</th><th>Activo</th>
                     <th class="col-opciones">Opciones</th>
                   </tr>
                 </thead>
@@ -1447,6 +1447,16 @@
         </thead>
         <tbody id="tabla-fallidos-detalle"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-detalle-usuario" hidden>
+  <div class="modal-card">
+    <h3 id="modal-detalle-usuario-titulo" style="margin-top:0;"></h3>
+    <div id="modal-detalle-usuario-cuerpo"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+      <button type="button" class="btn-secundario-modal" id="modal-detalle-usuario-cerrar">Cerrar</button>
     </div>
   </div>
 </div>
@@ -2913,7 +2923,7 @@
     }
     const tbody = document.getElementById("tabla-admin-usuarios");
     if(!filas.length){
-      tbody.innerHTML = `<tr><td colspan="8" class="sin-datos">Sin usuarios cargados.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="sin-datos">Sin usuarios cargados.</td></tr>`;
       return;
     }
     tbody.innerHTML = filas.map(u => `
@@ -2924,9 +2934,11 @@
         <td class="texto-muted">${u.sector || "—"}</td>
         <td>${u.es_admin ? '<span class="badge verde">Sí</span>' : '<span class="badge gris">No</span>'}</td>
         <td>${u.activo ? '<span class="badge verde">Sí</span>' : '<span class="badge rojo">No</span>'}</td>
-        <td class="texto-muted">${u.es_admin ? "Todas (admin)" : (clavesAVistasLabel(u.vistas_permitidas).join(", ") || "—")}</td>
         <td class="col-opciones">
-          <button type="button" class="btn-icono-chico editar" data-id="${u.id}" title="Editar"><i data-lucide="pencil"></i></button>
+          <span class="opciones-fila">
+            <button type="button" class="btn-icono-chico ver" data-id="${u.id}" title="Ver detalle"><i data-lucide="eye"></i></button>
+            <button type="button" class="btn-icono-chico editar" data-id="${u.id}" title="Editar"><i data-lucide="pencil"></i></button>
+          </span>
         </td>
       </tr>
     `).join("");
@@ -2938,7 +2950,40 @@
     renderAdminUsuarios();
   });
 
+  function abrirDetalleUsuario(id){
+    const u = adminUsuariosData.find(x => String(x.id) === String(id));
+    if(!u) return;
+    document.getElementById("modal-detalle-usuario-titulo").textContent = `Detalle — ${u.nombre} ${u.apellido}`;
+    const campos = [
+      { icono: "mail", label: "Email", valor: u.email },
+      { icono: "briefcase", label: "Sector", valor: u.sector || "—" },
+      { icono: "shield-check", label: "Admin", valor: u.es_admin ? "Sí" : "No" },
+      { icono: "check-circle-2", label: "Activo", valor: u.activo ? "Sí" : "No" },
+      { icono: "eye", label: "Vistas permitidas", valor: u.es_admin ? "Todas (admin)" : (clavesAVistasLabel(u.vistas_permitidas).join(", ") || "—"), span: true },
+    ];
+    document.getElementById("modal-detalle-usuario-cuerpo").innerHTML = `
+      <div class="grid-detalle-compacto">
+        ${campos.map(c => `
+          <div class="campo-detalle${c.span ? " campo-span-completo" : ""}">
+            <span class="campo-detalle-label"><i data-lucide="${c.icono}"></i>${c.label}</span>
+            <span class="campo-detalle-valor">${c.valor}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    lucide.createIcons();
+    document.getElementById("modal-detalle-usuario").hidden = false;
+  }
+  document.getElementById("modal-detalle-usuario-cerrar").addEventListener("click", ()=>{
+    document.getElementById("modal-detalle-usuario").hidden = true;
+  });
+  document.getElementById("modal-detalle-usuario").addEventListener("click", (e)=>{
+    if(e.target.id === "modal-detalle-usuario") document.getElementById("modal-detalle-usuario").hidden = true;
+  });
+
   document.getElementById("tabla-admin-usuarios").addEventListener("click", (e)=>{
+    const btnVer = e.target.closest(".btn-icono-chico.ver");
+    if(btnVer){ abrirDetalleUsuario(btnVer.dataset.id); return; }
     const btn = e.target.closest(".btn-icono-chico.editar");
     if(!btn) return;
     const usuario = adminUsuariosData.find(u => String(u.id) === btn.dataset.id);
