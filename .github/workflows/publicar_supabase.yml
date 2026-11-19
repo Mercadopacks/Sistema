@@ -124,6 +124,20 @@ jobs:
       # en Lightdata) que no matcheaba contra el roster. `continue-on-error`
       # por la misma razón que el paso de arriba: endpoint interno no
       # oficial, nunca debe tumbar la publicación de envíos.
+      #
+      # IMPORTANTE (bug real 2026-11-19): este paso forzaba SIEMPRE
+      # FECHA_DESCARGA a hoy, aunque el script ya soporta un rango de
+      # varios días (RANGO_DIAS_LIVE, ver vincular_choferes_envios.py) —
+      # con FECHA_DESCARGA seteada, el script ignora el rango y vuelve al
+      # modo de un solo día de siempre. Resultado: el fix de "refrescar
+      # también los casos de Fallidos de días anteriores" nunca se activaba
+      # en producción pese a estar deployado (caso real: tracking
+      # 48553756312, 2 días de antigüedad, seguía sin refrescarse después
+      # del fix). Ahora SOLO se fuerza una fecha puntual cuando el
+      # workflow_dispatch trae un input manual — en la corrida normal del
+      # cron, FECHA_DESCARGA queda sin setear y el script usa su rango por
+      # defecto (3 días, ver el docstring del script para por qué ese
+      # número y no uno más grande).
       - name: Vincular choferes a envíos (por ID de Lightdata)
         working-directory: scripts
         continue-on-error: true
@@ -136,8 +150,6 @@ jobs:
         run: |
           if [ -n "$FECHA_INPUT" ]; then
             export FECHA_DESCARGA="$FECHA_INPUT"
-          else
-            export FECHA_DESCARGA=$(date -u -d "-3 hours" +%F)  # ART = UTC-3
           fi
           python3 vincular_choferes_envios.py
 
