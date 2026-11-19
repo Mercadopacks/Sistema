@@ -20,7 +20,6 @@ import os
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client
@@ -73,25 +72,25 @@ def parsear_fecha(valor) -> str | None:
     return dt.isoformat() + "-03:00"
 
 
-def valor_json_seguro(valor):
-    """Convierte tipos de numpy/pandas a algo serializable por el cliente
-    de Supabase (json estándar) antes de meterlo en la columna `raw`."""
-    if valor is None:
+def numero_o_none(valor) -> float | None:
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
         return None
-    if isinstance(valor, float) and pd.isna(valor):
-        return None
-    if isinstance(valor, pd.Timestamp):
-        return valor.isoformat()
-    if isinstance(valor, np.integer):
-        return int(valor)
-    if isinstance(valor, np.floating):
+    try:
         return float(valor)
-    if isinstance(valor, np.bool_):
-        return bool(valor)
-    return valor
+    except (TypeError, ValueError):
+        return None
 
 
 def construir_filas(df: pd.DataFrame) -> list[dict]:
+    """
+    Fila de `envios` — ya NO incluye `raw` (auditoría 2026-11-19, ver
+    reglas_de_negocio.md): todo lo que traía el Excel ahora es una columna
+    propia, promovida acá mismo, salvo los 5 campos sensibles del
+    destinatario (Nombre/Dirección/Tel./Email/Latitud/Longitud), que van
+    aparte en `envios_contacto_destinatario` (construir_filas_contacto) —
+    RLS por fila no alcanza para esconder columnas dentro de la MISMA
+    tabla, por eso la separación real es en otra tabla.
+    """
     filas = []
     for _, fila in df.iterrows():
         id_interno = normalizar_id(fila.get("ID (Interno)"))
@@ -120,7 +119,43 @@ def construir_filas(df: pd.DataFrame) -> list[dict]:
             "fecha_estado": parsear_fecha(fila.get("Fecha estado")),
             "fecha_asignacion": parsear_fecha(fila.get("Fecha de asignación")),
             "fecha_a_planta": parsear_fecha(fila.get("Fecha a planta")),
-            "raw": {str(k): valor_json_seguro(v) for k, v in fila.items()},
+            "cp": texto_o_none(fila.get("CP")),
+            "origen": texto_o_none(fila.get("Origen")),
+            "precio": numero_o_none(fila.get("Precio")),
+            "provincia": texto_o_none(fila.get("Provincia")),
+            "cod_cliente": texto_o_none(fila.get("Cod.Cliente")),
+            "fecha_venta": parsear_fecha(fila.get("Fecha Venta")),
+            "id_venta_ml": texto_o_none(fila.get("ID venta ML")),
+            "zona_precio": texto_o_none(fila.get("Zona precio")),
+            "quien_estado": texto_o_none(fila.get("Quien estado")),
+            "razon_social": texto_o_none(fila.get("Razon Social")),
+            "url_tracking": texto_o_none(fila.get("URl Tracking")),
+            "fecha_colecta": parsear_fecha(fila.get("Fecha Colecta")),
+            "nombre_cuenta": texto_o_none(fila.get("Nombre cuenta")),
+            "usuario_ml_id": texto_o_none(fila.get("Usuario ML ID")),
+            "tipo_direccion": texto_o_none(fila.get("Tipo direccion")),
+            "total_a_cobrar": numero_o_none(fila.get("Total a cobrar")),
+            "metodo_envio": texto_o_none(fila.get("Método de envío")),
+            "comentario_destino": texto_o_none(fila.get("Comentario Destino")),
+        })
+    return filas
+
+
+def construir_filas_contacto(df: pd.DataFrame) -> list[dict]:
+    """Datos sensibles del destinatario — ver nota en construir_filas()."""
+    filas = []
+    for _, fila in df.iterrows():
+        id_interno = normalizar_id(fila.get("ID (Interno)"))
+        if not id_interno:
+            continue
+        filas.append({
+            "id_interno": id_interno,
+            "nombre_destinatario": texto_o_none(fila.get("Nombre Destinatario")),
+            "direccion": texto_o_none(fila.get("Dirección")),
+            "telefono_destinatario": texto_o_none(fila.get("Tel. Destinatario")),
+            "email_destinatario": texto_o_none(fila.get("Email Destinatario")),
+            "latitud": numero_o_none(fila.get("Latitud")),
+            "longitud": numero_o_none(fila.get("Longitud")),
         })
     return filas
 
@@ -148,11 +183,18 @@ def main():
     if not filas:
         sys.exit("Nada para subir.")
 
+    filas_contacto = construir_filas_contacto(df)
+
     client = create_client(url, key)
     for i in range(0, len(filas), LOTE):
         lote = filas[i:i + LOTE]
         client.table("envios").upsert(lote, on_conflict="id_interno").execute()
-        print(f"  subidas {min(i + LOTE, len(filas))}/{len(filas)}")
+        print(f"  envios: {min(i + LOTE, len(filas))}/{len(filas)}")
+
+    for i in range(0, len(filas_contacto), LOTE):
+        lote = filas_contacto[i:i + LOTE]
+        client.table("envios_contacto_destinatario").upsert(lote, on_conflict="id_interno").execute()
+        print(f"  envios_contacto_destinatario: {min(i + LOTE, len(filas_contacto))}/{len(filas_contacto)}")
 
     print("Listo.")
 

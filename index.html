@@ -2195,7 +2195,7 @@
   // tal cual lo trae Lightdata — no está promovido a columna propia como
   // logistica_inversa/observaciones porque acá solo se muestra, no se
   // filtra ni se usa para clasificar.
-  const COLUMNAS_ENVIO_FALLIDOS = "id_interno,tracking,cliente,localidad,cadete,chofer_lightdata_id,estado,fecha_mercadopacks,logistica_inversa,observaciones,raw";
+  const COLUMNAS_ENVIO_FALLIDOS = "id_interno,tracking,cliente,localidad,cadete,chofer_lightdata_id,estado,fecha_mercadopacks,logistica_inversa,logistica_inversa_real,observaciones,origen";
 
   // El Estado de Lightdata NO define un Cambio (describe el paquete NUEVO
   // que se entrega, no si el chofer ya devolvió el producto ORIGINAL) — la
@@ -2206,15 +2206,24 @@
   // Logistica Inversa es texto libre sin estandarizar (ver
   // diccionario_de_datos.md) — además de vacío/null, puede traer
   // literalmente "No"/"NO"/"no" (107 casos reales confirmados 2026-11-19),
-  // que significa "no hay logística inversa", no lo contrario. Sin este
-  // filtro, esos envíos entraban como Cambio por error.
+  // que significa "no hay logística inversa", no lo contrario. Respaldo
+  // SOLO para envíos que todavía no tienen `logistica_inversa_real`
+  // calculado (ver abajo) — no usar como fuente principal.
   function tieneLogisticaInversaReal(valor){
     const v = (valor || "").trim().toLowerCase();
     return v !== "" && v !== "no" && v !== "n/a" && v !== "na";
   }
 
+  // `envio.logistica_inversa_real` (booleano, completado por
+  // vincular_choferes_envios.py contra el filtro real de Lightdata —
+  // 0=No/1=Sí/2=Todos, confirmado confiable 2026-11-19, ver
+  // lightdata_api_envios.md) es la fuente de verdad. Null = todavía no se
+  // procesó ese envío con el fix nuevo (histórico o recién publicado) —
+  // ahí cae al texto libre como mejor esfuerzo, ya corregido para no
+  // contar "No" como señal.
   function determinarTipoDestinoFallido(envio){
-    const esCambio = tieneLogisticaInversaReal(envio.logistica_inversa)
+    const esCambio = envio.logistica_inversa_real === true
+      || (envio.logistica_inversa_real == null && tieneLogisticaInversaReal(envio.logistica_inversa))
       || /cambio/i.test(envio.observaciones || "");
     if(esCambio) return { tipo: "Cambio", destino: "Devolver a tienda" };
     return stateFallidos.mapeo[envio.estado] || null;
@@ -2265,7 +2274,7 @@
     // pasa por tieneLogisticaInversaReal() más abajo, esto es solo para
     // no pedir de más).
     let qD = sb.from("envios").select(COLUMNAS_ENVIO_FALLIDOS)
-      .or("and(logistica_inversa.not.is.null,logistica_inversa.not.ilike.no),observaciones.ilike.%cambio%");
+      .or("logistica_inversa_real.eq.true,and(logistica_inversa.not.is.null,logistica_inversa.not.ilike.no),observaciones.ilike.%cambio%");
     if(cutoff) qD = qD.gte("fecha_mercadopacks", cutoff);
 
     let qB = sb.from("fallidos_seguimiento").select("*");
@@ -2519,7 +2528,7 @@
       const alerta = alertaDiasFallido(f.dias);
       const idSeg = f.seguimiento ? f.seguimiento.id : "";
       const idInterno = f.envio.id_interno;
-      const origen = (f.envio.raw && f.envio.raw["Origen"]) || "—";
+      const origen = f.envio.origen || "—";
       return `
       <tr>
         <td><span class="badge ${alerta.color}">${f.dias === null ? "—" : f.dias + " d"} · ${alerta.label}</span></td>
