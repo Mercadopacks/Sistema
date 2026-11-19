@@ -2150,6 +2150,7 @@
     sortChofer: { key: "diasMax", dir: "desc" },
     tipo: "todos", destino: "", estatus: "pendiente", rangoDias: 30, search: "",
     mapeo: {}, umbrales: { pedir: 2, prioridad: 3, revisar: 5 }, filas: [],
+    nombresPorLightdataId: {}, // lightdata_id -> nombre (choferes_roster), ver cargarNombresPorLightdataId()
   };
 
   // Lightdata a veces carga el nombre del repartidor con espacios de más
@@ -2256,8 +2257,33 @@
     (data || []).forEach(u => { if(u.clave in stateFallidos.umbrales) stateFallidos.umbrales[u.clave] = u.valor_dias; });
   }
 
+  // Bug real 2026-11-19: `envios.chofer_lightdata_id` se completa en vivo
+  // por ID (vincular_choferes_envios.py), pero `envios.cadete` (texto,
+  // viene del Excel) puede quedar vacío para esos mismos envíos — "Por
+  // repartidor" agrupaba bien por ID (clave `ld:<id>`) pero mostraba
+  // "Sin repartidor" para todos, así que varios repartidores DISTINTOS se
+  // veían como filas idénticas repetidas en vez de agruparse ni
+  // distinguirse. Se resuelve el nombre real por `chofer_lightdata_id`
+  // contra el roster como respaldo cuando `cadete` viene vacío.
+  async function cargarNombresPorLightdataId(){
+    const { data, error } = await sb.from("choferes_roster").select("nombre,lightdata_id").not("lightdata_id", "is", null);
+    if(error){ console.error("Error cargando choferes_roster (nombres por lightdata_id):", error); return; }
+    stateFallidos.nombresPorLightdataId = {};
+    (data || []).forEach(c => { stateFallidos.nombresPorLightdataId[c.lightdata_id] = c.nombre; });
+  }
+
+  function nombreRepartidorFallido(envio){
+    const nombreCadete = normEspaciosNombre(envio.cadete);
+    if(nombreCadete) return nombreCadete;
+    if(envio.chofer_lightdata_id != null){
+      const porId = stateFallidos.nombresPorLightdataId[envio.chofer_lightdata_id];
+      if(porId) return porId;
+    }
+    return "Sin repartidor";
+  }
+
   async function cargarFallidos(){
-    await Promise.all([cargarMapeoFallidos(), cargarUmbralesFallidos()]);
+    await Promise.all([cargarMapeoFallidos(), cargarUmbralesFallidos(), cargarNombresPorLightdataId()]);
     const estados = Object.keys(stateFallidos.mapeo);
     if(!estados.length){
       stateFallidos.filas = [];
@@ -2370,7 +2396,7 @@
     const porChofer = {};
     pendientes.forEach(f => {
       const clave = claveRepartidorEnvio(f.envio);
-      const nombre = normEspaciosNombre(f.envio.cadete) || "Sin repartidor";
+      const nombre = nombreRepartidorFallido(f.envio);
       const g = porChofer[clave] || (porChofer[clave] = { clave, nombre, fallidos: 0, cambios: 0, diasMax: 0 });
       if(f.tipo === "Cambio") g.cambios++; else g.fallidos++;
       if(f.dias !== null && f.dias > g.diasMax) g.diasMax = f.dias;
@@ -2545,7 +2571,7 @@
         <td>${f.envio.tracking || "—"}</td>
         <td>${f.envio.cliente || "—"}</td>
         <td>${f.envio.localidad || "—"}</td>
-        ${incluirRepartidor ? `<td>${tituloNombre(f.envio.cadete) || "—"}</td>` : ""}
+        ${incluirRepartidor ? `<td>${tituloNombre(nombreRepartidorFallido(f.envio))}</td>` : ""}
         <td>${origen}</td>
         <td>${f.envio.estado || "—"}${f.duplicado ? ' <span class="badge gris">Duplicado</span>' : ""}</td>
         <td>${f.tipo}</td>
