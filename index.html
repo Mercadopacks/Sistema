@@ -2191,10 +2191,8 @@
     return Math.round((hoy - d) / (24 * 60 * 60 * 1000));
   }
 
-  // `raw` incluye "Origen" (Directo/ML/TNube/ML TURBO, ver diccionario_de_datos.md)
-  // tal cual lo trae Lightdata — no está promovido a columna propia como
-  // logistica_inversa/observaciones porque acá solo se muestra, no se
-  // filtra ni se usa para clasificar.
+  // `origen` (Directo/ML/TNube/ML TURBO, ver diccionario_de_datos.md) ya es
+  // columna propia de `envios` (ver reglas_de_negocio.md, rediseño sin `raw`).
   const COLUMNAS_ENVIO_FALLIDOS = "id_interno,tracking,cliente,localidad,cadete,chofer_lightdata_id,estado,fecha_mercadopacks,logistica_inversa,logistica_inversa_real,observaciones,origen";
 
   // El Estado de Lightdata NO define un Cambio (describe el paquete NUEVO
@@ -3607,7 +3605,7 @@
     document.getElementById("tabla-ruta-detalle").innerHTML = `<tr><td colspan="7" class="sin-datos">Cargando…</td></tr>`;
     const fecha = fechaRutaActual();
     const { data, error } = await sb.from("envios")
-      .select("tracking,cliente,localidad,zona,estado,fecha_estado,raw->>Origen")
+      .select("tracking,cliente,localidad,zona,estado,fecha_estado,origen")
       .eq("fecha_mercadopacks", fecha)
       .eq("cadete", cadete)
       .not("estado", "in", '("Entregado","Entregado 2DA visita","A retirar")');
@@ -3638,7 +3636,7 @@
       <tr>
         <td>${it.tracking || "—"}</td>
         <td>${it.cliente || "—"}</td>
-        <td>${it.Origen || "—"}</td>
+        <td>${it.origen || "—"}</td>
         <td>${it.localidad || "—"}</td>
         <td>${it.zona || "—"}</td>
         <td><span class="mini-dot ${gestionado ? "verde" : "rojo"}" style="margin-right:6px;"></span>${it.estado || "—"}</td>
