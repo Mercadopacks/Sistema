@@ -1,11 +1,16 @@
 """
 backfill_estado_fallidos_viejos.py
 ------------------------------------
-Corrida ÚNICA (no es parte del cron) para ponerse al día con los casos de
-Fallidos y Cambios que quedaron con `envios.estado` desactualizado por la
-cadena de bugs del 2026-11-19 (ver reglas_de_negocio.md, changelog) — en
-particular, todo lo que tiene más de los 3 días que cubre el refresco en
-vivo normal (`vincular_choferes_envios.py`, `RANGO_DIAS_LIVE`).
+Corre 1 vez por día desde el cron (.github/workflows/backfill_fallidos_diario.yml,
+agregado 2026-11-20) para mantener al día los casos de Fallidos y Cambios
+que quedan fuera de los 3 días que cubre el refresco en vivo normal
+(`vincular_choferes_envios.py`, `RANGO_DIAS_LIVE`) — tanto `envios.estado`
+como `envios.logistica_inversa_real` pueden quedar desactualizados para
+siempre si nadie los vuelve a consultar después de esa ventana (bug real
+2026-11-19 para estado, bug real 2026-11-20 para logistica_inversa_real:
+tracking "2960", FLIA HDC GROUP S.R.L., quedó con logistica_inversa_real=true
+desde el 17/11 aunque Lightdata ya no lo tenía marcado). También se puede
+correr a mano (uso original, antes de agregarse al cron):
 
 Por qué NO es un barrido por fecha: ya se midió que pedirle a Lightdata un
 rango de varios días (5-7+) cuelga el endpoint (ver docstring de
@@ -16,6 +21,15 @@ tienen `logistica_inversa_real=true` — el mismo criterio que usa
 `cargarFallidos()` en el frontend, sección 1 de index.html) y le pregunta
 a Lightdata, uno por uno, por su `tracking_number` puntual — una consulta
 chica y rápida en vez de una consulta grande y lenta.
+
+Bug real 2026-11-20: el filtro `tracking_number` de Lightdata matchea por
+SUBSTRING, no exacto — pedir tracking "2960" puede traer como primera fila
+un envío de ML ajeno cuyo tracking largo lo contiene (ej. "48582960190").
+Afecta sobre todo a clientes con tracking interno corto/numérico como FLIA
+HDC GROUP S.R.L. Corregido en `_fila_exacta()`: se descarta cualquier fila
+cuyo tracking no sea idénticamente igual al buscado, en vez de asumir
+`filas[0]`. Esto invalida los resultados de corridas de este script
+anteriores a ese fix para cualquier tracking corto — ver reglas_de_negocio.md.
 
 Uso:
     python backfill_estado_fallidos_viejos.py [--dry-run]
@@ -31,7 +45,7 @@ import time
 from dotenv import load_dotenv
 from supabase import create_client
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ingesta_lightdata"))
 from vincular_choferes_envios import (  # noqa: E402
     FILTROS_DEFAULT, COLUMNAS_DEFAULT, LIGHTDATA_URL, LIGHTDATA_ENDPOINT_ENVIOS,
     TIMEOUT_MS, texto_estado, texto_o_none, entero_o_none,
@@ -63,7 +77,37 @@ def obtener_candidatos(sb):
     return candidatos
 
 
-def consultar_tracking(page, tracking):
+def _fila_exacta(filas, tracking, id_interno):
+    """BUG REAL 2026-11-20 (parte 1): el filtro `tracking_number` de
+    Lightdata hace coincidencia por SUBSTRING, no exacta — buscar "2960"
+    (tracking interno corto, común en este cliente) devolvió como primera
+    fila un envío de ML totalmente distinto cuyo tracking largo
+    "48582960190" simplemente CONTIENE "2960". Tomar `filas[0]` a ciegas
+    (como se hacía antes) aplicaba el estado/logística inversa de un envío
+    ajeno al candidato real.
+
+    BUG REAL 2026-11-20 (parte 2, más sutil): exigir tracking EXACTO no
+    alcanza tampoco — un mismo tracking corto puede pertenecer a DOS
+    envíos reales distintos en Lightdata (dos `did` != pero mismo texto de
+    tracking, caso real: FLIA HDC GROUP S.R.L., tracking "2960" = dids
+    1237722 y 1237708). Por eso primero se filtra por tracking exacto, y
+    si hay más de una fila, se desambigua por `did` == `id_interno`
+    (nuestra clave, que ES el did de Lightdata) — nunca por posición en la
+    lista."""
+    tracking_norm = str(tracking).strip()
+    candidatas = [f for f in filas if str(f.get("tracking", "")).strip() == tracking_norm]
+    if not candidatas:
+        return None
+    if len(candidatas) == 1:
+        return candidatas[0]
+    for f in candidatas:
+        did = f.get("did")
+        if did is not None and str(int(float(did))) == str(id_interno):
+            return f
+    return None  # ambiguo y no se pudo resolver por did: mejor no actualizar que actualizar mal
+
+
+def consultar_tracking(page, tracking, id_interno):
     """Dos consultas chicas y puntuales (no un barrido): una para traer la
     fila, otra para saber si tiene logística inversa real (ver docstring
     de vincular_choferes_envios.py — ese flag no se puede pedir como
@@ -91,7 +135,8 @@ def consultar_tracking(page, tracking):
     filas = cuerpo.get("rows") or []
     if isinstance(filas, dict):
         filas = list(filas.values())
-    if not filas:
+    fila = _fila_exacta(filas, tracking, id_interno)
+    if fila is None:
         return None
 
     filtros_logistica = {**filtros, "logisticaInversa": "1"}
@@ -109,8 +154,9 @@ def consultar_tracking(page, tracking):
     filas2 = cuerpo2.get("rows") or []
     if isinstance(filas2, dict):
         filas2 = list(filas2.values())
+    tiene_logistica = _fila_exacta(filas2, tracking, id_interno) is not None
 
-    return filas[0], bool(filas2)
+    return fila, tiene_logistica
 
 
 def main():
@@ -155,7 +201,7 @@ def main():
                 actualizaciones = []
                 no_encontrados = []
                 for i, (id_interno, tracking) in enumerate(candidatos.items(), start=1):
-                    resultado = consultar_tracking(page, tracking)
+                    resultado = consultar_tracking(page, tracking, id_interno)
                     if resultado is None:
                         no_encontrados.append(tracking)
                         continue

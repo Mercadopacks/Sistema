@@ -83,7 +83,7 @@ jobs:
         run: pip install -r requirements_supabase.txt
 
       - name: Descargar de LightData y publicar a Supabase
-        working-directory: scripts
+        working-directory: scripts/ingesta_lightdata
         env:
           LIGHTDATA_USER: ${{ secrets.LIGHTDATA_USER }}
           LIGHTDATA_PASS: ${{ secrets.LIGHTDATA_PASS }}
@@ -109,7 +109,7 @@ jobs:
       # cambiar de formato sin aviso — si falla, NO debe tumbar la publicación
       # de envíos (lo que sí importa en cada corrida), queda para revisar aparte.
       - name: Sincronizar usuarios de Lightdata (roster de repartidores)
-        working-directory: scripts
+        working-directory: scripts/ingesta_lightdata
         continue-on-error: true
         env:
           LIGHTDATA_USER: ${{ secrets.LIGHTDATA_USER }}
@@ -139,7 +139,7 @@ jobs:
       # defecto (3 días, ver el docstring del script para por qué ese
       # número y no uno más grande).
       - name: Vincular choferes a envíos (por ID de Lightdata)
-        working-directory: scripts
+        working-directory: scripts/ingesta_lightdata
         continue-on-error: true
         env:
           LIGHTDATA_USER: ${{ secrets.LIGHTDATA_USER }}
@@ -158,5 +158,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: error-publicar-supabase
-          path: scripts/error_descarga.png
+          path: scripts/ingesta_lightdata/error_descarga.png
           if-no-files-found: ignore

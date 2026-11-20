@@ -42,7 +42,7 @@ from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from supabase import create_client
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ingesta_lightdata"))
 from vincular_choferes_envios import (  # noqa: E402
     obtener_envios_del_rango, texto_estado, CODIGOS_ESTADO,
 )

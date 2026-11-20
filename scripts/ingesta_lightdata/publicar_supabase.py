@@ -168,7 +168,10 @@ def main():
     if not ruta.exists():
         sys.exit(f"No se encontró el archivo: {ruta}")
 
-    load_dotenv(Path(__file__).parent / ".env")
+    # El .env real vive en scripts/.env (compartido por todas las
+    # subcarpetas de scripts/, ver README.md) — este archivo se movió a
+    # scripts/ingesta_lightdata/ en la reorganización 2026-11-20.
+    load_dotenv(Path(__file__).parent.parent / ".env")
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:

@@ -27,7 +27,7 @@ import sys
 from dotenv import load_dotenv
 from supabase import create_client
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ingesta_lightdata"))
 from publicar_supabase import texto_o_none, parsear_fecha, numero_o_none  # noqa: E402
 
 load_dotenv()

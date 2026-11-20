@@ -5,7 +5,7 @@ datos_crudos/*.xlsx
 !datos_crudos/.gitkeep
 
 # Captura de pantalla que genera descargar_lightdata.py si falla (debug local)
-scripts/error_descarga.png
+scripts/ingesta_lightdata/error_descarga.png
 
 # Entorno virtual de Python, si se crea uno local
 scripts/.venv/

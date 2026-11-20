@@ -2407,10 +2407,14 @@
     Object.values(enviosById).forEach(envio => {
       const grupo = seguimientoPorEnvio[envio.id_interno] || [];
       // "A retirar" nunca es un fallido/cambio (el paquete está esperando
-      // que el cliente lo retire, no hubo intento fallido) — se excluye acá
-      // sin importar cómo esté configurado parametros_fallidos_mapeo, salvo
-      // que ya tenga un caso abierto a mano (grupo.length), que se respeta.
-      const clasif = (envio.estado === "A retirar" && !grupo.length) ? null : determinarTipoDestinoFallido(envio);
+      // que el cliente lo retire, no hubo intento fallido), y "Devuelto al
+      // cliente" significa que el caso ya se gestionó (pedido del usuario
+      // 2026-11-20) — ambos se excluyen acá sin importar cómo esté
+      // configurado parametros_fallidos_mapeo ni la señal de logística
+      // inversa (qD), salvo que ya tengan un caso abierto a mano
+      // (grupo.length), que se respeta.
+      const ESTADOS_SIEMPRE_EXCLUIDOS = ["A retirar", "Devuelto al cliente"];
+      const clasif = (ESTADOS_SIEMPRE_EXCLUIDOS.includes(envio.estado) && !grupo.length) ? null : determinarTipoDestinoFallido(envio);
       if(!clasif && !grupo.length) return; // sin señal de fallido/cambio y nadie lo tocó a mano: no entra
       const tipo = clasif ? clasif.tipo : "—";
       const destino = clasif ? clasif.destino : "—";
