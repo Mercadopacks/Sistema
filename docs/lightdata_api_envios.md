@@ -100,7 +100,7 @@ La respuesta trae más campos que estas columnas (ver §3), así que se pueden m
 | `tracking` | Número de tracking. |
 | `flexname` | Nombre/identificador Flex. |
 | `tipo_servicio` | Tipo de servicio. |
-| `ml_vendedor_id` | ID del vendedor en MercadoLibre. |
+| `ml_vendedor_id` | ⚠️ Pese al nombre, en el listado es el **ID de la venta/orden** de ML (16 dígitos), no el seller. El seller (`ml_vendedor_id`) y la cuenta (`didCuenta`) vienen en el detalle del envío: `modules/envios/alta/controlador.php` con `operador=get&did=<did>` (ver `lightdata_api_clientes.md`). |
 | `fechaventa` | Fecha de venta. |
 | `fechagestionar` | Fecha a gestionar. |
 | `estimated_delivery_time_date_72` | Fecha estimada de entrega. |

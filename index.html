@@ -317,7 +317,30 @@
      altura 36px para alinear con los chips. La forma de "pastilla"
      (border-radius:20px) es exclusiva de los chips seleccionables, nunca de
      un campo donde se escribe o se elige un valor. */
-  #rango-envios, #fecha-ruta-wrap{display:inline-flex; align-items:center; gap:8px;}
+  #rango-envios, #fecha-ruta-wrap, .rango-fechas-envios-listado{display:inline-flex; align-items:center; gap:8px;}
+  /* Pedido 2026-11-21: títulos de columna centrados en la grilla de
+     "Envíos" (no cambia las demás tablas del sistema, que siguen
+     alineadas a la izquierda por default). */
+  #vista-envios-listado thead th{text-align:center;}
+  /* Pedido 2026-11-21: antes el modal de detalle de Cliente crecía con la
+     cantidad de cuentas vinculadas y podía salirse de la pantalla. Fix
+     real: el ancho/alto del modal NO se tocan (quedan como el resto de
+     los modales de detalle de siempre) — solo la LISTA de cuentas tiene
+     su propio tope de alto con scroll interno, que alcanza para que el
+     modal entero nunca necesite un segundo scroll. (El intento anterior
+     de forzar width/max-height en el modal entero generó doble scroll y
+     lo angostó sin que hiciera falta — se revierte.) */
+  .tabla-cuentas-cliente-scroll{max-height:220px; overflow-y:auto;}
+  /* Títulos centrados en las 2 matrices del modal de Precios por cliente
+     (pedido 2026-11-21) — también se centran los inputs de precio, tiene
+     más sentido visual en una matriz numérica que alineados a la
+     izquierda (Regla 5 de sección 1: números/checkboxes centrados). */
+  #precios-cliente-matriz-envios th, #precios-cliente-matriz-flete th{text-align:center;}
+  #precios-cliente-matriz-envios td:not(:first-child), #precios-cliente-matriz-flete td{text-align:center;}
+  .precio-envio-input, .precio-flete-input{text-align:right;}
+  .paginacion-envios-listado{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; flex-wrap:wrap;}
+  .paginacion-controles{display:flex; align-items:center; gap:8px;}
+  .paginacion-controles .btn-icono:disabled{opacity:.4; cursor:not-allowed;}
   input[type="date"]{
     padding:0 12px; border:1px solid var(--borde); border-radius:8px;
     font-family:inherit; font-size:13px; color:var(--negro); background:#fff;
@@ -482,7 +505,16 @@
      mucho más angosto que el combo). Como .combo-filtro ya tiene
      position:relative y ocupa el 100% del campo, basta con left:0/right:
      auto/width:100% en vez del right:0/width:220px genérico. */
-  .panel-multiselect{left:0; right:auto; width:100%; box-sizing:border-box; gap:8px;}
+  /* 2 clases (no 1) a propósito — bug real 2026-11-21: con la misma
+     especificidad que ".panel-filtros-ruta" (que fija width:220px para el
+     popover de Filtrar), gana la regla que esté MÁS ABAJO en el archivo,
+     no importa la intención; ".panel-filtros-ruta" vive después de esta
+     regla en el CSS, así que su width:220px le ganaba a este width:100% en
+     TODO multiselect de un modal (Localidades del ABM de Repartidores y
+     cualquier otro que use este mismo componente), dejando el desplegable
+     visiblemente más angosto que el campo. Repetir las 2 clases sube la
+     especificidad y hace que esta regla gane sin depender del orden. */
+  .panel-filtros-ruta.panel-multiselect{left:0; right:auto; width:100%; box-sizing:border-box; gap:8px;}
   .buscador-multiselect{
     width:100%; padding:7px 10px; border:1px solid var(--borde); border-radius:6px;
     font-family:inherit; font-size:13px; color:var(--negro); background:#fff; box-sizing:border-box;
@@ -664,6 +696,9 @@
       <button class="nav-item activo" data-vista="envios">
         <i data-lucide="package"></i><span class="texto">Dashboard de Envíos</span>
       </button>
+      <button class="nav-item" data-vista="envios-listado">
+        <i data-lucide="list"></i><span class="texto">Envíos</span>
+      </button>
       <button class="nav-item" data-vista="fallidos">
         <i data-lucide="rotate-ccw"></i><span class="texto">Fallidos y Cambios</span>
       </button>
@@ -777,6 +812,143 @@
             </table>
           </div>
           <button class="btn-ver-mas" id="btn-ver-mas-choferes" hidden></button>
+        </div>
+      </div>
+
+      <!-- Listado de envíos (pedido 2026-11-20) — distinto del Dashboard
+           de arriba (que es agregados/gráficos): acá se ve cada envío
+           individual, con el mismo acceso por cliente que el resto del
+           sistema (ver reglas_de_negocio.md sección 2, "Acceso por
+           cliente" — un usuario tipo Cliente solo ve sus propios envíos,
+           la RLS restrictiva lo hace solo, no hay filtro de cliente
+           manual acá). Paginado con "Cargar más" (mismo patrón que el
+           ranking de repartidores) porque el rango de fechas puede traer
+           miles de filas. -->
+      <div id="vista-envios-listado" hidden>
+        <div class="card">
+          <div class="buscar-mas-filtrar">
+            <input id="buscar-envios-listado" class="buscador" placeholder="Buscar por tracking, cliente o localidad…" />
+            <span class="rango-fechas-envios-listado">
+              <input type="date" id="envios-listado-desde" />
+              <span style="color:#777;">a</span>
+              <input type="date" id="envios-listado-hasta" />
+            </span>
+            <div class="combo-filtro" id="popover-filtros-envios-listado">
+              <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                <i data-lucide="sliders-horizontal"></i>Filtrar
+              </button>
+              <div class="panel-filtros-ruta" hidden>
+                <div class="panel-filtros-ruta-campo">Estado
+                  <div class="combo-filtro" id="combo-estado-envios-listado">
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                    <ul class="combo-filtro-lista" role="listbox" hidden>
+                      <li data-valor="" aria-selected="true">Todos</li>
+                      <li data-valor="Retirado">Retirado</li>
+                      <li data-valor="En planta de procesamiento">En planta de procesamiento</li>
+                      <li data-valor="En camino al destinatario">En camino al destinatario</li>
+                      <li data-valor="Devolviendo a planta de procesamiento">Devolviendo a planta de procesamiento</li>
+                      <li data-valor="Entregado">Entregado</li>
+                      <li data-valor="Nadie">Nadie</li>
+                      <li data-valor="A retirar">A retirar</li>
+                      <li data-valor="Cancelado">Cancelado</li>
+                      <li data-valor="Entregado 2da visita">Entregado 2da visita</li>
+                      <li data-valor="Nadie 2da visita">Nadie 2da visita</li>
+                      <li data-valor="En camino 2da visita">En camino 2da visita</li>
+                      <li data-valor="En camino reprogramado">En camino reprogramado</li>
+                      <li data-valor="No entregado">No entregado</li>
+                      <li data-valor="Devuelto al cliente">Devuelto al cliente</li>
+                      <li data-valor="Rechazado por el comprador">Rechazado por el comprador</li>
+                      <li data-valor="Dirección incorrecta">Dirección incorrecta</li>
+                      <li data-valor="Reprogramado por comprador">Reprogramado por comprador</li>
+                      <li data-valor="Reprogramado por Meli">Reprogramado por Meli</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="panel-filtros-ruta-campo">Origen
+                  <div class="combo-filtro" id="combo-origen-envios-listado">
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                    <ul class="combo-filtro-lista" role="listbox" hidden>
+                      <li data-valor="" aria-selected="true">Todos</li>
+                      <li data-valor="ML">ML</li>
+                      <li data-valor="ML TURBO">ML TURBO</li>
+                      <li data-valor="Directo">Directo</li>
+                      <li data-valor="TNube">TNube</li>
+                    </ul>
+                  </div>
+                </div>
+                <!-- Cliente/Localidad/Zona/Repartidor (pedido 2026-11-20:
+                     "filtrar por todos los datos que contenga la tabla") —
+                     se arrancan con un solo <li> "Todos", el resto de
+                     opciones se agrega por JS al entrar a la pantalla por
+                     primera vez (son listas largas que vienen de la base,
+                     no se pueden hardcodear en el HTML) — ver
+                     inicializarFiltrosEnviosListado(). El buscador adentro
+                     del combo aparece solo (UMBRAL_BUSCADOR_COMBO) apenas
+                     hay más de 8 opciones. -->
+                <div class="panel-filtros-ruta-campo">Cliente
+                  <div class="combo-filtro" id="combo-cliente-envios-listado">
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                    <ul class="combo-filtro-lista" role="listbox" hidden>
+                      <li data-valor="" aria-selected="true">Todos</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="panel-filtros-ruta-campo">Localidad
+                  <div class="combo-filtro" id="combo-localidad-envios-listado">
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todas</button>
+                    <ul class="combo-filtro-lista" role="listbox" hidden>
+                      <li data-valor="" aria-selected="true">Todas</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="panel-filtros-ruta-campo">Zona
+                  <div class="combo-filtro" id="combo-zona-envios-listado">
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todas</button>
+                    <ul class="combo-filtro-lista" role="listbox" hidden>
+                      <li data-valor="" aria-selected="true">Todas</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="panel-filtros-ruta-campo">Repartidor
+                  <div class="combo-filtro" id="combo-repartidor-envios-listado">
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                    <ul class="combo-filtro-lista" role="listbox" hidden>
+                      <li data-valor="" aria-selected="true">Todos</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tabla-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tracking</th><th>ID de venta</th><th>Cliente</th><th>Localidad</th><th>Zona</th>
+                  <th>Repartidor</th><th>Origen</th><th>Estado</th><th>Fecha Mercadopacks</th>
+                  <th class="col-opciones">Opciones</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-envios-listado"></tbody>
+            </table>
+          </div>
+          <div class="paginacion-envios-listado">
+            <span id="envios-listado-resumen" class="texto-muted"></span>
+            <div class="paginacion-controles">
+              <span class="texto-muted">Mostrar</span>
+              <div class="combo-filtro" id="combo-tamano-envios-listado">
+                <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">10</button>
+                <ul class="combo-filtro-lista" role="listbox" hidden>
+                  <li data-valor="10" aria-selected="true">10</li>
+                  <li data-valor="20">20</li>
+                  <li data-valor="50">50</li>
+                  <li data-valor="100">100</li>
+                </ul>
+              </div>
+              <button type="button" class="btn-icono" id="btn-envios-listado-anterior" title="Página anterior"><i data-lucide="chevron-left"></i></button>
+              <button type="button" class="btn-icono" id="btn-envios-listado-siguiente" title="Página siguiente"><i data-lucide="chevron-right"></i></button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1179,8 +1351,12 @@
             <button class="config-nav-item" data-modo-admin-link="zonas"><i data-lucide="map"></i><span>Zonas</span></button>
             <button class="config-nav-item" data-modo-admin-link="turnos"><i data-lucide="clock"></i><span>Turnos</span></button>
             <button class="config-nav-item" data-modo-admin-link="localidades"><i data-lucide="map-pinned"></i><span>Localidades</span></button>
+            <button class="config-nav-item" data-modo-admin-link="tamanos-paquete"><i data-lucide="box"></i><span>Tamaños de paquete</span></button>
+            <button class="config-nav-item" data-modo-admin-link="cordones"><i data-lucide="map"></i><span>Cordones</span></button>
             <button class="config-nav-item" data-modo-admin-link="alertas"><i data-lucide="bell"></i><span>Umbrales de alerta</span></button>
             <button class="config-nav-item" data-modo-admin-link="fallidos"><i data-lucide="rotate-ccw"></i><span>Fallidos y Cambios</span></button>
+            <button class="config-nav-item" data-modo-admin-link="sectores"><i data-lucide="briefcase"></i><span>Sectores</span></button>
+            <button class="config-nav-item" data-modo-admin-link="clientes"><i data-lucide="building-2"></i><span>Clientes</span></button>
             <button class="config-nav-item" data-modo-admin-link="usuarios"><i data-lucide="user-cog"></i><span>Usuarios</span></button>
           </aside>
           <div class="config-contenido">
@@ -1291,6 +1467,9 @@
           </div>
         </div>
 
+        <!-- Zona vuelve a ser su propio ABM (pedido 2026-11-21): se había
+             unificado con Localidad el 20/11, pero el usuario pidió
+             parametrizarla aparte y asociarla por FK desde Localidad. -->
         <div id="admin-zonas" hidden>
           <div class="card">
             <div class="buscar-mas-filtrar">
@@ -1321,16 +1500,50 @@
           </div>
         </div>
 
+        <!-- Unificación Zona + Localidad + CP + Cordón (pedido 2026-11-20):
+             antes eran dos ABMs sin vínculo entre sí (parametros_zonas y
+             parametros_localidades); ahora cada localidad lleva su zona,
+             su CP y su cordón (elegido del ABM de Cordones, de ahí abajo). -->
         <div id="admin-localidades" hidden>
           <div class="card">
             <div class="buscar-mas-filtrar">
-              <input id="buscar-admin-localidades" class="buscador" placeholder="Buscar localidad…" />
+              <input id="buscar-admin-localidades" class="buscador" placeholder="Buscar localidad, zona o CP…" />
               <button type="button" class="btn-filtrar" id="btn-agregar-localidad"><i data-lucide="plus"></i>Agregar localidad</button>
             </div>
             <div class="tabla-scroll">
               <table>
-                <thead><tr><th>Nombre</th><th>Activa</th><th class="col-opciones">Opciones</th></tr></thead>
+                <thead><tr><th>Localidad</th><th>Zona</th><th>CP</th><th>Cordón</th><th>Activa</th><th class="col-opciones">Opciones</th></tr></thead>
                 <tbody id="tabla-admin-localidades"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="admin-tamanos-paquete" hidden>
+          <div class="card">
+            <div class="buscar-mas-filtrar">
+              <input id="buscar-admin-tamanos-paquete" class="buscador" placeholder="Buscar tamaño…" />
+              <button type="button" class="btn-filtrar" id="btn-agregar-tamano-paquete"><i data-lucide="plus"></i>Agregar tamaño</button>
+            </div>
+            <div class="tabla-scroll">
+              <table>
+                <thead><tr><th>Nombre</th><th>Activo</th><th class="col-opciones">Opciones</th></tr></thead>
+                <tbody id="tabla-admin-tamanos-paquete"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="admin-cordones" hidden>
+          <div class="card">
+            <div class="buscar-mas-filtrar">
+              <input id="buscar-admin-cordones" class="buscador" placeholder="Buscar cordón…" />
+              <button type="button" class="btn-filtrar" id="btn-agregar-cordon"><i data-lucide="plus"></i>Agregar cordón</button>
+            </div>
+            <div class="tabla-scroll">
+              <table>
+                <thead><tr><th>Nombre</th><th>Activo</th><th class="col-opciones">Opciones</th></tr></thead>
+                <tbody id="tabla-admin-cordones"></tbody>
               </table>
             </div>
           </div>
@@ -1367,6 +1580,45 @@
           </div>
         </div>
 
+        <!-- Lista cerrada de sectores (pedido 2026-11-20, reemplaza el
+             "sector" de texto libre del ABM de Usuarios — Regla 4 de
+             reglas_de_negocio.md sección 1: opciones fijas = su propia
+             tabla/ABM, nunca texto libre). -->
+        <div id="admin-sectores" hidden>
+          <div class="card">
+            <div class="buscar-mas-filtrar">
+              <input id="buscar-admin-sectores" class="buscador" placeholder="Buscar sector…" />
+              <button type="button" class="btn-filtrar" id="btn-agregar-sector"><i data-lucide="plus"></i>Agregar sector</button>
+            </div>
+            <div class="tabla-scroll">
+              <table>
+                <thead><tr><th>Nombre</th><th>Activo</th><th class="col-opciones">Opciones</th></tr></thead>
+                <tbody id="tabla-admin-sectores"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Clientes (pedido 2026-11-20, igual criterio que Repartidores):
+             de solo lectura — los datos vienen sincronizados de Lightdata
+             (scripts/ingesta_lightdata/sincronizar_clientes_lightdata.py,
+             1 vez por día), no se dan de alta ni editan a mano acá. -->
+        <div id="admin-clientes" hidden>
+          <div class="card">
+            <div class="buscar-mas-filtrar">
+              <input id="buscar-admin-clientes" class="buscador" placeholder="Buscar por nombre o código…" />
+            </div>
+            <div class="tabla-scroll">
+              <table>
+                <thead>
+                  <tr><th>Código</th><th>Cliente</th><th>Razón social</th><th>Habilitado</th><th>Cuentas</th><th>Tipo de Servicio</th><th class="col-opciones">Opciones</th></tr>
+                </thead>
+                <tbody id="tabla-admin-clientes"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <!-- Alta y permisos de usuarios (pedido 2026-11-16). El alta real
              (crear la cuenta de Supabase Auth) pasa por la Edge Function
              `crear-usuario` — ver supabase/functions/crear-usuario — nunca
@@ -1374,14 +1626,14 @@
         <div id="admin-usuarios" hidden>
           <div class="card">
             <div class="buscar-mas-filtrar">
-              <input id="buscar-admin-usuarios" class="buscador" placeholder="Buscar por nombre, email o sector…" />
+              <input id="buscar-admin-usuarios" class="buscador" placeholder="Buscar por nombre, email, sector o cliente…" />
               <button type="button" class="btn-filtrar" id="btn-agregar-usuario"><i data-lucide="user-plus"></i>Agregar usuario</button>
             </div>
             <div class="tabla-scroll">
               <table>
                 <thead>
                   <tr>
-                    <th>Nombre</th><th>Apellido</th><th>Email</th><th>Sector</th>
+                    <th>Nombre</th><th>Apellido</th><th>Email</th><th>Tipo</th>
                     <th>Admin</th><th>Activo</th>
                     <th class="col-opciones">Opciones</th>
                   </tr>
@@ -1405,6 +1657,42 @@
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
       <button type="button" class="btn-secundario-modal" id="modal-abm-cerrar">Cerrar</button>
       <button type="button" class="btn-primario" id="modal-abm-guardar">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-precios-cliente" hidden>
+  <div class="modal-card" style="max-width:760px;">
+    <h3 id="modal-precios-cliente-titulo" style="margin-top:0;"></h3>
+
+    <div class="modal-abm-label">Tipo de servicio
+      <div class="combo-filtro" id="combo-precios-cliente-tipo-servicio" data-valor-actual="ultima_milla">
+        <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Última milla</button>
+        <ul class="combo-filtro-lista" role="listbox" hidden>
+          <li data-valor="ultima_milla" aria-selected="true">Última milla</li>
+          <li data-valor="fulfillment" aria-selected="false">Fulfillment (última milla + almacenamiento)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="precios-cliente-fulfillment-campos" hidden style="display:flex; gap:16px; margin-top:14px;">
+      <label class="modal-abm-label" style="flex:1;">Precio por Pallet
+        <input type="text" inputmode="decimal" class="cel-input input-moneda" id="modal-precios-cliente-deposito" />
+      </label>
+      <label class="modal-abm-label" style="flex:1;">Precio por Despacho Unitario
+        <input type="text" inputmode="decimal" class="cel-input input-moneda" id="modal-precios-cliente-despacho" />
+      </label>
+    </div>
+
+    <h4 style="margin:18px 0 8px;">Envíos por tamaño y cordón</h4>
+    <div class="tabla-scroll" id="precios-cliente-matriz-envios"></div>
+
+    <h4 style="margin:18px 0 8px;">Flete por cordón</h4>
+    <div class="tabla-scroll" id="precios-cliente-matriz-flete"></div>
+
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+      <button type="button" class="btn-secundario-modal" id="modal-precios-cliente-cerrar">Cerrar</button>
+      <button type="button" class="btn-primario" id="modal-precios-cliente-guardar">Guardar</button>
     </div>
   </div>
 </div>
@@ -1473,6 +1761,26 @@
     <div id="modal-detalle-repartidor-cuerpo"></div>
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
       <button type="button" class="btn-secundario-modal" id="modal-detalle-repartidor-cerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-detalle-cliente" hidden>
+  <div class="modal-card">
+    <h3 id="modal-detalle-cliente-titulo" style="margin-top:0;"></h3>
+    <div id="modal-detalle-cliente-cuerpo"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+      <button type="button" class="btn-secundario-modal" id="modal-detalle-cliente-cerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-detalle-envio" hidden>
+  <div class="modal-card">
+    <h3 id="modal-detalle-envio-titulo" style="margin-top:0;"></h3>
+    <div id="modal-detalle-envio-cuerpo"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+      <button type="button" class="btn-secundario-modal" id="modal-detalle-envio-cerrar">Cerrar</button>
     </div>
   </div>
 </div>
@@ -1581,8 +1889,19 @@
   // Claves válidas = keys del objeto `vistas` (ver más abajo). Debe
   // mantenerse sincronizado a mano si se agrega una vista nueva — no hay
   // forma de derivarlo antes de que `vistas` exista en el script.
+  // tipo_usuario (pedido 2026-11-20, reemplaza el "sector" de texto libre):
+  // "cliente" ve solo su propia información (acotado por RLS vía
+  // clientes_lightdata_ids, ver migración 2026-11-20_tipo_usuario_y_acceso_por_cliente.sql),
+  // "administrativo" es personal de la empresa y usa un sector de la
+  // lista cerrada parametros_sectores en vez de texto libre.
+  const TIPOS_USUARIO_OPCIONES = [
+    { valor: "administrativo", texto: "Administrativo" },
+    { valor: "cliente", texto: "Cliente" },
+  ];
+
   const VISTAS_DISPONIBLES = [
     { clave: "envios", label: "Dashboard de Envíos" },
+    { clave: "envios-listado", label: "Envíos" },
     { clave: "fallidos", label: "Fallidos y Cambios" },
     { clave: "repa-ruta", label: "Seguimiento en Ruta" },
     { clave: "repa-asistencia", label: "Asistencia de Repartidores" },
@@ -1691,6 +2010,7 @@
       abmVehiculos.cargar();
       abmZonas.cargar();
       abmTurnos.cargar();
+      abmCordones.cargar();
       abmLocalidades.cargar();
     }
   }
@@ -1711,9 +2031,17 @@
     mostrarApp(loginData.session);
   });
 
+  // Recarga completa de la página (no solo mostrarLogin()) — bug real
+  // 2026-11-20: al cerrar sesión y entrar con OTRO usuario en la misma
+  // pestaña, se veían por un instante los datos del usuario anterior
+  // (decenas de variables de estado en memoria — stateFallidos,
+  // adminUsuariosData, stateEnviosListado, etc. — nunca se limpiaban al
+  // desloguear). Recargar la página es la única forma de garantizar que
+  // no quede nada de la sesión anterior en memoria, en vez de tener que
+  // acordarse de resetear cada variable de estado del sistema a mano.
   logoutBtn.addEventListener("click", async ()=>{
     await sb.auth.signOut();
-    mostrarLogin();
+    window.location.reload();
   });
 
   // ===================== Sidebar: navegación + colapsar =====================
@@ -1724,6 +2052,7 @@
 
   const vistas = {
     "envios": { titulo: "Dashboard de Envíos", icono: "package", el: document.getElementById("vista-envios") },
+    "envios-listado": { titulo: "Envíos", icono: "list", el: document.getElementById("vista-envios-listado") },
     "fallidos": { titulo: "Fallidos y Cambios", icono: "rotate-ccw", el: document.getElementById("vista-fallidos") },
     "repa-ruta": { titulo: "Seguimiento en Ruta", icono: "map-pin", el: document.getElementById("vista-repa-ruta") },
     "repa-asistencia": { titulo: "Asistencia de Repartidores", icono: "clipboard-check", el: document.getElementById("vista-repa-asistencia") },
@@ -1736,7 +2065,7 @@
   // DENTRO de la pantalla (.config-sidebar) el que decide esto, no el
   // sidebar principal — ver seleccionarModoAdmin().
   let modoAdminActual = "bienvenida";
-  const MODOS_ADMIN = ["bienvenida","choferes","vehiculos","zonas","turnos","localidades","alertas","fallidos","usuarios"];
+  const MODOS_ADMIN = ["bienvenida","choferes","vehiculos","zonas","turnos","localidades","tamanos-paquete","cordones","alertas","fallidos","sectores","clientes","usuarios"];
 
   function seleccionarModoAdmin(modo){
     modoAdminActual = modo;
@@ -1749,8 +2078,12 @@
     if(modo === "zonas") abmZonas.cargar();
     if(modo === "turnos") abmTurnos.cargar();
     if(modo === "localidades") abmLocalidades.cargar();
+    if(modo === "tamanos-paquete") abmTamanosPaquete.cargar();
+    if(modo === "cordones") abmCordones.cargar();
     if(modo === "alertas") cargarAdminAlertas();
     if(modo === "fallidos"){ cargarAdminFallidosMapeo(); cargarAdminFallidosAlertas(); }
+    if(modo === "sectores") abmSectores.cargar();
+    if(modo === "clientes") cargarAdminClientes();
     if(modo === "usuarios") cargarAdminUsuarios();
   }
 
@@ -1768,6 +2101,7 @@
       lucide.createIcons();
     }
     if(v === "envios") cargarResumenEnvios();
+    if(v === "envios-listado") inicializarFiltrosEnviosListado().then(()=> cargarEnviosListado(true));
     if(v === "fallidos") cargarFallidos();
     if(v === "repa-ruta") cargarRuta();
     if(v === "repa-asistencia") cargarAsistencia();
@@ -2139,6 +2473,240 @@
   }
 
   // ======================================================================
+  // Envíos (listado) — pedido 2026-11-20. Distinto del Dashboard de
+  // arriba (agregados/gráficos): acá se lista cada envío individual, con
+  // filtros de texto/fecha/estado/origen y detalle completo. El acceso
+  // por cliente (un usuario tipo Cliente solo ve SUS envíos) no se filtra
+  // acá en JS — lo hace la RLS restrictiva de la base (ver
+  // reglas_de_negocio.md sección 2, "Acceso por cliente"), así que esta
+  // pantalla simplemente pide "todos los envíos del rango" y Supabase ya
+  // devuelve solo los permitidos para quien está logueado.
+  const COLUMNAS_ENVIOS_LISTADO = "id_interno,tracking,id_venta_ml,cliente,localidad,zona,cadete,chofer_lightdata_id,did_cliente,origen,estado,fecha_mercadopacks,fecha_venta,fecha_estado,fecha_asignacion,fecha_a_planta,fecha_colecta,logistica_inversa,logistica_inversa_real,observaciones";
+
+  const stateEnviosListado = {
+    busqueda: "", estado: "", origen: "", cliente: "", localidad: "", zona: "", repartidor: "",
+    desde: fechaART(-29), hasta: fechaART(0),
+    filas: [], paginaActual: 0, tamanoPagina: 10, total: 0, cargando: false,
+  };
+
+  function construirQueryEnviosListado(){
+    // `count: "exact"` para mostrar el total real de la consulta (pedido
+    // 2026-11-20: "un total de los registros que trajo la consulta"), no
+    // solo la página actual.
+    let q = sb.from("envios").select(COLUMNAS_ENVIOS_LISTADO, { count: "exact" })
+      .gte("fecha_mercadopacks", stateEnviosListado.desde)
+      .lte("fecha_mercadopacks", stateEnviosListado.hasta)
+      .order("fecha_mercadopacks", { ascending: false });
+    if(stateEnviosListado.estado) q = q.eq("estado", stateEnviosListado.estado);
+    if(stateEnviosListado.origen) q = q.eq("origen", stateEnviosListado.origen);
+    if(stateEnviosListado.cliente) q = q.eq("did_cliente", stateEnviosListado.cliente);
+    // `ilike` (no `eq`) para localidad/zona: son texto libre de Lightdata,
+    // mezcla de mayúsculas/minúsculas (Regla 15 de sección 1) — comparar
+    // exacto contra el valor de `parametros_localidades`/`parametros_zonas`
+    // (que sí está prolijo) fallaría en silencio contra el dato crudo.
+    if(stateEnviosListado.localidad) q = q.ilike("localidad", stateEnviosListado.localidad);
+    if(stateEnviosListado.zona) q = q.ilike("zona", stateEnviosListado.zona);
+    if(stateEnviosListado.repartidor) q = q.eq("chofer_lightdata_id", stateEnviosListado.repartidor);
+    if(stateEnviosListado.busqueda){
+      const b = stateEnviosListado.busqueda.replace(/[%,]/g, "");
+      q = q.or(`tracking.ilike.%${b}%,cliente.ilike.%${b}%,localidad.ilike.%${b}%`);
+    }
+    return q;
+  }
+
+  async function cargarEnviosListado(reset){
+    if(stateEnviosListado.cargando) return;
+    if(reset) stateEnviosListado.paginaActual = 0;
+    stateEnviosListado.cargando = true;
+
+    await cargarNombresPorLightdataId(); // mismo roster que usa Fallidos, para mostrar el nombre real del repartidor
+
+    const tam = stateEnviosListado.tamanoPagina;
+    const desde = stateEnviosListado.paginaActual * tam;
+    const { data, error, count } = await construirQueryEnviosListado().range(desde, desde + tam - 1);
+    stateEnviosListado.cargando = false;
+    if(error){
+      console.error("Error cargando envíos:", error);
+      document.getElementById("tabla-envios-listado").innerHTML = `<tr><td colspan="10" class="sin-datos">Error cargando los datos.</td></tr>`;
+      return;
+    }
+    stateEnviosListado.filas = data || [];
+    stateEnviosListado.total = count || 0;
+    renderEnviosListado();
+  }
+
+  function renderEnviosListado(){
+    const tbody = document.getElementById("tabla-envios-listado");
+    const filas = stateEnviosListado.filas;
+    if(!filas.length){
+      tbody.innerHTML = `<tr><td colspan="10" class="sin-datos">Sin envíos para este filtro.</td></tr>`;
+    } else {
+      tbody.innerHTML = filas.map(e => `
+        <tr data-id="${e.id_interno}">
+          <td>${e.tracking || "—"}</td>
+          <td>${e.id_venta_ml || "—"}</td>
+          <td>${tituloTexto(e.cliente) || "—"}</td>
+          <td>${tituloTexto(e.localidad) || "—"}</td>
+          <td>${tituloTexto(e.zona) || "—"}</td>
+          <td>${tituloTexto(nombreRepartidorFallido(e))}</td>
+          <td>${e.origen || "—"}</td>
+          <td>${tituloTexto(e.estado) || "—"}</td>
+          <td>${e.fecha_mercadopacks || "—"}</td>
+          <td class="col-opciones">
+            <span class="opciones-fila">
+              <button type="button" class="btn-icono-chico ver" data-id="${e.id_interno}" title="Detalle"><i data-lucide="eye"></i></button>
+            </span>
+          </td>
+        </tr>
+      `).join("");
+      lucide.createIcons();
+    }
+
+    const total = stateEnviosListado.total;
+    const tam = stateEnviosListado.tamanoPagina;
+    const totalPaginas = Math.max(1, Math.ceil(total / tam));
+    const paginaActual = Math.min(stateEnviosListado.paginaActual, totalPaginas - 1);
+    stateEnviosListado.paginaActual = paginaActual;
+    const desdeFila = total ? paginaActual * tam + 1 : 0;
+    const hastaFila = Math.min(total, (paginaActual + 1) * tam);
+    document.getElementById("envios-listado-resumen").textContent =
+      total ? `Mostrando ${desdeFila}–${hastaFila} de ${total} envíos` : "Sin envíos para este filtro.";
+    document.getElementById("btn-envios-listado-anterior").disabled = paginaActual <= 0;
+    document.getElementById("btn-envios-listado-siguiente").disabled = paginaActual >= totalPaginas - 1;
+  }
+
+  function abrirDetalleEnvio(id){
+    const e = stateEnviosListado.filas.find(x => String(x.id_interno) === String(id));
+    if(!e) return;
+    document.getElementById("modal-detalle-envio-titulo").textContent = `Envío — ${e.tracking || e.id_interno}`;
+    const esCambio = e.logistica_inversa_real === true
+      || (e.logistica_inversa_real == null && tieneLogisticaInversaReal(e.logistica_inversa));
+    const campos = [
+      { icono: "hash", label: "Tracking", valor: e.tracking || "—" },
+      { icono: "shopping-cart", label: "ID de venta", valor: e.id_venta_ml || "—" },
+      { icono: "building-2", label: "Cliente", valor: tituloTexto(e.cliente) || "—" },
+      { icono: "map-pin", label: "Localidad", valor: tituloTexto(e.localidad) || "—" },
+      { icono: "map", label: "Zona", valor: tituloTexto(e.zona) || "—" },
+      { icono: "truck", label: "Repartidor", valor: tituloTexto(nombreRepartidorFallido(e)) },
+      { icono: "package", label: "Origen", valor: e.origen || "—" },
+      { icono: "info", label: "Estado", valor: tituloTexto(e.estado) || "—" },
+      { icono: "calendar", label: "Fecha Mercadopacks", valor: e.fecha_mercadopacks || "—" },
+      { icono: "calendar", label: "Fecha venta", valor: e.fecha_venta || "—" },
+      { icono: "calendar", label: "Fecha estado", valor: e.fecha_estado || "—" },
+      { icono: "calendar", label: "Fecha asignación", valor: e.fecha_asignacion || "—" },
+      { icono: "calendar", label: "Fecha a planta", valor: e.fecha_a_planta || "—" },
+      { icono: "calendar", label: "Fecha colecta", valor: e.fecha_colecta || "—" },
+      { icono: "rotate-ccw", label: "Logística inversa", valor: esCambio ? "Sí" : "No" },
+      { icono: "message-square", label: "Observaciones", valor: e.observaciones || "—", span: true },
+    ];
+    document.getElementById("modal-detalle-envio-cuerpo").innerHTML = `
+      <div class="grid-detalle-compacto">
+        ${campos.map(c => `
+          <div class="campo-detalle${c.span ? " campo-span-completo" : ""}">
+            <span class="campo-detalle-label"><i data-lucide="${c.icono}"></i>${c.label}</span>
+            <span class="campo-detalle-valor">${c.valor}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    lucide.createIcons();
+    document.getElementById("modal-detalle-envio").hidden = false;
+  }
+  document.getElementById("modal-detalle-envio-cerrar").addEventListener("click", ()=>{
+    document.getElementById("modal-detalle-envio").hidden = true;
+  });
+  document.getElementById("modal-detalle-envio").addEventListener("click", (e)=>{
+    if(e.target.id === "modal-detalle-envio") document.getElementById("modal-detalle-envio").hidden = true;
+  });
+  document.getElementById("tabla-envios-listado").addEventListener("click", (e)=>{
+    const btn = e.target.closest(".btn-icono-chico.ver");
+    if(btn) abrirDetalleEnvio(btn.dataset.id);
+  });
+
+  document.getElementById("btn-envios-listado-anterior").addEventListener("click", ()=>{
+    if(stateEnviosListado.paginaActual <= 0) return;
+    stateEnviosListado.paginaActual--;
+    cargarEnviosListado(false);
+  });
+  document.getElementById("btn-envios-listado-siguiente").addEventListener("click", ()=>{
+    const totalPaginas = Math.max(1, Math.ceil(stateEnviosListado.total / stateEnviosListado.tamanoPagina));
+    if(stateEnviosListado.paginaActual >= totalPaginas - 1) return;
+    stateEnviosListado.paginaActual++;
+    cargarEnviosListado(false);
+  });
+  crearComboGenerico("combo-tamano-envios-listado", (valor)=>{
+    stateEnviosListado.tamanoPagina = Number(valor) || 10;
+    cargarEnviosListado(true);
+  });
+
+  // Buscador con debounce (acá SÍ hace falta — a diferencia de Fallidos,
+  // que filtra un array ya cargado en memoria, esto re-consulta la base
+  // por la paginación) — 350ms para no disparar una consulta por tecla.
+  let debounceEnviosListado = null;
+  document.getElementById("buscar-envios-listado").addEventListener("input", (e)=>{
+    stateEnviosListado.busqueda = e.target.value.trim();
+    clearTimeout(debounceEnviosListado);
+    debounceEnviosListado = setTimeout(()=> cargarEnviosListado(true), 350);
+  });
+  document.getElementById("envios-listado-desde").value = stateEnviosListado.desde;
+  document.getElementById("envios-listado-hasta").value = stateEnviosListado.hasta;
+  document.getElementById("envios-listado-desde").addEventListener("change", (e)=>{
+    stateEnviosListado.desde = e.target.value || fechaART(-29);
+    cargarEnviosListado(true);
+  });
+  document.getElementById("envios-listado-hasta").addEventListener("change", (e)=>{
+    stateEnviosListado.hasta = e.target.value || fechaART(0);
+    cargarEnviosListado(true);
+  });
+  crearComboGenerico("combo-estado-envios-listado", (valor)=>{ stateEnviosListado.estado = valor; cargarEnviosListado(true); });
+  crearComboGenerico("combo-origen-envios-listado", (valor)=>{ stateEnviosListado.origen = valor; cargarEnviosListado(true); });
+  crearPopoverGenerico("popover-filtros-envios-listado");
+
+  // Cliente/Localidad/Zona/Repartidor (pedido 2026-11-20): listas largas
+  // que vienen de la base, no se pueden poner directo en el HTML como
+  // Estado/Origen — se arman una sola vez, la primera vez que se entra a
+  // la pantalla (los <li> tienen que existir ANTES de crearComboGenerico,
+  // que solo engancha los eventos de los que ve en ese momento).
+  let filtrosEnviosListadoListos = false;
+  function agregarOpcionesCombo(contId, opciones){
+    const ul = document.querySelector(`#${contId} .combo-filtro-lista`);
+    opciones.forEach(o=>{
+      const li = document.createElement("li");
+      li.dataset.valor = o.valor;
+      li.textContent = o.texto;
+      ul.appendChild(li);
+    });
+  }
+  async function inicializarFiltrosEnviosListado(){
+    if(filtrosEnviosListadoListos) return;
+    filtrosEnviosListadoListos = true;
+
+    if(!clientesDisponibles.length){
+      const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia");
+      if(error) console.error("Error cargando lightdata_clientes para el filtro:", error);
+      else clientesDisponibles = data || [];
+    }
+    agregarOpcionesCombo("combo-cliente-envios-listado", clientesDisponibles.map(c => ({ valor: c.did, texto: labelCliente(c) })));
+    crearComboGenerico("combo-cliente-envios-listado", (valor)=>{ stateEnviosListado.cliente = valor; cargarEnviosListado(true); });
+
+    agregarOpcionesCombo("combo-localidad-envios-listado", abmLocalidades.obtenerActivos().map(n => ({ valor: n, texto: tituloTexto(n) })));
+    crearComboGenerico("combo-localidad-envios-listado", (valor)=>{ stateEnviosListado.localidad = valor; cargarEnviosListado(true); });
+
+    agregarOpcionesCombo("combo-zona-envios-listado", abmZonas.obtenerActivos().map(n => ({ valor: n, texto: tituloTexto(n) })));
+    crearComboGenerico("combo-zona-envios-listado", (valor)=>{ stateEnviosListado.zona = valor; cargarEnviosListado(true); });
+
+    // Repartidor: mismo roster que ya resuelve el nombre en la grilla
+    // (cargarNombresPorLightdataId) — filtra por chofer_lightdata_id, no
+    // por nombre (regla de siempre: cruzar por ID de Lightdata).
+    await cargarNombresPorLightdataId();
+    const repartidores = Object.entries(stateFallidos.nombresPorLightdataId)
+      .map(([id, nombre]) => ({ valor: id, texto: nombre }))
+      .sort((a, b) => a.texto.localeCompare(b.texto));
+    agregarOpcionesCombo("combo-repartidor-envios-listado", repartidores);
+    crearComboGenerico("combo-repartidor-envios-listado", (valor)=>{ stateEnviosListado.repartidor = valor; cargarEnviosListado(true); });
+  }
+
+  // ======================================================================
   // Fallidos y Cambios — reemplaza la planilla "Seguimiento Fallidos y
   // Devoluciones V2" (ver Sistema_Cambios_Fallidos_Mercadopacks.md).
   // Un paquete fallido/cambio que nadie tocó todavía NO tiene fila en
@@ -2195,6 +2763,27 @@
     return (s || "").toLowerCase().replace(/(^|\s)\p{L}/gu, c => c.toUpperCase());
   }
   function tituloNombre(s){ return tituloTexto(s); }
+
+  // Formato moneda AR ($ 0.000,00) para los inputs de precios (pedido
+  // 2026-11-21, módulo de Precios por Cliente) — los inputs son type="text"
+  // (un type="number" nativo no puede mostrar separador de miles ni "$",
+  // el navegador lo rechaza como valor inválido), con inputmode="decimal"
+  // para que el teclado numérico salga en mobile. `parsearMoneda` siempre
+  // vuelve a un número de JS (o null si está vacío) para guardar en la
+  // base — nunca se guarda el string formateado.
+  function formatearMoneda(n){
+    if(n == null || n === "") return "";
+    const num = Number(n);
+    if(Number.isNaN(num)) return "";
+    return "$ " + num.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function parsearMoneda(s){
+    if(s == null) return null;
+    const limpio = String(s).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+    if(limpio === "") return null;
+    const num = Number(limpio);
+    return Number.isNaN(num) ? null : num;
+  }
 
   // Como normEspaciosNombre, pero además saca acentos y pasa a minúscula —
   // para cruzar nombres contra el roster cuando chofer_lightdata_id no
@@ -3037,6 +3626,27 @@
   // ======================================================================
   let adminUsuariosData = [];
   let adminUsuariosBusqueda = "";
+  // Listas cerradas usadas por el ABM de Usuarios (pedido 2026-11-20):
+  // sectores (para tipo_usuario="administrativo") y clientes de Lightdata
+  // (para tipo_usuario="cliente", ver docs/lightdata_api_clientes.md y
+  // migración 2026-11-20_tipo_usuario_y_acceso_por_cliente.sql). Se
+  // cargan junto con los usuarios porque el modal de alta/edición las
+  // necesita ya resueltas (combo/multiselect) antes de abrirse.
+  let sectoresDisponibles = [];   // [{id, nombre}]
+  let clientesDisponibles = [];   // [{did, nombre_fantasia, codigo}]
+
+  // El multiselect genérico del modal trabaja con labels (string = value),
+  // no con pares {id,nombre} — mismo patrón que clavesAVistasLabel/
+  // labelsAVistasClave de arriba, pero para clientes. El label combina
+  // código + nombre de fantasía para distinguir clientes con nombres
+  // parecidos.
+  function labelCliente(c){ return c.codigo ? `${c.codigo} - ${c.nombre_fantasia || "(sin nombre)"}` : (c.nombre_fantasia || `Cliente ${c.did}`); }
+  function didsClienteALabel(dids){
+    return (dids || []).map(d => { const c = clientesDisponibles.find(x => x.did === d); return c ? labelCliente(c) : null; }).filter(Boolean);
+  }
+  function labelsClienteADid(labels){
+    return (labels || []).map(l => { const c = clientesDisponibles.find(x => labelCliente(x) === l); return c ? c.did : null; }).filter(d => d != null);
+  }
 
   // Convierte la lista de claves guardadas (ej. ["envios","fallidos"]) a
   // los labels legibles que usa el combo multiselect del modal, y
@@ -3051,11 +3661,343 @@
     return (labels || []).map(l => (VISTAS_DISPONIBLES.find(v => v.label === l) || {}).clave).filter(Boolean);
   }
 
+  // ----- Clientes (pedido 2026-11-20) -----
+  // Solo lectura: los datos vienen de Lightdata (sincronizados por
+  // scripts/ingesta_lightdata/sincronizar_clientes_lightdata.py), no se
+  // dan de alta ni editan acá. `conteoCuentasPorCliente` se arma en memoria al
+  // cargar para no pedir las cuentas de vuelta en cada "Ver detalle".
+  let adminClientesData = [];
+  let adminClientesBusqueda = "";
+  // Solo la CANTIDAD de cuentas por cliente se carga de entrada (columna
+  // liviana, un solo `did_cliente` por fila) — las 496 filas completas
+  // (con las 7 columnas de IDs externos) se piden recién al abrir el
+  // detalle de UN cliente puntual, no de los 296 de la lista entera.
+  // Ver reglas_de_negocio.md sección 1, Regla de "consultar lo que se
+  // necesita" (2026-11-21).
+  let conteoCuentasPorCliente = {}; // did_cliente -> cantidad
+  let adminClientesCargado = false; // mismo criterio de caching de arriba
+
+  const TIPO_CUENTA_LABEL = {
+    1: "MercadoLibre", 2: "Tienda Nube", 3: "Shopify", 4: "WooCommerce",
+  };
+  function labelTipoCuenta(t){ return TIPO_CUENTA_LABEL[t] || `Tipo ${t}`; }
+  function idsDeCuenta(c){
+    return [
+      c.ml_id_vendedor && `ML: ${c.ml_id_vendedor}`,
+      c.tn_id && `TN: ${c.tn_id}`,
+      c.shop_url && `Shopify: ${c.shop_url}`,
+      c.woo_web && `WooCommerce: ${c.woo_web}`,
+      c.vtex_url && `VTEX: ${c.vtex_url}`,
+      c.pre_url && `PrestaShop: ${c.pre_url}`,
+      c.fala_url && `Falabella: ${c.fala_url}`,
+    ].filter(Boolean).join(", ") || "—";
+  }
+
+  async function cargarAdminClientes(){
+    if(adminClientesCargado){ renderAdminClientes(); return; }
+    const [{ data, error }, { data: cuentas, error: errCuentas }, { data: cabeceras, error: errCab }] = await Promise.all([
+      sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia,razon_social,habilitado").order("nombre_fantasia"),
+      sb.from("lightdata_cuentas").select("did_cliente"),
+      sb.from("precios_cliente").select("did_cliente,tipo_servicio,actualizado_en"),
+    ]);
+    if(error){ console.error("Error cargando lightdata_clientes:", error); return; }
+    if(errCuentas) console.error("Error cargando lightdata_cuentas:", errCuentas);
+    if(errCab) console.error("Error cargando precios_cliente:", errCab);
+    adminClientesData = data || [];
+    conteoCuentasPorCliente = {};
+    (cuentas || []).forEach(c => { conteoCuentasPorCliente[c.did_cliente] = (conteoCuentasPorCliente[c.did_cliente] || 0) + 1; });
+    preciosClienteCabeceraPorDid = {};
+    (cabeceras || []).forEach(c => { preciosClienteCabeceraPorDid[c.did_cliente] = c; });
+    adminClientesCargado = true;
+    renderAdminClientes();
+  }
+
+  function renderAdminClientes(){
+    const q = adminClientesBusqueda;
+    let filas = adminClientesData;
+    if(q){
+      filas = filas.filter(c =>
+        (c.nombre_fantasia || "").toLowerCase().includes(q) ||
+        (c.codigo || "").toLowerCase().includes(q)
+      );
+    }
+    const tbody = document.getElementById("tabla-admin-clientes");
+    if(!filas.length){
+      tbody.innerHTML = `<tr><td colspan="7" class="sin-datos">Sin clientes cargados — ¿corrió ya sincronizar_clientes_lightdata.py?</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = filas.map(c => {
+      const cab = preciosClienteCabeceraPorDid[c.did];
+      return `
+      <tr data-id="${c.did}" class="${c.habilitado ? "" : "fila-inactiva"}">
+        <td>${c.codigo || "—"}</td>
+        <td>${c.nombre_fantasia || "—"}</td>
+        <td class="texto-muted">${c.razon_social || "—"}</td>
+        <td>${c.habilitado ? '<span class="badge verde">Sí</span>' : '<span class="badge gris">No</span>'}</td>
+        <td>${conteoCuentasPorCliente[c.did] || 0}</td>
+        <td>${cab ? labelTipoServicioPrecio(cab.tipo_servicio) : '<span class="texto-muted">Sin configurar</span>'}</td>
+        <td class="col-opciones">
+          <span class="opciones-fila">
+            <button type="button" class="btn-icono-chico ver" data-id="${c.did}" title="Ver detalle"><i data-lucide="eye"></i></button>
+            <button type="button" class="btn-icono-chico configurar-precios" data-did="${c.did}" title="Configurar precios"><i data-lucide="dollar-sign"></i></button>
+          </span>
+        </td>
+      </tr>
+    `;
+    }).join("");
+    lucide.createIcons();
+  }
+
+  document.getElementById("buscar-admin-clientes").addEventListener("input", (e)=>{
+    adminClientesBusqueda = e.target.value.trim().toLowerCase();
+    renderAdminClientes();
+  });
+
+  async function abrirDetalleCliente(did){
+    const c = adminClientesData.find(x => String(x.did) === String(did));
+    if(!c) return;
+    document.getElementById("modal-detalle-cliente-titulo").textContent = `Cliente — ${c.nombre_fantasia || c.did}`;
+    const campos = [
+      { icono: "hash", label: "Código", valor: c.codigo || "—" },
+      { icono: "building-2", label: "Nombre de fantasía", valor: c.nombre_fantasia || "—" },
+      { icono: "file-text", label: "Razón social", valor: c.razon_social || "—" },
+      { icono: "check-circle-2", label: "Habilitado", valor: c.habilitado ? "Sí" : "No" },
+    ];
+    document.getElementById("modal-detalle-cliente-cuerpo").innerHTML = `
+      <div class="grid-detalle-compacto">
+        ${campos.map(c => `
+          <div class="campo-detalle">
+            <span class="campo-detalle-label"><i data-lucide="${c.icono}"></i>${c.label}</span>
+            <span class="campo-detalle-valor">${c.valor}</span>
+          </div>
+        `).join("")}
+      </div>
+      <h3 style="margin-bottom:0;">Cuentas asociadas</h3>
+      <div class="tabla-scroll tabla-cuentas-cliente-scroll"><p class="sin-datos">Cargando…</p></div>
+    `;
+    lucide.createIcons();
+    document.getElementById("modal-detalle-cliente").hidden = false;
+
+    // Las cuentas completas (7 columnas de IDs externos) se piden recién
+    // acá, para ESTE cliente puntual — no en cargarAdminClientes() para
+    // los 296 clientes de la lista (ver Regla de consultas en
+    // reglas_de_negocio.md, 2026-11-21).
+    const { data: cuentas, error } = await sb.from("lightdata_cuentas").select("*").eq("did_cliente", did);
+    if(error) console.error("Error cargando cuentas del cliente:", error);
+    const tablaCuentas = (cuentas || []).length ? `
+      <table style="margin-top:10px;">
+        <thead><tr><th>Integración</th><th>IDs</th></tr></thead>
+        <tbody>
+          ${cuentas.map(cu => `<tr><td>${labelTipoCuenta(cu.tipo_cuenta)}</td><td>${idsDeCuenta(cu)}</td></tr>`).join("")}
+        </tbody>
+      </table>
+    ` : `<p class="sin-datos">Sin cuentas asociadas.</p>`;
+    const contCuentas = document.querySelector("#modal-detalle-cliente-cuerpo .tabla-cuentas-cliente-scroll");
+    if(contCuentas) contCuentas.innerHTML = tablaCuentas;
+  }
+  document.getElementById("modal-detalle-cliente-cerrar").addEventListener("click", ()=>{
+    document.getElementById("modal-detalle-cliente").hidden = true;
+  });
+  document.getElementById("modal-detalle-cliente").addEventListener("click", (e)=>{
+    if(e.target.id === "modal-detalle-cliente") document.getElementById("modal-detalle-cliente").hidden = true;
+  });
+
+  // ----- Precios por cliente (pedido 2026-11-20, movido AL módulo de
+  // Clientes el 2026-11-21 — el usuario pidió que viva ahí, ya que el
+  // precio se asocia 1 a 1 con cada cliente, no en una sección aparte):
+  // tarifario de Última milla / Fulfillment — matriz de envíos (tamaño ×
+  // cordón), flete por cordón, y para Fulfillment el precio unitario de
+  // depósito (por pallet) y despacho (por envío); la CANTIDAD de
+  // pallets/envíos se calcula después, en la liquidación — acá solo se
+  // cargan los precios. `preciosClienteCabeceraPorDid` se llena en
+  // cargarAdminClientes() junto con el resto de los datos del cliente.
+  let preciosClienteCabeceraPorDid = {};
+  let preciosClienteAbriendoDid = null;
+
+  function labelTipoServicioPrecio(t){
+    return t === "fulfillment" ? "Fulfillment" : "Última milla";
+  }
+
+  document.getElementById("tabla-admin-clientes").addEventListener("click", (e)=>{
+    const btn = e.target.closest(".configurar-precios");
+    if(btn) abrirPreciosCliente(Number(btn.dataset.did));
+  });
+
+  function actualizarVisibilidadFulfillment(){
+    const tipo = document.getElementById("combo-precios-cliente-tipo-servicio").dataset.valorActual;
+    document.getElementById("precios-cliente-fulfillment-campos").hidden = tipo !== "fulfillment";
+  }
+  crearComboGenerico("combo-precios-cliente-tipo-servicio", (valor)=>{
+    document.getElementById("combo-precios-cliente-tipo-servicio").dataset.valorActual = valor;
+    actualizarVisibilidadFulfillment();
+  });
+
+  async function abrirPreciosCliente(did){
+    const cliente = adminClientesData.find(c => c.did === did);
+    if(!cliente) return;
+    preciosClienteAbriendoDid = did;
+    await Promise.all([abmCordones.cargar(), abmTamanosPaquete.cargar()]);
+    const cordones = abmCordones.obtenerActivosConId();
+    const tamanos = abmTamanosPaquete.obtenerActivosConId();
+
+    const { data: cab } = await sb.from("precios_cliente").select("*").eq("did_cliente", did).maybeSingle();
+    let envios = [], flete = [];
+    if(cab){
+      const [{ data: e }, { data: f }] = await Promise.all([
+        sb.from("precios_cliente_envio").select("*").eq("precios_cliente_id", cab.id),
+        sb.from("precios_cliente_flete").select("*").eq("precios_cliente_id", cab.id),
+      ]);
+      envios = e || []; flete = f || [];
+    }
+    const precioEnvio = (tamanoId, cordonId) => {
+      const f = envios.find(x => x.tamano_paquete_id === tamanoId && x.cordon_id === cordonId);
+      return formatearMoneda(f ? f.precio : null);
+    };
+    const precioFlete = (cordonId) => {
+      const f = flete.find(x => x.cordon_id === cordonId);
+      return formatearMoneda(f ? f.precio : null);
+    };
+
+    document.getElementById("modal-precios-cliente-titulo").textContent = `Precios — ${labelCliente(cliente)}`;
+    const tipoServicio = cab ? cab.tipo_servicio : "ultima_milla";
+    const comboTipo = document.getElementById("combo-precios-cliente-tipo-servicio");
+    comboTipo.dataset.valorActual = tipoServicio;
+    comboTipo.querySelector(".combo-filtro-btn").textContent = labelTipoServicioPrecio(tipoServicio) === "Fulfillment" ? "Fulfillment (última milla + almacenamiento)" : "Última milla";
+    comboTipo.querySelectorAll("li").forEach(li => li.setAttribute("aria-selected", String(li.dataset.valor === tipoServicio)));
+    actualizarVisibilidadFulfillment();
+
+    document.getElementById("modal-precios-cliente-deposito").value = formatearMoneda(cab ? cab.precio_deposito_pallet : null);
+    document.getElementById("modal-precios-cliente-despacho").value = formatearMoneda(cab ? cab.precio_despacho_envio : null);
+
+    if(!cordones.length || !tamanos.length){
+      document.getElementById("precios-cliente-matriz-envios").innerHTML = `<p class="sin-datos">Cargá al menos un Tamaño de paquete y un Cordón en Configuración antes de armar el tarifario.</p>`;
+      document.getElementById("precios-cliente-matriz-flete").innerHTML = "";
+    } else {
+      document.getElementById("precios-cliente-matriz-envios").innerHTML = `
+        <table>
+          <thead><tr><th>Tamaño \\ Cordón</th>${cordones.map(c => `<th>${c.texto}</th>`).join("")}</tr></thead>
+          <tbody>
+            ${tamanos.map(t => `
+              <tr>
+                <td>${t.texto}</td>
+                ${cordones.map(c => `<td><input type="text" inputmode="decimal" class="cel-input input-moneda precio-envio-input" data-tamano="${t.valor}" data-cordon="${c.valor}" value="${precioEnvio(t.valor, c.valor)}" /></td>`).join("")}
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+      document.getElementById("precios-cliente-matriz-flete").innerHTML = `
+        <table>
+          <thead><tr>${cordones.map(c => `<th>${c.texto}</th>`).join("")}</tr></thead>
+          <tbody>
+            <tr>${cordones.map(c => `<td><input type="text" inputmode="decimal" class="cel-input input-moneda precio-flete-input" data-cordon="${c.valor}" value="${precioFlete(c.valor)}" /></td>`).join("")}</tr>
+          </tbody>
+        </table>
+      `;
+    }
+    document.getElementById("modal-precios-cliente").hidden = false;
+  }
+
+  // Reformatea a "$ 0.000,00" al salir del campo (delegado en el modal
+  // porque los inputs de la matriz se arman dinámicamente en cada
+  // apertura — ver Regla 7 de sección 1). Mientras se está escribiendo
+  // se deja el valor tal cual lo tipea la persona, reformatear en cada
+  // tecla saltaría el cursor al final todo el tiempo.
+  document.getElementById("modal-precios-cliente").addEventListener("focusout", (e)=>{
+    if(e.target.classList && e.target.classList.contains("input-moneda")){
+      e.target.value = formatearMoneda(parsearMoneda(e.target.value));
+    }
+  });
+
+  document.getElementById("modal-precios-cliente-cerrar").addEventListener("click", ()=>{
+    document.getElementById("modal-precios-cliente").hidden = true;
+  });
+  document.getElementById("modal-precios-cliente").addEventListener("click", (e)=>{
+    if(e.target.id === "modal-precios-cliente") document.getElementById("modal-precios-cliente").hidden = true;
+  });
+  document.getElementById("modal-precios-cliente-guardar").addEventListener("click", async ()=>{
+    const did = preciosClienteAbriendoDid;
+    if(!did) return;
+    const btn = document.getElementById("modal-precios-cliente-guardar");
+    const textoOriginal = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Guardando…";
+    try {
+      const tipoServicio = document.getElementById("combo-precios-cliente-tipo-servicio").dataset.valorActual || "ultima_milla";
+      const deposito = parsearMoneda(document.getElementById("modal-precios-cliente-deposito").value);
+      const despacho = parsearMoneda(document.getElementById("modal-precios-cliente-despacho").value);
+
+      const { data: cab, error: errCab } = await sb.from("precios_cliente")
+        .upsert({
+          did_cliente: did,
+          tipo_servicio: tipoServicio,
+          precio_deposito_pallet: deposito,
+          precio_despacho_envio: despacho,
+          actualizado_en: new Date().toISOString(),
+        }, { onConflict: "did_cliente" })
+        .select().single();
+      if(errCab){ console.error("Error guardando precios_cliente:", errCab); await mostrarAviso("No se pudo guardar."); return; }
+
+      const filasEnvio = [...document.querySelectorAll(".precio-envio-input")]
+        .map(inp => ({ inp, precio: parsearMoneda(inp.value) }))
+        .filter(x => x.precio != null)
+        .map(x => ({ precios_cliente_id: cab.id, tamano_paquete_id: Number(x.inp.dataset.tamano), cordon_id: Number(x.inp.dataset.cordon), precio: x.precio }));
+      const filasFlete = [...document.querySelectorAll(".precio-flete-input")]
+        .map(inp => ({ inp, precio: parsearMoneda(inp.value) }))
+        .filter(x => x.precio != null)
+        .map(x => ({ precios_cliente_id: cab.id, cordon_id: Number(x.inp.dataset.cordon), precio: x.precio }));
+
+      await Promise.all([
+        sb.from("precios_cliente_envio").delete().eq("precios_cliente_id", cab.id),
+        sb.from("precios_cliente_flete").delete().eq("precios_cliente_id", cab.id),
+      ]);
+      if(filasEnvio.length){
+        const { error } = await sb.from("precios_cliente_envio").insert(filasEnvio);
+        if(error){ console.error("Error guardando precios_cliente_envio:", error); await mostrarAviso("Se guardó la cabecera pero no toda la matriz de envíos."); }
+      }
+      if(filasFlete.length){
+        const { error } = await sb.from("precios_cliente_flete").insert(filasFlete);
+        if(error){ console.error("Error guardando precios_cliente_flete:", error); await mostrarAviso("Se guardó la cabecera pero no el flete."); }
+      }
+
+      preciosClienteCabeceraPorDid[did] = cab;
+      renderAdminClientes();
+      document.getElementById("modal-precios-cliente").hidden = true;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = textoOriginal;
+    }
+  });
+  document.getElementById("tabla-admin-clientes").addEventListener("click", (e)=>{
+    const btn = e.target.closest(".btn-icono-chico.ver");
+    if(btn) abrirDetalleCliente(btn.dataset.id);
+  });
+
   async function cargarAdminUsuarios(){
-    const { data, error } = await sb.from("perfiles_usuario").select("*").order("nombre");
+    const [{ data, error }, { data: sectores, error: errSectores }, { data: clientes, error: errClientes }] = await Promise.all([
+      sb.from("perfiles_usuario").select("*").order("nombre"),
+      sb.from("parametros_sectores").select("id,nombre").eq("activo", true).order("nombre"),
+      sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia"),
+    ]);
     if(error){ console.error("Error cargando perfiles_usuario:", error); return; }
+    if(errSectores) console.error("Error cargando parametros_sectores:", errSectores);
+    if(errClientes) console.error("Error cargando lightdata_clientes:", errClientes);
     adminUsuariosData = data || [];
+    sectoresDisponibles = sectores || [];
+    clientesDisponibles = clientes || [];
     renderAdminUsuarios();
+  }
+
+  // Texto de la columna "Tipo" / búsqueda — sector por nombre si es
+  // administrativo, clientes asociados si es cliente (mismo criterio que
+  // el detalle, ver abrirDetalleUsuario).
+  function descripcionTipoUsuario(u){
+    if(u.tipo_usuario === "cliente"){
+      const nombres = didsClienteALabel(u.clientes_lightdata_ids);
+      return nombres.length ? `Cliente: ${nombres.join(", ")}` : "Cliente (sin asociar)";
+    }
+    const sector = sectoresDisponibles.find(s => s.id === u.sector_id);
+    return sector ? `Administrativo: ${sector.nombre}` : "Administrativo";
   }
 
   function renderAdminUsuarios(){
@@ -3066,7 +4008,7 @@
         (u.nombre || "").toLowerCase().includes(q) ||
         (u.apellido || "").toLowerCase().includes(q) ||
         (u.email || "").toLowerCase().includes(q) ||
-        (u.sector || "").toLowerCase().includes(q)
+        descripcionTipoUsuario(u).toLowerCase().includes(q)
       );
     }
     const tbody = document.getElementById("tabla-admin-usuarios");
@@ -3079,7 +4021,7 @@
         <td>${u.nombre}</td>
         <td>${u.apellido}</td>
         <td>${u.email}</td>
-        <td class="texto-muted">${u.sector || "—"}</td>
+        <td class="texto-muted">${descripcionTipoUsuario(u)}</td>
         <td>${u.es_admin ? '<span class="badge verde">Sí</span>' : '<span class="badge gris">No</span>'}</td>
         <td>${u.activo ? '<span class="badge verde">Sí</span>' : '<span class="badge rojo">No</span>'}</td>
         <td class="col-opciones">
@@ -3102,9 +4044,13 @@
     const u = adminUsuariosData.find(x => String(x.id) === String(id));
     if(!u) return;
     document.getElementById("modal-detalle-usuario-titulo").textContent = `Detalle — ${u.nombre} ${u.apellido}`;
+    const esCliente = u.tipo_usuario === "cliente";
     const campos = [
       { icono: "mail", label: "Email", valor: u.email },
-      { icono: "briefcase", label: "Sector", valor: u.sector || "—" },
+      { icono: "user-cog", label: "Tipo de usuario", valor: esCliente ? "Cliente" : "Administrativo" },
+      esCliente
+        ? { icono: "building-2", label: "Clientes asociados", valor: didsClienteALabel(u.clientes_lightdata_ids).join(", ") || "—", span: true }
+        : { icono: "briefcase", label: "Sector", valor: (sectoresDisponibles.find(s => s.id === u.sector_id) || {}).nombre || "—" },
       { icono: "shield-check", label: "Admin", valor: u.es_admin ? "Sí" : "No" },
       { icono: "check-circle-2", label: "Activo", valor: u.activo ? "Sí" : "No" },
       { icono: "eye", label: "Vistas permitidas", valor: u.es_admin ? "Todas (admin)" : (clavesAVistasLabel(u.vistas_permitidas).join(", ") || "—"), span: true },
@@ -3139,13 +4085,37 @@
     abrirModalAbm(`Editar usuario: ${usuario.nombre} ${usuario.apellido}`, [
       { clave: "nombre", label: "Nombre", tipo: "texto" },
       { clave: "apellido", label: "Apellido", tipo: "texto" },
-      { clave: "sector", label: "Sector", tipo: "texto" },
+      { clave: "tipo_usuario", label: "Tipo de usuario", tipo: "select", opciones: TIPOS_USUARIO_OPCIONES },
+      {
+        clave: "sector_id", label: "Sector", tipo: "select",
+        opciones: sectoresDisponibles.map(s => ({ valor: s.id, texto: s.nombre })),
+        mostrarSi: v => v.tipo_usuario !== "cliente",
+      },
+      {
+        clave: "clientes", label: "Clientes asociados", tipo: "multiselect", span: true,
+        opciones: clientesDisponibles.map(labelCliente),
+        mostrarSi: v => v.tipo_usuario === "cliente",
+      },
       { clave: "es_admin", label: "Administrador (ve todas las vistas)", tipo: "checkbox" },
       { clave: "activo", label: "Activo (desmarcar bloquea su acceso)", tipo: "checkbox" },
       { clave: "vistas", label: "Vistas permitidas (si no es admin)", tipo: "multiselect", opciones: VISTAS_DISPONIBLES.map(v => v.label) },
-    ], { ...usuario, vistas: clavesAVistasLabel(usuario.vistas_permitidas).join(", ") }, async (vals)=>{
+    ], {
+      ...usuario,
+      tipo_usuario: usuario.tipo_usuario || "administrativo",
+      vistas: clavesAVistasLabel(usuario.vistas_permitidas).join(", "),
+      clientes: didsClienteALabel(usuario.clientes_lightdata_ids).join(", "),
+    }, async (vals)=>{
+      const esCliente = vals.tipo_usuario === "cliente";
+      const clientesIds = labelsClienteADid(String(vals.clientes || "").split(",").map(s => s.trim()).filter(Boolean));
+      if(esCliente && !clientesIds.length){
+        await mostrarAviso("Un usuario tipo Cliente necesita al menos un cliente asociado.");
+        return false;
+      }
       const payload = {
-        nombre: vals.nombre, apellido: vals.apellido, sector: vals.sector || null,
+        nombre: vals.nombre, apellido: vals.apellido,
+        tipo_usuario: esCliente ? "cliente" : "administrativo",
+        sector_id: esCliente ? null : (vals.sector_id || null),
+        clientes_lightdata_ids: esCliente ? clientesIds : null,
         es_admin: !!vals.es_admin, activo: !!vals.activo,
         vistas_permitidas: labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean)),
       };
@@ -3167,11 +4137,27 @@
       { clave: "apellido", label: "Apellido", tipo: "texto" },
       { clave: "email", label: "Email", tipo: "texto" },
       { clave: "password", label: "Contraseña temporal (mínimo 6 caracteres)", tipo: "texto" },
-      { clave: "sector", label: "Sector", tipo: "texto" },
+      { clave: "tipo_usuario", label: "Tipo de usuario", tipo: "select", opciones: TIPOS_USUARIO_OPCIONES },
+      {
+        clave: "sector_id", label: "Sector", tipo: "select",
+        opciones: sectoresDisponibles.map(s => ({ valor: s.id, texto: s.nombre })),
+        mostrarSi: v => v.tipo_usuario !== "cliente",
+      },
+      {
+        clave: "clientes", label: "Clientes asociados", tipo: "multiselect", span: true,
+        opciones: clientesDisponibles.map(labelCliente),
+        mostrarSi: v => v.tipo_usuario === "cliente",
+      },
       { clave: "vistas", label: "Vistas permitidas", tipo: "multiselect", opciones: VISTAS_DISPONIBLES.map(v => v.label) },
-    ], {}, async (vals)=>{
+    ], { tipo_usuario: "administrativo" }, async (vals)=>{
       if(!vals.nombre || !vals.apellido || !vals.email || !vals.password){
         await mostrarAviso("Nombre, Apellido, Email y Contraseña son obligatorios.");
+        return false;
+      }
+      const esCliente = vals.tipo_usuario === "cliente";
+      const clientesIds = labelsClienteADid(String(vals.clientes || "").split(",").map(s => s.trim()).filter(Boolean));
+      if(esCliente && !clientesIds.length){
+        await mostrarAviso("Un usuario tipo Cliente necesita al menos un cliente asociado.");
         return false;
       }
       const { data: sesionActual } = await sb.auth.getSession();
@@ -3187,7 +4173,9 @@
         },
         body: JSON.stringify({
           nombre: vals.nombre, apellido: vals.apellido, email: vals.email, password: vals.password,
-          sector: vals.sector || null,
+          tipo_usuario: esCliente ? "cliente" : "administrativo",
+          sector_id: esCliente ? null : (vals.sector_id || null),
+          clientes_lightdata_ids: esCliente ? clientesIds : null,
           vistas_permitidas: labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean)),
         }),
       });
@@ -4739,11 +5727,23 @@
   function crearAbmSimple({ tabla, tbodyId, buscarId, btnAgregarId, titulo, orden }){
     let datos = [];
     let busqueda = "";
+    // Regla de consultas (2026-11-21, ver reglas_de_negocio.md sección 1):
+    // estas tablas de parámetros son chicas y cambian poco — se piden UNA
+    // vez por sesión, no cada vez que se entra a la pantalla. Antes,
+    // navegar a Choferes/Localidades/etc. volvía a pedir Vehículos,
+    // Cordones, Zonas... de cero cada vez, aunque ya estuvieran en
+    // memoria sin cambios. `forzar=true` lo saltea (lo usan alta/edición/
+    // borrado locales, que ya actualizan `datos` a mano sin volver a
+    // pedir nada — no hace falta en este ABM, queda disponible por si
+    // algún consumidor externo necesita refrescar).
+    let cargado = false;
 
-    async function cargar(){
+    async function cargar(forzar){
+      if(cargado && !forzar) return;
       const { data, error } = await sb.from(tabla).select("*").order(orden || "nombre");
       if(error){ console.error(`Error cargando ${tabla}:`, error); return; }
       datos = data || [];
+      cargado = true;
       render();
     }
 
@@ -4818,12 +5818,137 @@
       if(btnBorrar) borrar(Number(btnBorrar.dataset.id));
     });
 
-    return { cargar, obtenerActivos: () => datos.filter(f => f.activo).map(f => f.nombre) };
+    return {
+      cargar,
+      obtenerActivos: () => datos.filter(f => f.activo).map(f => f.nombre),
+      obtenerActivosConId: () => datos.filter(f => f.activo).map(f => ({ valor: f.id, texto: f.nombre })),
+    };
   }
 
   const abmVehiculos = crearAbmSimple({ tabla: "parametros_vehiculos", tbodyId: "tabla-admin-vehiculos", buscarId: "buscar-admin-vehiculos", btnAgregarId: "btn-agregar-vehiculo", titulo: "Vehículo" });
   const abmZonas = crearAbmSimple({ tabla: "parametros_zonas", tbodyId: "tabla-admin-zonas", buscarId: "buscar-admin-zonas", btnAgregarId: "btn-agregar-zona", titulo: "Zona" });
-  const abmLocalidades = crearAbmSimple({ tabla: "parametros_localidades", tbodyId: "tabla-admin-localidades", buscarId: "buscar-admin-localidades", btnAgregarId: "btn-agregar-localidad", titulo: "Localidad" });
+  const abmSectores = crearAbmSimple({ tabla: "parametros_sectores", tbodyId: "tabla-admin-sectores", buscarId: "buscar-admin-sectores", btnAgregarId: "btn-agregar-sector", titulo: "Sector" });
+  const abmCordones = crearAbmSimple({ tabla: "parametros_cordones", tbodyId: "tabla-admin-cordones", buscarId: "buscar-admin-cordones", btnAgregarId: "btn-agregar-cordon", titulo: "Cordón", orden: "orden" });
+  const abmTamanosPaquete = crearAbmSimple({ tabla: "parametros_tamanos_paquete", tbodyId: "tabla-admin-tamanos-paquete", buscarId: "buscar-admin-tamanos-paquete", btnAgregarId: "btn-agregar-tamano-paquete", titulo: "Tamaño de paquete", orden: "orden" });
+
+  // ----- ABM de Localidad con CP/Cordón/Zona por FK (pedido 2026-11-20,
+  // revertido parcialmente el 2026-11-21: la Zona vuelve a ser su propio
+  // ABM parametrizable — acá solo se la referencia por FK, no se la edita
+  // como texto libre). Cordón también es FK al ABM de Cordones.
+  function crearAbmLocalidades(){
+    let datos = [];
+    let busqueda = "";
+    let cargado = false; // mismo criterio de caching que crearAbmSimple
+
+    async function cargar(forzar){
+      await Promise.all([abmCordones.cargar(), abmZonas.cargar()]);
+      if(cargado && !forzar) return;
+      const { data, error } = await sb.from("parametros_localidades").select("*").order("nombre");
+      if(error){ console.error("Error cargando parametros_localidades:", error); return; }
+      datos = data || [];
+      cargado = true;
+      render();
+    }
+
+    function labelCordon(id){
+      const c = (abmCordones.obtenerActivosConId() || []).find(x => x.valor === id);
+      return c ? c.texto : "—";
+    }
+    function labelZona(id){
+      const z = (abmZonas.obtenerActivosConId() || []).find(x => x.valor === id);
+      return z ? z.texto : "—";
+    }
+
+    function render(){
+      let filas = datos;
+      if(busqueda) filas = filas.filter(f =>
+        (f.nombre || "").toLowerCase().includes(busqueda) ||
+        (f.cp || "").toLowerCase().includes(busqueda)
+      );
+      const tbody = document.getElementById("tabla-admin-localidades");
+      if(!filas.length){
+        tbody.innerHTML = `<tr><td colspan="6" class="sin-datos">Sin localidades cargadas.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = filas.map(f => `
+        <tr class="${f.activo ? "" : "fila-inactiva"}" data-id="${f.id}">
+          <td>${f.nombre}${f.activo ? "" : '<span class="badge-inactivo">Inactivo</span>'}</td>
+          <td>${labelZona(f.zona_id)}</td>
+          <td>${f.cp || "—"}</td>
+          <td>${labelCordon(f.cordon_id)}</td>
+          <td>${f.activo ? "Sí" : "No"}</td>
+          <td class="col-opciones">
+            <span class="opciones-fila">
+              <button type="button" class="btn-icono-chico editar" data-id="${f.id}" title="Editar"><i data-lucide="pencil"></i></button>
+              <button type="button" class="btn-icono-chico borrar" data-id="${f.id}" title="Borrar"><i data-lucide="trash-2"></i></button>
+            </span>
+          </td>
+        </tr>
+      `).join("");
+      lucide.createIcons();
+    }
+
+    function campos(){
+      return [
+        { clave: "nombre", label: "Localidad", tipo: "texto" },
+        { clave: "zona_id", label: "Zona", tipo: "select", opciones: abmZonas.obtenerActivosConId() },
+        { clave: "cp", label: "CP", tipo: "texto" },
+        { clave: "cordon_id", label: "Cordón", tipo: "select", opciones: abmCordones.obtenerActivosConId() },
+        { clave: "activo", label: "Activo", tipo: "checkbox" },
+      ];
+    }
+
+    function abrirAlta(){
+      abrirModalAbm("Agregar localidad", campos(), { activo: true }, async (vals)=>{
+        if(!vals.nombre){ await mostrarAviso("El nombre es obligatorio."); return false; }
+        const payload = { nombre: vals.nombre, zona_id: vals.zona_id ? Number(vals.zona_id) : null, cp: vals.cp || null, cordon_id: vals.cordon_id ? Number(vals.cordon_id) : null, activo: !!vals.activo };
+        const { data, error } = await sb.from("parametros_localidades").insert(payload).select().single();
+        if(error){ await mostrarAviso("No se pudo guardar (¿ya existe esa localidad?)."); return false; }
+        datos.push(data);
+        render();
+      });
+    }
+
+    function abrirEdicion(id){
+      const fila = datos.find(f => f.id === id);
+      if(!fila) return;
+      abrirModalAbm("Editar localidad", campos(), fila, async (vals)=>{
+        if(!vals.nombre){ await mostrarAviso("El nombre es obligatorio."); return false; }
+        const payload = { nombre: vals.nombre, zona_id: vals.zona_id ? Number(vals.zona_id) : null, cp: vals.cp || null, cordon_id: vals.cordon_id ? Number(vals.cordon_id) : null, activo: !!vals.activo };
+        const { error } = await sb.from("parametros_localidades").update(payload).eq("id", id);
+        if(error){ await mostrarAviso("No se pudo guardar."); return false; }
+        Object.assign(fila, payload);
+        render();
+      });
+    }
+
+    async function borrar(id){
+      if(!(await mostrarConfirmacion("¿Borrar este registro? No se puede deshacer."))) return;
+      const { error } = await sb.from("parametros_localidades").delete().eq("id", id);
+      if(error){ console.error(error); await mostrarAviso("No se pudo borrar."); return; }
+      datos = datos.filter(f => f.id !== id);
+      render();
+    }
+
+    document.getElementById("buscar-admin-localidades").addEventListener("input", (e)=>{
+      busqueda = e.target.value.toLowerCase();
+      render();
+    });
+    document.getElementById("btn-agregar-localidad").addEventListener("click", abrirAlta);
+    document.getElementById("tabla-admin-localidades").addEventListener("click", (e)=>{
+      const btnEditar = e.target.closest(".btn-icono-chico.editar");
+      const btnBorrar = e.target.closest(".btn-icono-chico.borrar");
+      if(btnEditar) abrirEdicion(Number(btnEditar.dataset.id));
+      if(btnBorrar) borrar(Number(btnBorrar.dataset.id));
+    });
+
+    return {
+      cargar,
+      obtenerActivos: () => datos.filter(f => f.activo).map(f => f.nombre),
+    };
+  }
+
+  const abmLocalidades = crearAbmLocalidades();
 
   // Turnos usa "hora" en vez de "nombre" como valor principal — formulario propio, mismo patrón de modal.
   let adminTurnosData = [];
@@ -4899,14 +6024,25 @@
   let adminChoferesSearch = "";
   let adminChoferesSoloPendientes = false;
   let adminChoferesFiltros = { vehiculo: "", turno: "", zona: "", activo: "", sabado: "" };
+  // 858 filas (toda la plantilla histórica, no solo los activos) — se
+  // piden UNA vez por sesión, no cada vez que se entra a la pantalla
+  // (ver Regla de consultas, reglas_de_negocio.md sección 1, 2026-11-21).
+  // Alta/edición/borrado actualizan `adminChoferesData` a mano, así que
+  // no hace falta volver a pedir nada después de esas acciones.
+  let adminChoferesCargado = false;
 
   async function cargarAdminChoferes(){
+    if(adminChoferesCargado){
+      await Promise.all([abmVehiculos.cargar(), abmLocalidades.cargar()]);
+      return;
+    }
     const [{ data, error }] = await Promise.all([
       sb.from("choferes_roster").select("*").order("nombre"),
-      abmVehiculos.cargar(), abmZonas.cargar(),
+      abmVehiculos.cargar(), abmLocalidades.cargar(),
     ]);
     if(error){ console.error("Error cargando choferes_roster:", error); return; }
     adminChoferesData = data || [];
+    adminChoferesCargado = true;
 
     const idsLightdata = adminChoferesData.map(f => f.lightdata_id).filter(id => id != null);
     adminChoferesLightdataUsuarios = {};

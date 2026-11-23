@@ -59,12 +59,23 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { email, password, nombre, apellido, sector, vistas_permitidas } = body || {};
+    const {
+      email, password, nombre, apellido, vistas_permitidas,
+      tipo_usuario, sector_id, clientes_lightdata_ids,
+    } = body || {};
     if (!email || !password || !nombre || !apellido) {
       return json({ error: "Faltan campos obligatorios (email, password, nombre, apellido)." }, 400);
     }
     if (String(password).length < 6) {
       return json({ error: "La contraseña debe tener al menos 6 caracteres." }, 400);
+    }
+    // tipo_usuario (2026-11-20, reemplaza el "sector" de texto libre):
+    // "cliente" necesita al menos un cliente asociado, "administrativo"
+    // usa sector_id (lista cerrada, parametros_sectores) — ver migración
+    // 2026-11-20_tipo_usuario_y_acceso_por_cliente.sql.
+    const tipoUsuarioFinal = tipo_usuario === "cliente" ? "cliente" : "administrativo";
+    if (tipoUsuarioFinal === "cliente" && (!Array.isArray(clientes_lightdata_ids) || clientes_lightdata_ids.length === 0)) {
+      return json({ error: "Un usuario tipo Cliente necesita al menos un cliente asociado." }, 400);
     }
 
     // Cliente con service role — el único con permiso para crear usuarios
@@ -82,7 +93,9 @@ Deno.serve(async (req) => {
       nombre,
       apellido,
       email,
-      sector: sector || null,
+      tipo_usuario: tipoUsuarioFinal,
+      sector_id: tipoUsuarioFinal === "administrativo" ? (sector_id || null) : null,
+      clientes_lightdata_ids: tipoUsuarioFinal === "cliente" ? clientes_lightdata_ids : null,
       vistas_permitidas: vistas_permitidas || [],
       es_admin: false,
       activo: true,

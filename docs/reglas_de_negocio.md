@@ -135,6 +135,35 @@ borrado) sigue esto:
     se VE en el `<td>`. Excepción: texto cargado a mano en el sistema
     (observaciones de un caso de Fallidos, motivo de cierre, etc.) se
     muestra tal cual lo escribió la persona, sin tocar.
+16. **Toda vista que lista datos consulta solo lo que necesita, no "todo
+    por si acaso"** (pedido 2026-11-21, ver changelog). En la práctica:
+    - **Nunca `select("*")` cuando se usan solo algunas columnas** —
+      pedir explícito `select("col1,col2,...")`.
+    - **Las tablas de PARÁMETROS de Configuración (ABMs chicos: Zonas,
+      Vehículos, Turnos, Cordones, Tamaños de paquete, Sectores — todas
+      con menos de ~50 filas) se piden UNA vez por sesión**, no cada vez
+      que se entra a esa pantalla — `crearAbmSimple()`/
+      `crearAbmLocalidades()` guardan un flag `cargado` y saltean el
+      fetch si ya se cargaron (alta/edición/borrado actualizan el array
+      en memoria a mano, nunca hace falta re-pedir después de esas
+      acciones). Esto NO aplica a datos operativos que cambian solos en
+      el fondo (envíos, fallidos) — esos sí se vuelven a pedir cada vez.
+    - **Un dato "pesado" que solo hace falta en el DETALLE de una fila no
+      se pide para TODA la lista** — ejemplo real: la grilla de Clientes
+      solo necesita la CANTIDAD de cuentas vinculadas por cliente (se
+      puede pedir pidiendo solo la columna `did_cliente`, sin las otras
+      6 columnas de IDs externos); las cuentas completas de un cliente
+      se piden recién al abrir su "Ver detalle", no las de los 296
+      clientes de entrada.
+    - **Pantallas con una tabla que puede crecer sin límite** (Envíos,
+      Fallidos y Cambios) usan paginado real contra la base
+      (`select(..., {count:"exact"})` + `.range()`), no cargan todo y
+      paginan en memoria — ver "Envíos" (`cargarEnviosListado()`) como
+      referencia. Una tabla de Configuración chica (parámetros) NO
+      necesita este paginado — agregárselo sería complejidad sin
+      beneficio real (ver changelog 2026-11-21 para el análisis de
+      tamaños que justificó esta distinción, en vez de paginar todo por
+      igual).
 
 **Excepción explícita — pantallas operativas "en vivo"** (ej. una
 pantalla tipo "Asistencia de hoy" donde varias personas van tildando
@@ -230,15 +259,47 @@ select proname from pg_proc where pronamespace = 'public'::regnamespace
   cadete, hay que armarla de nuevo con un trigger real, no asumir que ya
   existe.
 - **`perfiles_usuario`**: metadata de cada usuario del dashboard
-  (nombre, apellido, email, sector, `es_admin`, `activo`,
+  (nombre, apellido, email, `es_admin`, `activo`,
   `vistas_permitidas text[]`), enlazada 1 a 1 con `auth.users` por
   `auth_user_id`. **INSERT no está habilitado para `authenticated`** —
   el alta de un usuario nuevo SIEMPRE pasa por la Edge Function
   `crear-usuario` (único lugar con permiso para crear la cuenta de Auth
   + el perfil, usando la service role key). La edición de un perfil
-  existente (sector/vistas/admin/activo) SÍ es un `.update()` directo
-  desde el cliente, protegido por una política RLS que exige que quien
-  edita tenga `es_admin=true` en su propio perfil.
+  existente (tipo/sector/clientes/vistas/admin/activo) SÍ es un
+  `.update()` directo desde el cliente, protegido por una política RLS
+  que exige que quien edita tenga `es_admin=true` en su propio perfil.
+  Desde 2026-11-20 (ver changelog) tiene `tipo_usuario`
+  ("administrativo"/"cliente"), `sector_id` (FK a `parametros_sectores`,
+  solo para administrativo) y `clientes_lightdata_ids bigint[]` (solo
+  para cliente, FK lógica a `lightdata_clientes.did`) — el viejo `sector`
+  de texto libre queda deprecado (columna sin borrar, por las dudas).
+- **`lightdata_clientes`**: sincronizada por
+  `scripts/ingesta_lightdata/sincronizar_clientes_lightdata.py` (1 vez
+  por día, endpoint `getClientes` — ver `lightdata_api_clientes.md`),
+  `did` como PK. Solo tiene los campos que necesita el combo del ABM de
+  Usuarios (`codigo`, `nombre_fantasia`, `razon_social`, `habilitado`) —
+  no el modelo completo de contactos/direcciones/cuentas que documenta
+  el `.md`, se amplía si hace falta a futuro (ej. liquidación de
+  clientes). Lectura abierta a `authenticated`, escritura solo
+  `service_role`.
+- **`parametros_sectores`**: lista cerrada de sectores (id, nombre,
+  activo) — reemplaza el `sector` de texto libre de `perfiles_usuario`
+  (Regla 4 de sección 1: opciones fijas = su propia tabla). ABM simple
+  en Configuración → Sectores, misma fábrica `crearAbmSimple()` que
+  Vehículos/Zonas/Localidades.
+- **`parametros_tamanos_paquete`** / **`parametros_cordones`**: ABMs
+  simples (`crearAbmSimple()`) para Pequeño/Mediano/Grande y CABA/GBA1/
+  GBA2/GBA3 — se usan como FK en el tarifario de `precios_cliente_envio`/
+  `precios_cliente_flete` (ver changelog 2026-11-20, "Precios por
+  Cliente").
+- **`parametros_localidades`** pasa a tener `zona`/`cp`/`cordon_id`
+  (unificación con la vieja `parametros_zonas`, que queda deprecada sin
+  ABM propio — ver changelog 2026-11-20).
+- **`precios_cliente`** (cabecera, 1 fila por `did_cliente`) +
+  **`precios_cliente_envio`** (precio por tamaño × cordón) +
+  **`precios_cliente_flete`** (precio por cordón): tarifario comercial
+  por cliente, RLS acotada a la vista "admin" (ni lectura ni escritura
+  para usuarios tipo Cliente) — ver changelog 2026-11-20.
 - **`fallidos_seguimiento`**: seguimiento manual de casos de Fallidos/
   Cambios (`id_interno` no es único a propósito — un duplicado genera
   una segunda fila con `duplicado=true` referenciando el mismo envío).
@@ -291,6 +352,22 @@ select proname from pg_proc where pronamespace = 'public'::regnamespace
   tabla por API directa sin que la UI lo permitiera ver. Si se agrega una
   tabla nueva con escritura sensible, replicar este patrón, no asumir
   que "requiere login" alcanza.
+- **Acceso por cliente (desde 2026-11-20)**: un usuario `tipo_usuario='cliente'`
+  solo puede LEER los envíos de los `clientes_lightdata_ids` que tiene
+  asociados (vía `envios.did_cliente`) — administrativo/admin ven todo,
+  igual que siempre. Esto se implementa con policies **RESTRICTIVAS**
+  (`as restrictive`, no el default permisivo) sobre `envios`,
+  `envios_contacto_destinatario` y `fallidos_seguimiento`, usando la
+  función `puede_ver_envio_de_cliente(did_cliente)`. Importante: una
+  policy restrictiva se combina con AND con cualquier policy permisiva
+  que ya exista en la tabla (en vez de OR, como pasa entre permisivas) —
+  es la única forma de ESTRECHAR acceso sin tener que conocer ni tocar
+  la policy permisiva original (que no está en ninguna migración
+  rastreada, se armó a mano antes de esta carpeta). Si se agrega una
+  tabla nueva con datos propios de un cliente, replicar esta misma
+  policy restrictiva ahí también — agregar solo una policy "más" sin
+  `as restrictive` NO alcanza, porque se combina por OR y la permisiva
+  vieja sigue dejando ver todo.
 - Auth: registro público desactivado (`Allow new users to sign up`
   off). Login con email+contraseña.
 
@@ -357,6 +434,17 @@ Reglas de negocio confirmadas con el usuario (2026-11-16):
 - `activo=false` fuerza el logout inmediato en el próximo chequeo de
   sesión (no revoca la sesión de Supabase Auth en sí, es un chequeo del
   lado del cliente).
+- **`tipo_usuario` (desde 2026-11-20)**: "administrativo" (personal de
+  la empresa, ve todos los envíos sin importar `clientes_lightdata_ids`)
+  o "cliente" (acotado a los `clientes_lightdata_ids` que tenga
+  asociados — ver sección 2, "Acceso por cliente"). Es ortogonal a
+  `vistas_permitidas`/`es_admin`: un usuario tipo Cliente sigue
+  necesitando la vista correspondiente habilitada (ej. `envios`) para
+  verla en el sidebar — `tipo_usuario` decide QUÉ datos ve dentro de esa
+  vista, no si la vista aparece. El ABM de Usuarios exige al menos un
+  cliente asociado para dar de alta/editar un usuario tipo Cliente (Edge
+  Function y frontend validan esto, además de la constraint `check` de
+  la columna).
 
 ---
 
@@ -424,3 +512,17 @@ Reglas de negocio confirmadas con el usuario (2026-11-16):
 | 2026-11-20 | **2 bugs reales en `backfill_estado_fallidos_viejos.py` (reconciliación de Fallidos/Cambios viejos), encontrados investigando un caso puntual** (tracking "2960", FLIA HDC GROUP S.R.L., `logistica_inversa_real=true` desde el 17/11 sin refrescarse — confirma que el bug de fondo de esa columna, igual que el de `estado` del 19/11, es que nunca se re-chequea pasados los `RANGO_DIAS_LIVE` días): (1) el filtro `tracking_number` de Lightdata matchea por SUBSTRING, no exacto — pedir "2960" devolvía como primera fila un envío de ML ajeno cuyo tracking largo ("48582960190") simplemente lo contenía; (2) un mismo tracking corto puede pertenecer a DOS envíos reales distintos en Lightdata (mismo texto, `did` distinto) — exigir coincidencia exacta de tracking no alcanza, hay que desambiguar por `did == id_interno`. Se agrega `_fila_exacta()` (antes tomaba `filas[0]` a ciegas) con las dos verificaciones; si no se puede resolver sin ambigüedad, se trata como "no encontrado" en vez de arriesgar una actualización cruzada. Se re-corrió el backfill completo con el fix (417 candidatos, 406 actualizados, 11 no encontrados genuinos) para pisar las actualizaciones incorrectas de las 2 corridas previas al fix. Nota aparte, sin resolver: para ese mismo tracking 2960, el filtro `logisticaInversa=1` de Lightdata sigue devolviendo `true` aunque el campo de texto libre "Logística Inversa" en el detalle del envío (la fuente que mira el usuario) dice "no" — decisión explícita: no se cambia la lógica de clasificación por ahora, el equipo revisa a mano los casos que le resulten raros. |
 | 2026-11-20 | **`backfill_estado_fallidos_viejos.py` pasa a ser parte del cron** (antes "corrida única"): se agrega `.github/workflows/backfill_fallidos_diario.yml` (1 vez por día, 08:00 UTC = 05:00 ART, antes del horario operativo) para que ningún caso de Fallidos/Cambios quede desactualizado para siempre por salir de la ventana de `RANGO_DIAS_LIVE`. |
 | 2026-11-20 | **Reorganización de carpetas** (el repo tenía todo mezclado en `scripts/` y los `.md` de negocio sueltos en la raíz): los docs de negocio/arquitectura se mueven a `docs/` (`reglas_de_negocio.md` — este archivo —, `diccionario_de_datos.md`, `integracion_usuarios_lightdata.md`, `lightdata_api_envios.md`, `qa_fallidos_estado.md`); `scripts/` se separa por función en `ingesta_lightdata/` (el pipeline de cada 10 min, se importan entre sí — quedan juntos a propósito), `fallidos_y_cambios/` (el backfill diario), `qa/` (test de regresión) y `migraciones_python_unicas/` (backfills de una sola vez ya ejecutados, archivo histórico); `scripts/migraciones/` (SQL) sin cambios. Se agrega `.claude/skills/` con 2 skills propios de este repo (`mercadopacks-sistema-ui-rules`, que apunta a la sección 1 de este archivo; `levantar-entorno`, cómo servir `index.html` local y correr los scripts). Se actualizaron los `import`/`sys.path.insert` entre scripts movidos a carpetas distintas y los dos workflows de GitHub Actions (`working-directory`, ruta de `error_descarga.png`) — verificado que cada script resuelve sus imports y su `.env` desde la nueva ubicación antes de dar el cambio por terminado. Ver `README.md` para el árbol completo. |
+| 2026-11-20 | **Acceso por cliente + `tipo_usuario`** (pedido del usuario): el ABM de Usuarios distingue "Administrativo" (personal de la empresa, ve todo) de "Cliente" (acotado a sus propios envíos). Reemplaza el `sector` de texto libre por `tipo_usuario` + `sector_id` (FK a la nueva tabla `parametros_sectores`, con su propio ABM en Configuración → Sectores) + `clientes_lightdata_ids bigint[]` (para tipo Cliente). Se agrega `lightdata_clientes` (sincronizada 1 vez por día por `scripts/ingesta_lightdata/sincronizar_clientes_lightdata.py`, endpoint `getClientes` — ver `lightdata_api_clientes.md`) para que el ABM busque clientes por nombre en un combo, no por ID a mano. El acceso real se aplica con policies RESTRICTIVAS (`as restrictive`) sobre `envios`/`envios_contacto_destinatario`/`fallidos_seguimiento` vía `puede_ver_envio_de_cliente(did_cliente)` (migración `2026-11-20_tipo_usuario_y_acceso_por_cliente.sql`) — ver sección 2 para por qué tiene que ser restrictiva y no una policy permisiva más. La Edge Function `crear-usuario` y el frontend validan que un usuario tipo Cliente tenga al menos un cliente asociado antes de guardar. No se tocó qué vistas ve un usuario Cliente (`vistas_permitidas` sigue siendo independiente) — queda para una tarea aparte decidir qué pantallas tiene sentido que vea un portal de cliente. |
+| 2026-11-20 | **Nueva sección "Envíos" (listado), distinta del "Dashboard de Envíos"** (que es agregados/gráficos, vista clave `envios`) — vista clave `envios-listado`, pedida para probar en la práctica el acceso por cliente de la fila de arriba (el primer test con un usuario de prueba mostraba todos los envíos porque ese usuario había quedado con `tipo_usuario='administrativo'`, no porque faltara el filtro — la RLS restrictiva ya funcionaba). Listado paginado (`range()`, 100 por página, botón "Cargar más") con buscador (tracking/cliente/localidad, con debounce porque busca contra la base, no en memoria — a diferencia de Fallidos, que filtra un array ya cargado), filtro de fecha desde/hasta (default: últimos 30 días sobre `fecha_mercadopacks`) y filtro por Estado/Origen (mismo patrón de combo que Fallidos). Botón Detalle por fila abre un modal con todos los campos del envío — sin la dirección del destinatario (`envios_contacto_destinatario`), porque esa tabla solo tiene policy de lectura para la vista `fallidos` (migración `2026-11-19h`); si se quiere mostrar acá también, hace falta extender esa policy para la vista `envios-listado`. No necesita lógica de filtrado por cliente en el frontend — la RLS restrictiva de `envios` ya devuelve solo lo permitido para quien está logueado, sea cual sea la pantalla que pregunte. |
+| 2026-11-20 | **5 ajustes sobre "Envíos" y el acceso por cliente, tras la primera prueba real**: (1) el panel de filtros no abría — faltaba el `crearPopoverGenerico("popover-filtros-envios-listado")` (cada popover de filtros se registra a mano, no es automático por tener la clase `combo-filtro`). (2) Se agrega `id_venta_ml` a la grilla y al detalle. (3) Reemplazado el "Cargar más" (acumulaba filas) por paginación real: `select(..., {count:"exact"})` + `range()`, selector de tamaño de página (10/20/50/100, combo propio — no `<select>` nativo, Regla de sección 1) y texto "Mostrando X–Y de Z envíos". (4) **Bug real de fondo, no de esta pantalla**: al cerrar sesión y entrar con otro usuario en la misma pestaña, se veían por un instante los datos del usuario anterior — decenas de variables de estado en memoria (`stateFallidos`, `adminUsuariosData`, `stateEnviosListado`, etc.) nunca se limpiaban al desloguear. Se cambia `logoutBtn` para hacer `window.location.reload()` en vez de solo `mostrarLogin()` — la única forma de garantizar que no quede nada de la sesión anterior en memoria sin tener que acordarse de resetear cada variable de estado a mano. (5) El primer test de acceso por cliente mostraba todos los envíos no por un bug de la RLS sino porque el usuario de prueba había quedado con `tipo_usuario='administrativo'` (nunca se configuró como Cliente) — la RLS restrictiva ya andaba bien. |
+| 2026-11-20 | **Módulo "Clientes" en Configuración** (mismo criterio que Repartidores, pero de solo lectura — los datos vienen sincronizados de Lightdata, no se cargan a mano): se agrega `lightdata_cuentas` (migración `2026-11-20b_lightdata_cuentas.sql`, FK a `lightdata_clientes.did`, sin columnas de credenciales — ver `lightdata_api_clientes.md` §3) y se extiende `sincronizar_clientes_lightdata.py` para además pedir `getCliente` por cada cliente (secuencial, ~1.5-2.5 min para ~297 clientes, se agregó al mismo cron diario) y guardar sus cuentas con al menos un ID externo (ML/Tienda Nube/Shopify/WooCommerce/VTEX/PrestaShop/Falabella). La pantalla lista clientes (código, nombre, razón social, habilitado, cantidad de cuentas) con buscador, y un "Ver detalle" muestra la tabla de cuentas asociadas por integración. |
+| 2026-11-20 | **2 ajustes más sobre "Envíos"**: (1) se agrega filtro por Cliente (combo con buscador automático — `crearComboGenerico` ya agrega un buscador solo cuando hay más de `UMBRAL_BUSCADOR_COMBO` opciones, acá ~300), y de paso Localidad/Zona/Repartidor (interpretación práctica de "filtrar por todos los datos que contenga la tabla" — se cubrieron las dimensiones categóricas con sentido como filtro de combo; campos de texto libre/numéricos como precio u observaciones quedan para el buscador de texto o un pedido aparte si hace falta). Estos 4 combos se arman por JS la primera vez que se entra a la pantalla (`inicializarFiltrosEnviosListado()`) porque sus opciones vienen de la base (no se pueden hardcodear como Estado/Origen); Localidad/Zona se filtran con `ilike` en vez de `eq` porque son texto libre de Lightdata con mayúsculas/minúsculas mezcladas (Regla 15), comparar exacto contra el valor prolijo de `parametros_localidades`/`parametros_zonas` fallaría en silencio. Repartidor filtra por `chofer_lightdata_id` (cruce por ID, no por nombre, mismo criterio de siempre). (2) La grilla mostraba "Fecha" sin aclarar cuál — se renombra a "Fecha Mercadopacks" (que es la que ya mostraba) y el detalle ahora trae las 6 fechas de `envios` (Mercadopacks, venta, estado, asignación, a planta, colecta). |
+| 2026-11-20 | **Precios por Cliente** (primer paso de la liquidación de clientes/repartidores, pedido del usuario junto con una planilla de referencia `logica_informacion_base_clientes.md`): se agregan 3 ABMs nuevos en Configuración — **Tamaños de paquete** (`parametros_tamanos_paquete`, seed Pequeño/Mediano/Grande) y **Cordones** (`parametros_cordones`, seed CABA/GBA1/GBA2/GBA3), ambos ABMs simples (`crearAbmSimple`, ahora con `obtenerActivosConId()` además de `obtenerActivos()` para poder usarlos como `select` por FK). (2) **Unificación Zona + Localidad + CP + Cordón**: hasta ahora `parametros_zonas` y `parametros_localidades` eran dos ABMs sin ningún vínculo entre sí — se agregan las columnas `zona`/`cp`/`cordon_id` (FK a `parametros_cordones`) directo a `parametros_localidades` (migración `2026-11-20c_precios_por_cliente.sql`) y la pantalla "Localidades" pasa a mostrar las 4 columnas; `parametros_zonas` queda deprecada (no se borra, no tiene ABM propio) y el filtro de Zona de "Envíos" ahora saca sus opciones de `abmLocalidades.obtenerZonasActivas()` (distinct de la columna `zona`) en vez de la tabla vieja. (3) **Tarifario por cliente** (Configuración → Precios por Cliente): cabecera `precios_cliente` (1 fila por cliente — `tipo_servicio` "Última milla" o "Fulfillment"; si es Fulfillment, además `precio_deposito_pallet` y `precio_despacho_envio`, que son el **precio unitario** — la cantidad de pallets/envíos de cada liquidación se calcula después, no acá) + dos matrices hijas: `precios_cliente_envio` (precio por tamaño × cordón) y `precios_cliente_flete` (precio por cordón). El modal de edición arma la matriz dinámicamente según los tamaños/cordones activos (no son columnas fijas, por eso no se pudo modelar como 4 columnas tipo la planilla vieja) y al guardar borra e inserta de nuevo las filas de ambas matrices (más simple y sin riesgo de filas huérfanas que un diff celda por celda). RLS: lectura y escritura de precios solo con la vista "admin" (`precios_cliente*` con policies `for all`, igual que el resto de Configuración) — a diferencia de `parametros_tamanos_paquete`/`parametros_cordones` (lectura abierta a cualquier autenticado, los necesitan otros combos), el tarifario es información comercial y ningún usuario tipo Cliente debe poder verlo. Probado de punta a punta con jsdom simulando Supabase (ABMs, armado de matriz, guardado y las 3 tablas resultantes). Pendiente (no pedido todavía): tarifas Turbo/Colecta de la planilla vieja, y el cálculo real de la liquidación que consume estos precios. |
+| 2026-11-21 | **Grants faltantes en la migración de Precios por Cliente** (bug real recién detectado, ya corregido): `2026-11-20c_precios_por_cliente.sql` creó `parametros_tamanos_paquete`/`parametros_cordones`/`precios_cliente*` con RLS completa pero sin los `grant` de Postgres a `authenticated`/`service_role` — en Supabase, sin el `grant` la policy de RLS ni se evalúa, Postgres rechaza el acceso un paso antes (`permission denied for table`, código `42501`). Mismo patrón que ya se había hecho bien en `2026-11-20_tipo_usuario_y_acceso_por_cliente.sql`/`2026-11-20b_lightdata_cuentas.sql`, pero se olvidó en esta. Corregido con `2026-11-21b_grants_precios_por_cliente.sql`. También se aplicó `2026-11-21_separar_zonas_de_localidades.sql` (ver fila siguiente) y se forzó `NOTIFY pgrst, 'reload schema'` — ahora `aplicar_migracion.py` lo hace solo al final de cada migración, porque el caché de esquema de PostgREST no se refresca solo al instante (mismo síntoma ya visto con `lightdata_cuentas` el 20/11, esta vez además agravado por el bug de grants). Se documenta como regla permanente en memoria del asistente (no solo en este repo) por ser la segunda vez que pasa. |
+| 2026-11-21 | **Revertido el pedido de unificación Zona+Localidad del 20/11, a pedido explícito del usuario**: Zona vuelve a ser su propio ABM parametrizable (`parametros_zonas`, nunca se había borrado), y `parametros_localidades` se asocia a ella por `zona_id` (FK) en vez del `zona` de texto libre agregado el 20/11 — ese texto libre se borra (`2026-11-21_separar_zonas_de_localidades.sql`, sin pérdida de datos: nadie había llegado a cargar zona/cp/cordón todavía). CP y Cordón de la localidad quedan igual que antes. Se revierten también los 3 lugares que habían pasado a usar `abmLocalidades.obtenerZonasActivas()` (Zona de Asistencia×2, filtro de Zona de "Envíos") — vuelven a `abmZonas.obtenerActivos()`. |
+| 2026-11-21 | **"Precios por Cliente" se mueve adentro del módulo de Clientes** (a pedido del usuario: el precio se asocia 1 a 1 a cada cliente, no tiene sentido una sección aparte) — se borra la pantalla/nav separada, y la grilla de Clientes agrega un botón ($) por fila (`abrirPreciosCliente()`, mismo modal de siempre) y una columna "Tipo de Servicio" que muestra si ya tiene tarifario configurado. |
+| 2026-11-21 | **Bug real de CSS, global, no solo de "Localidades"**: el multiselect de un campo de modal (ej. "Localidades" del ABM de Repartidores) salía más angosto que el campo — `.panel-multiselect{width:100%}` y `.panel-filtros-ruta{width:220px}` tienen la MISMA especificidad (1 clase cada una), así que ganaba la que estuviera más abajo en el archivo CSS (`.panel-filtros-ruta`, por simple orden de aparición), sin importar la intención de ninguna de las dos reglas. Se cambia el selector a `.panel-filtros-ruta.panel-multiselect` (2 clases, gana sin depender del orden) — corrige TODOS los multiselect de la app de una sola vez, no solo Localidades. |
+| 2026-11-21 | **Modal de detalle de Cliente con tamaño fijo** (antes crecía con la cantidad de cuentas vinculadas y podía salirse de la pantalla): `.modal-card` de ese modal queda con `max-height:80vh`, y la lista de cuentas asociadas scrollea adentro en un contenedor propio (`.tabla-cuentas-cliente-scroll`, `max-height:220px`) en vez de estirar todo el modal. |
+| 2026-11-21 | **Títulos de columna centrados en la grilla de "Envíos"** (pedido puntual de esa pantalla, no un cambio global de estilo de tabla). |
+| 2026-11-21 | **Regla 16 de sección 1 (nueva): "consultar solo lo que se necesita"**, a partir de un pedido de performance del usuario sobre el módulo de Configuración. Análisis real de tamaños antes de decidir qué hacer (conteo directo contra la base): las tablas de parámetros chicas (Vehículos 6, Zonas 5, Turnos 6, Cordones 4, Tamaños de paquete 3, Sectores 2, Localidades 47) son chicas de verdad — agregarles paginado real sería complejidad sin beneficio. Los dos casos que sí pesan son `choferes_roster` (858 filas, toda la plantilla histórica) y `lightdata_clientes`+`lightdata_cuentas` (296+496). Para esos dos, en vez de construir paginado server-side completo (que para Choferes exigiría rehacer los 5 filtros combinados + la búsqueda contra una tabla con join + el contador de "pendientes", con alto riesgo de romper algo ya probado, para un ahorro real chico — 858 filas planas no son un problema serio de bandwidth/render), se aplicaron 2 optimizaciones de bajo riesgo y alto impacto real: (1) **caching de sesión**: `crearAbmSimple()`/`crearAbmLocalidades()`/`cargarAdminChoferes()`/`cargarAdminClientes()` ahora piden sus datos una sola vez por sesión (flag `cargado`), no cada vez que se vuelve a entrar a esa pantalla — antes, visitar "Repartidores" dos veces volvía a pedir Vehículos+Localidades+Cordones+Zonas+858 choferes+lightdata_usuarios de cero las dos veces. (2) **Clientes: el dato pesado se difiere al detalle** — la grilla de 296 clientes antes traía las 496 filas completas de `lightdata_cuentas` (7 columnas de IDs externos) solo para mostrar un número; ahora pide apenas la columna `did_cliente` para contar, y las columnas completas de cuentas se piden recién al abrir "Ver detalle" de UN cliente. Mismo criterio para `select("*")` → columnas explícitas en `lightdata_clientes`/`precios_cliente`. |
+| 2026-11-21 | **3 ajustes más tras la primera prueba visual de Clientes/Precios**: (1) el fix de tamaño fijo del modal de detalle de Cliente (fila anterior) quedó mal — angostaba el modal y generaba doble scroll; se revierte el ancho/alto forzado del modal entero, dejando SOLO la lista de cuentas con su propio tope de alto (`.tabla-cuentas-cliente-scroll`), que alcanza por sí solo (el resto del contenido del modal es chico y fijo). (2) Títulos de las 2 matrices del modal de Precios por cliente, centrados (no se habían aplicado la primera vez). (3) Los inputs de precio pasan de `type="number"` a `type="text"` con formato moneda argentino ($ 0.000,00) — un `<input type="number">` nativo no puede mostrar separador de miles ni el símbolo "$", el navegador lo rechaza como valor inválido. Se agregan `formatearMoneda()`/`parsearMoneda()` (siempre se guarda el número parseado en la base, nunca el string formateado) y se reformatea el campo al perder el foco (`focusout` delegado, no en cada tecla — saltaría el cursor). |
