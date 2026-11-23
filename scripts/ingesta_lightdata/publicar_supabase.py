@@ -115,7 +115,11 @@ def construir_filas(df: pd.DataFrame) -> list[dict]:
             "logistica_inversa": texto_o_none(fila.get("Logistica Inversa")),
             "observaciones": texto_o_none(fila.get("Observaciones")),
             "cadete": texto_o_none(fila.get("Cadete")),
-            "fecha_mercadopacks": fecha_mp_iso[:10] if fecha_mp_iso else None,
+            # Pedido 2026-11-23: antes se truncaba a solo fecha ([:10]) aunque
+            # Lightdata manda hora real — la columna pasó de `date` a
+            # `timestamptz` (ver migración
+            # 2026-11-23_fecha_mercadopacks_con_hora.sql) para no perderla.
+            "fecha_mercadopacks": fecha_mp_iso,
             "fecha_estado": parsear_fecha(fila.get("Fecha estado")),
             "fecha_asignacion": parsear_fecha(fila.get("Fecha de asignación")),
             "fecha_a_planta": parsear_fecha(fila.get("Fecha a planta")),

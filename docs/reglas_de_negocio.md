@@ -526,3 +526,130 @@ Reglas de negocio confirmadas con el usuario (2026-11-16):
 | 2026-11-21 | **Títulos de columna centrados en la grilla de "Envíos"** (pedido puntual de esa pantalla, no un cambio global de estilo de tabla). |
 | 2026-11-21 | **Regla 16 de sección 1 (nueva): "consultar solo lo que se necesita"**, a partir de un pedido de performance del usuario sobre el módulo de Configuración. Análisis real de tamaños antes de decidir qué hacer (conteo directo contra la base): las tablas de parámetros chicas (Vehículos 6, Zonas 5, Turnos 6, Cordones 4, Tamaños de paquete 3, Sectores 2, Localidades 47) son chicas de verdad — agregarles paginado real sería complejidad sin beneficio. Los dos casos que sí pesan son `choferes_roster` (858 filas, toda la plantilla histórica) y `lightdata_clientes`+`lightdata_cuentas` (296+496). Para esos dos, en vez de construir paginado server-side completo (que para Choferes exigiría rehacer los 5 filtros combinados + la búsqueda contra una tabla con join + el contador de "pendientes", con alto riesgo de romper algo ya probado, para un ahorro real chico — 858 filas planas no son un problema serio de bandwidth/render), se aplicaron 2 optimizaciones de bajo riesgo y alto impacto real: (1) **caching de sesión**: `crearAbmSimple()`/`crearAbmLocalidades()`/`cargarAdminChoferes()`/`cargarAdminClientes()` ahora piden sus datos una sola vez por sesión (flag `cargado`), no cada vez que se vuelve a entrar a esa pantalla — antes, visitar "Repartidores" dos veces volvía a pedir Vehículos+Localidades+Cordones+Zonas+858 choferes+lightdata_usuarios de cero las dos veces. (2) **Clientes: el dato pesado se difiere al detalle** — la grilla de 296 clientes antes traía las 496 filas completas de `lightdata_cuentas` (7 columnas de IDs externos) solo para mostrar un número; ahora pide apenas la columna `did_cliente` para contar, y las columnas completas de cuentas se piden recién al abrir "Ver detalle" de UN cliente. Mismo criterio para `select("*")` → columnas explícitas en `lightdata_clientes`/`precios_cliente`. |
 | 2026-11-21 | **3 ajustes más tras la primera prueba visual de Clientes/Precios**: (1) el fix de tamaño fijo del modal de detalle de Cliente (fila anterior) quedó mal — angostaba el modal y generaba doble scroll; se revierte el ancho/alto forzado del modal entero, dejando SOLO la lista de cuentas con su propio tope de alto (`.tabla-cuentas-cliente-scroll`), que alcanza por sí solo (el resto del contenido del modal es chico y fijo). (2) Títulos de las 2 matrices del modal de Precios por cliente, centrados (no se habían aplicado la primera vez). (3) Los inputs de precio pasan de `type="number"` a `type="text"` con formato moneda argentino ($ 0.000,00) — un `<input type="number">` nativo no puede mostrar separador de miles ni el símbolo "$", el navegador lo rechaza como valor inválido. Se agregan `formatearMoneda()`/`parsearMoneda()` (siempre se guarda el número parseado en la base, nunca el string formateado) y se reformatea el campo al perder el foco (`focusout` delegado, no en cada tecla — saltaría el cursor). |
+
+---
+
+## Changelog 2026-11-22 — Envíos (filtro/columnas/bugs) + nueva sección Picking Tamaños
+
+1. **Envíos (listado):** el filtro de fecha por defecto pasa de 30 a 7 días
+   (`fechaART(-6)`), para no cargar tantos datos de entrada.
+2. **Envíos (listado):** columnas reordenadas a Fecha Mercadopacks, Origen,
+   Tracking, ID de venta, Cliente, Localidad, Dirección, Zona, Tamaño,
+   Estado (se saca "Repartidor" de la grilla principal — sigue disponible
+   en el detalle). "Dirección" reusa `direccionDe()` ya existente de
+   Fallidos (embed por FK a `envios_contacto_destinatario`).
+3. **Fix real, 2 bugs distintos en el popover "Filtrar" de Envíos** (no es
+   el mismo bug de ancho ya corregido antes):
+   - `.panel-filtros-ruta{right:0}` anclaba el panel por la derecha,
+     abriéndolo hacia la izquierda del botón. Se agregó el modificador
+     opt-in `.panel-filtros-ruta.abre-derecha{left:0; right:auto;}`,
+     aplicado solo al popover de Envíos — los demás popovers "Filtrar" del
+     sistema siguen anclados a la derecha (eran correctos así).
+   - `.combo-filtro-lista` no tenía `max-width` (solo `min-width:100%`) y
+     usa `white-space:nowrap` — una opción larga (ej. nombre de cliente)
+     estiraba la lista más ancha que el panel de 220px que la contiene. Se
+     acotó con `.panel-filtros-ruta .combo-filtro-lista{max-width:100%;
+     white-space:normal;}`, scopeado solo dentro de `.panel-filtros-ruta`
+     para no angostar combos sueltos de otras pantallas.
+4. **Nueva sección "Picking Tamaños"** (sidebar, ítem propio, no dentro de
+   Configuración): puerto de la planilla vieja (Picking.txt/Codigo.txt) a
+   Supabase. Pantalla de escaneo con foco pegajoso (input autofocus, se
+   re-enfoca solo mientras la vista está activa), parseo de prefijo
+   `GRA-`/`MED-` → Grande/Mediano ("Pequeño" nunca se escanea, es el
+   default implícito) y la misma regex anti-falsos-positivos de
+   `did`/`tracking_number`/`id` que la planilla.
+   - Tabla nueva `picking_tamanos` (migración
+     `2026-11-22_picking_tamanos.sql`, con grants explícitos desde el
+     vamos — ver regla de grants). Sin vaciado nocturno: todo el historial
+     vive en la misma tabla (a diferencia de la planilla, acá no hay
+     límite práctico de filas).
+   - Unique index parcial en `id_normalizado` (excluye `'Revisar_Manual'`,
+     que se repite legítimamente) para poder hacer upsert: reescanear el
+     mismo paquete con otro tamaño pisa el escaneo anterior.
+   - Cruce automático e inmediato con Envíos: al guardar cada escaneo se
+     hace `update` de `envios.tamano` por `id_interno` o `tracking`
+     (columna nueva, default `'Pequeño'`) — no hay botón manual de
+     "actualizar cruces" como en la planilla vieja, el escaneo es la
+     fuente de verdad y el último escaneo real siempre gana.
+
+---
+
+## Changelog 2026-11-23 — Picking Tamaños (rediseño), Mapeo Localidad→Cordón, fecha con hora
+
+1. **Picking Tamaños rediseñado**: pasó de ser una sola pantalla de escaneo
+   a tener el mismo estilo que el resto del sistema — buscador + filtro de
+   fecha (por defecto "hoy", se resetea cada vez que se entra a la
+   pantalla) + botón "Escanear" que abre un modal. El modal es un log de
+   actividad puro (cada escaneo agrega su propia línea, "NUEVO"/"🔄
+   CORREGIDO", nunca se dedupea ni se reemplaza — igual que `Lector.html`
+   de la planilla vieja), acotado a ~6 filas visibles con scroll propio
+   para que no se agrande de más. La grilla de atrás sí persiste y se
+   refresca al cerrar el modal o al escanear si el filtro está en "hoy".
+   - Bug real: el primer `upsert({onConflict})` fallaba siempre porque el
+     unique index de `id_normalizado` es parcial (excluye
+     `'Revisar_Manual'`) y Postgres no puede resolver `ON CONFLICT
+     (columna)` contra un índice parcial sin repetir la condición ahí
+     mismo — se resolvió con un select-then-update/insert manual en vez de
+     depender de `upsert`.
+   - `scripts/importar_picking_historico.py`: importa el histórico real
+     (`Picking_Historica.xlsx`) solo del mes pedido, deduplicado por
+     `id_normalizado` quedándose con el escaneo más reciente.
+2. **`fecha_mercadopacks` pasó de `date` a `timestamptz`**: Lightdata
+   manda hora real para ese campo, pero `publicar_supabase.py` la
+   truncaba a propósito (`[:10]`). Esto obligó a reescribir 2 funciones
+   SQL que comparaban por igualdad/`between` exacto de fecha
+   (`choferes_en_ruta`, `resumen_envios`) para comparar por RANGO de día
+   en huso horario ART explícito — si no, romperían la pantalla de
+   Seguimiento en Ruta y el Dashboard de Envíos enteros. `diasDesde()` y
+   `formatearFechaHora()` también se ajustaron para convertir
+   correctamente un timestamp UTC a su "día ART" (un envío de las 23:50
+   ART cae en el día siguiente en UTC).
+3. **Mapeo Localidad+CP → Cordón** (puerto de la hoja `Base_Zonas`):
+   `envios.zona` es el dato crudo de Lightdata y no es confiable del todo
+   (ej. "Buenos Aires" en Lightdata es una sola zona, pero según el CP real
+   puede ser CABA, GBA1 o GBA2). Se agregó `envios.cordon_id` (resuelto
+   por Localidad+CP contra una tabla nueva `parametros_localidad_cps`,
+   hija de `parametros_localidades` porque una misma localidad puede caer
+   en más de un Cordón según el CP — confirmado con datos reales, 8
+   localidades de `Base_Zonas` así lo hacían). `envios.zona` queda intacto
+   como referencia, nunca se pisa.
+   - Cruce bidireccional por triggers (mismo patrón que Tamaño): un envío
+     nuevo busca su cordón solo (cascada CP+Localidad → CP → Localidad,
+     igual a `actualizarCruces()` de la planilla vieja, incluida la
+     limpieza de CP tipo `limpiarCP()` vía `normalizar_cp_localidad()`); si
+     no matchea, se encola automáticamente como pendiente. Clasificar un
+     CP a mano re-aplica el cordón a los envíos existentes.
+   - Bug real de grants: los triggers son `SECURITY INVOKER` — cuando los
+     dispara un usuario autenticado (no el pipeline de ingesta), el
+     `UPDATE` interno sobre `envios` corre con SUS permisos, y
+     `authenticated` nunca tuvo grant de escritura ahí (solo lectura,
+     separar del pipeline fue intencional). Se agregó
+     `grant update (tamano, cordon_id) on envios to authenticated` —
+     acotado a esas 2 columnas, el resto del envío sigue de solo lectura
+     para la app. Este mismo bug afectaba al cruce de Tamaño desde el
+     principio, pero quedaba oculto porque el código viejo hacía ese
+     `UPDATE` aparte (no atómico con el insert) y solo lo logueaba a
+     consola sin avisar en pantalla.
+   - Pantalla de Localidades rediseñada: ahora es una lista plana (sin
+     agrupar/expandir) de Localidad+CP+Cordón, con badge "Sin clasificar"
+     para los pendientes, filtro "Ver solo pendientes", y un botón
+     "Resincronizar envíos" (`resincronizar_cordones_envios()`, función
+     `SECURITY DEFINER` para no tener que ampliar más el grant de
+     `envios`) para re-aplicar el cruce a mano si el trigger llegara a
+     fallar para algún envío puntual.
+   - Filtro de Envíos: "Zona" se renombra a "Cordón" y se reconecta — el
+     combo estaba mal cableado desde siempre (comparaba `ilike` contra
+     `envios.zona` usando las opciones de `abmZonas`, la asignación
+     geográfica de repartidores — dos vocabularios que nunca podían
+     matchear). Incluye la opción "Sin clasificar" para encontrar los
+     pendientes directo desde Envíos.
+4. **Alerta de "Configuración" en el sidebar**: 2 badges numéricos sueltos
+   (choferes pendientes + localidades pendientes) se reemplazaron por un
+   solo punto de alerta — avisa que hay algo pendiente sin decir cuánto
+   (el número exacto sigue viéndose adentro de cada sub-sección). Bug
+   real: la primera versión usaba un ícono Lucide (`<i data-lucide>`) con
+   un `id` fijo — `lucide.createIcons()` reemplaza ese `<i>` por un `<svg>`
+   nuevo que no conserva el `id`, así que la segunda vez que el código
+   buscaba el elemento por ese id no lo encontraba y fallaba en silencio.
+   Se cambió a un `<span>` simple (nunca tocado por Lucide), mismo
+   criterio que ya usan el resto de los `nav-contador` del sistema.

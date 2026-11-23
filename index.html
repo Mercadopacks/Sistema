@@ -422,6 +422,18 @@
   .badge.naranja{background:#fff1e0; color:#b85c00;}
   .badge.gris{background:#f0efe9; color:#777;}
   .nav-contador{background:#c0392b; color:#fff; font-size:11px; font-weight:700; line-height:1; padding:2px 6px; border-radius:10px; margin-left:auto;}
+  /* Alerta genérica (pedido 2026-11-23): reemplaza mostrar números sueltos
+     en el ítem "Configuración" del sidebar — solo avisa QUE hay algo
+     pendiente, sin decir cuánto (el detalle numérico queda adentro de cada
+     sub-sección, donde sí es útil). Un <span> simple, NO un ícono Lucide:
+     lucide.createIcons() reemplaza un <i data-lucide> por un <svg> nuevo
+     que no conserva el id — bug real 2026-11-23, el badge dejaba de
+     encontrarse por getElementById después del primer render de íconos. */
+  .nav-alerta-pendiente{
+    width:9px; height:9px; border-radius:50%; background:#c0392b;
+    margin-left:auto; flex-shrink:0; box-shadow:0 0 0 2px rgba(255,255,255,.4);
+  }
+  .sidebar.colapsado .nav-item .nav-alerta-pendiente{position:absolute; top:8px; right:8px; margin-left:0;}
   .fila-pendiente-completar{background:#fff9ee;}
   /* Punto "pendiente de completar" (pedido 2026-11-17: antes era un badge
      grande al lado del nombre, ahora un punto chico con el detalle en el
@@ -583,6 +595,22 @@
   th.ordenable .flecha.activa{color:var(--negro); font-weight:700;}
   .btn-pendientes{font-size:12px; padding:5px 10px; border-radius:8px; font-weight:700;}
 
+  /* ===================== Picking Tamaños ===================== */
+  .modal-escaneo-picking-card{max-width:480px;}
+  .input-picking-tamanos{
+    width:100%; font-size:16px; padding:14px; text-align:center; box-sizing:border-box;
+    border:2px solid var(--dorado); border-radius:8px; font-family:inherit; color:var(--negro);
+  }
+  .input-picking-tamanos:focus{outline:none; box-shadow:0 0 0 3px rgba(246,190,5,.25);}
+  /* Pedido 2026-11-23: tope de ~6 escaneos visibles (el log puede crecer
+     sin límite durante una sesión larga de escaneo) para que el modal no
+     se agrande y se salga de la pantalla — scroll propio a partir de ahí. */
+  .picking-tamanos-historial{margin-top:16px; display:flex; flex-direction:column; gap:6px; max-height:264px; overflow-y:auto;}
+  .picking-item{padding:9px 14px; border-radius:8px; font-size:13px; border:1px solid var(--borde); background:#fff;}
+  .picking-item.ok{border-color:#1e7e3c; color:#1e7e3c;}
+  .picking-item.error{border-color:#c0392b; color:#c0392b;}
+  .picking-item.procesando{border-color:#b9700a; color:#b9700a;}
+
   /* ===================== ABM (Administración): modal + columna Opciones ===================== */
   .btn-secundario-modal{
     background:#fff; color:var(--negro); border:1px solid var(--borde); padding:9px 16px;
@@ -617,6 +645,7 @@
   .btn-icono-chico svg{width:15px; height:15px;}
   .fila-inactiva{color:#999;}
   .badge-inactivo{background:#f0efe9; color:#999; font-size:11px; padding:2px 8px; border-radius:10px; margin-left:6px;}
+  .badge-pendiente-cordon{background:#fff4e5; color:#b9700a; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px;}
   .buscar-mas-filtrar{display:flex; align-items:center; gap:10px; margin-bottom:14px;}
   .buscar-mas-filtrar .buscador{flex:1; max-width:280px; min-width:0; margin-bottom:0;}
   .buscar-mas-filtrar .combo-filtro{width:auto; flex-shrink:0;}
@@ -632,6 +661,21 @@
     background:#fff; border:1px solid var(--borde); border-radius:10px;
     box-shadow:0 10px 24px rgba(17,17,17,.16); padding:14px; display:flex; flex-direction:column; gap:12px;
   }
+  /* Pedido 2026-11-22: el popover "Filtrar" de Envíos abría hacia la
+     IZQUIERDA del botón (ancla por right:0, de arriba) y se veía fuera de
+     lugar — acá se ancla por la izquierda en cambio. Modificador opt-in
+     (no se toca el default de los otros popovers "Filtrar" del sistema,
+     que sí están bien anclados a la derecha). */
+  .panel-filtros-ruta.abre-derecha{left:0; right:auto;}
+  /* Pedido 2026-11-22: los combo-filtro-lista de adentro de un
+     panel-filtros-ruta (Estado/Origen/Cliente/etc.) se salían del panel de
+     220px porque .combo-filtro-lista no tiene max-width (solo min-width:
+     100%) y usa white-space:nowrap — una opción larga (p.ej. un nombre de
+     cliente) empuja la lista a ser más ancha que el panel que la contiene.
+     Acotado solo DENTRO de .panel-filtros-ruta para no angostar los combos
+     sueltos de otras pantallas, que si quieren ensancharse para mostrar
+     texto largo no tienen ese problema de contenedor. */
+  .panel-filtros-ruta .combo-filtro-lista{max-width:100%; white-space:normal;}
   /* DIV, no <label>: un <label> alrededor de un combo hace que el
      navegador reenvíe el click de cualquier <li> de adentro al PRIMER
      control "labelable" que encuentre (el botón del combo) — eso es lo
@@ -702,6 +746,9 @@
       <button class="nav-item" data-vista="fallidos">
         <i data-lucide="rotate-ccw"></i><span class="texto">Fallidos y Cambios</span>
       </button>
+      <button class="nav-item" data-vista="picking-tamanos">
+        <i data-lucide="scan-line"></i><span class="texto">Picking Tamaños</span>
+      </button>
       <div class="nav-group">
         <div class="nav-group-label" data-grupo="repartidores">
           <i data-lucide="truck"></i><span class="texto">Seguimiento de Repartidores</span>
@@ -722,7 +769,7 @@
            (pedido 2026-11-16, ver .config-sidebar más abajo). -->
       <button class="nav-item" data-vista="admin">
         <i data-lucide="settings"></i><span class="texto">Configuración</span>
-        <span class="nav-contador" id="contador-choferes-pendientes" hidden>0</span>
+        <span class="nav-alerta-pendiente" id="icono-pendientes-config" hidden title="Hay elementos pendientes de completar"></span>
       </button>
     </nav>
   </div>
@@ -837,7 +884,7 @@
               <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
                 <i data-lucide="sliders-horizontal"></i>Filtrar
               </button>
-              <div class="panel-filtros-ruta" hidden>
+              <div class="panel-filtros-ruta abre-derecha" hidden>
                 <div class="panel-filtros-ruta-campo">Estado
                   <div class="combo-filtro" id="combo-estado-envios-listado">
                     <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
@@ -876,6 +923,17 @@
                     </ul>
                   </div>
                 </div>
+                <div class="panel-filtros-ruta-campo">Tamaño
+                  <div class="combo-filtro" id="combo-tamano-filtro-envios-listado">
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                    <ul class="combo-filtro-lista" role="listbox" hidden>
+                      <li data-valor="" aria-selected="true">Todos</li>
+                      <li data-valor="Pequeño">Pequeño</li>
+                      <li data-valor="Mediano">Mediano</li>
+                      <li data-valor="Grande">Grande</li>
+                    </ul>
+                  </div>
+                </div>
                 <!-- Cliente/Localidad/Zona/Repartidor (pedido 2026-11-20:
                      "filtrar por todos los datos que contenga la tabla") —
                      se arrancan con un solo <li> "Todos", el resto de
@@ -901,11 +959,11 @@
                     </ul>
                   </div>
                 </div>
-                <div class="panel-filtros-ruta-campo">Zona
+                <div class="panel-filtros-ruta-campo">Cordón
                   <div class="combo-filtro" id="combo-zona-envios-listado">
-                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todas</button>
+                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
                     <ul class="combo-filtro-lista" role="listbox" hidden>
-                      <li data-valor="" aria-selected="true">Todas</li>
+                      <li data-valor="" aria-selected="true">Todos</li>
                     </ul>
                   </div>
                 </div>
@@ -924,8 +982,9 @@
             <table>
               <thead>
                 <tr>
-                  <th>Tracking</th><th>ID de venta</th><th>Cliente</th><th>Localidad</th><th>Zona</th>
-                  <th>Repartidor</th><th>Origen</th><th>Estado</th><th>Fecha Mercadopacks</th>
+                  <th>Fecha<br>Mercadopacks</th><th>Origen</th><th>Tracking</th><th>ID de venta</th>
+                  <th>Cliente</th><th>Localidad</th><th>Dirección</th><th>Cordón</th><th>Tamaño</th>
+                  <th>Estado</th>
                   <th class="col-opciones">Opciones</th>
                 </tr>
               </thead>
@@ -948,6 +1007,26 @@
               <button type="button" class="btn-icono" id="btn-envios-listado-anterior" title="Página anterior"><i data-lucide="chevron-left"></i></button>
               <button type="button" class="btn-icono" id="btn-envios-listado-siguiente" title="Página siguiente"><i data-lucide="chevron-right"></i></button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="vista-picking-tamanos" hidden>
+        <div class="card">
+          <div class="buscar-mas-filtrar">
+            <input id="buscar-picking-tamanos" class="buscador" placeholder="Buscar por ID, tracking o escaneo…" />
+            <input type="date" id="picking-tamanos-fecha" />
+            <button type="button" class="btn-filtrar" id="btn-abrir-escaneo-picking">
+              <i data-lucide="scan-line"></i>Escanear
+            </button>
+          </div>
+          <div class="tabla-scroll">
+            <table>
+              <thead>
+                <tr><th>Hora</th><th>Tamaño</th><th>ID normalizado</th><th>Tipo de envío</th></tr>
+              </thead>
+              <tbody id="tabla-picking-tamanos"></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1350,7 +1429,7 @@
             <button class="config-nav-item" data-modo-admin-link="vehiculos"><i data-lucide="car"></i><span>Vehículos</span></button>
             <button class="config-nav-item" data-modo-admin-link="zonas"><i data-lucide="map"></i><span>Zonas</span></button>
             <button class="config-nav-item" data-modo-admin-link="turnos"><i data-lucide="clock"></i><span>Turnos</span></button>
-            <button class="config-nav-item" data-modo-admin-link="localidades"><i data-lucide="map-pinned"></i><span>Localidades</span></button>
+            <button class="config-nav-item" data-modo-admin-link="localidades"><i data-lucide="map-pinned"></i><span>Localidades</span><span class="nav-contador" id="contador-localidades-pendientes-submenu" hidden>0</span></button>
             <button class="config-nav-item" data-modo-admin-link="tamanos-paquete"><i data-lucide="box"></i><span>Tamaños de paquete</span></button>
             <button class="config-nav-item" data-modo-admin-link="cordones"><i data-lucide="map"></i><span>Cordones</span></button>
             <button class="config-nav-item" data-modo-admin-link="alertas"><i data-lucide="bell"></i><span>Umbrales de alerta</span></button>
@@ -1506,13 +1585,19 @@
              su CP y su cordón (elegido del ABM de Cordones, de ahí abajo). -->
         <div id="admin-localidades" hidden>
           <div class="card">
+            <p class="texto-muted" style="margin-bottom:10px;">
+              Mapeo de Localidad + CP → Cordón, usado para corregir la "Zona" que trae Lightdata (no siempre confiable) en la pantalla de Envíos.
+              Las filas marcadas <span class="badge-pendiente-cordon">Sin clasificar</span> se agregaron solas porque llegó un envío con esa combinación y no había cordón cargado todavía.
+            </p>
             <div class="buscar-mas-filtrar">
-              <input id="buscar-admin-localidades" class="buscador" placeholder="Buscar localidad, zona o CP…" />
+              <input id="buscar-admin-localidades" class="buscador" placeholder="Buscar localidad o CP…" />
+              <button type="button" class="btn-filtrar" id="btn-ver-solo-pendientes-localidades" aria-expanded="false"><i data-lucide="filter"></i>Ver solo pendientes</button>
+              <button type="button" class="btn-filtrar" id="btn-resincronizar-cordones" title="Busca otra vez el cordón de todos los envíos que quedaron sin clasificar (por si el cruce automático falló para alguno)"><i data-lucide="refresh-cw"></i>Resincronizar envíos</button>
               <button type="button" class="btn-filtrar" id="btn-agregar-localidad"><i data-lucide="plus"></i>Agregar localidad</button>
             </div>
             <div class="tabla-scroll">
               <table>
-                <thead><tr><th>Localidad</th><th>Zona</th><th>CP</th><th>Cordón</th><th>Activa</th><th class="col-opciones">Opciones</th></tr></thead>
+                <thead><tr><th>Localidad</th><th>CP</th><th>Cordón</th><th class="col-opciones">Opciones</th></tr></thead>
                 <tbody id="tabla-admin-localidades"></tbody>
               </table>
             </div>
@@ -1771,6 +1856,17 @@
     <div id="modal-detalle-cliente-cuerpo"></div>
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
       <button type="button" class="btn-secundario-modal" id="modal-detalle-cliente-cerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-escaneo-picking" hidden>
+  <div class="modal-card modal-escaneo-picking-card">
+    <h3 style="margin-top:0;">Escanear paquetes</h3>
+    <input type="text" id="input-picking-tamanos" class="input-picking-tamanos" placeholder="Esperando escáner…" autocomplete="off" />
+    <div id="picking-tamanos-historial" class="picking-tamanos-historial"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+      <button type="button" class="btn-secundario-modal" id="modal-escaneo-picking-cerrar">Cerrar</button>
     </div>
   </div>
 </div>
@@ -2054,6 +2150,7 @@
     "envios": { titulo: "Dashboard de Envíos", icono: "package", el: document.getElementById("vista-envios") },
     "envios-listado": { titulo: "Envíos", icono: "list", el: document.getElementById("vista-envios-listado") },
     "fallidos": { titulo: "Fallidos y Cambios", icono: "rotate-ccw", el: document.getElementById("vista-fallidos") },
+    "picking-tamanos": { titulo: "Picking Tamaños", icono: "scan-line", el: document.getElementById("vista-picking-tamanos") },
     "repa-ruta": { titulo: "Seguimiento en Ruta", icono: "map-pin", el: document.getElementById("vista-repa-ruta") },
     "repa-asistencia": { titulo: "Asistencia de Repartidores", icono: "clipboard-check", el: document.getElementById("vista-repa-asistencia") },
     "repa-vivo": { titulo: "Operación en vivo", icono: "radio", el: document.getElementById("vista-repa-vivo") },
@@ -2103,6 +2200,14 @@
     if(v === "envios") cargarResumenEnvios();
     if(v === "envios-listado") inicializarFiltrosEnviosListado().then(()=> cargarEnviosListado(true));
     if(v === "fallidos") cargarFallidos();
+    if(v === "picking-tamanos"){
+      // Pedido 2026-11-23: siempre debe estar posicionado en "hoy" al
+      // entrar a la pantalla, aunque la vez anterior se haya quedado
+      // filtrando otro día.
+      statePickingTamanos.fecha = fechaART(0);
+      document.getElementById("picking-tamanos-fecha").value = statePickingTamanos.fecha;
+      cargarPickingTamanosGrid();
+    }
     if(v === "repa-ruta") cargarRuta();
     if(v === "repa-asistencia") cargarAsistencia();
     if(v === "repa-vivo") cargarOperacionVivo();
@@ -2130,6 +2235,24 @@
   // reglas_de_negocio.md), no la fecha cruda del navegador.
   function fechaART(offsetDias){
     const ms = Date.now() - 3 * 60 * 60 * 1000 + offsetDias * 24 * 60 * 60 * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+
+  // Pedido 2026-11-23: `envios.fecha_mercadopacks` pasó de `date` a
+  // `timestamptz` (ver migración 2026-11-23_fecha_mercadopacks_con_hora.sql)
+  // — estos 3 helpers arman los límites de día en ART de forma explícita
+  // (mismo criterio ART = UTC-3 fijo que usa parsear_fecha() en la
+  // ingesta), para no depender del timezone de sesión de Postgres al
+  // filtrar por fecha ni al calcular "día ART" de un timestamp.
+  function limiteDiaART(fechaStr){ return fechaStr + "T00:00:00-03:00"; }
+  function diaSiguienteStr(fechaStr){
+    const d = new Date(fechaStr + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+  function fechaArtDeIso(fechaISO){
+    if(!fechaISO) return null;
+    const ms = new Date(fechaISO).getTime() - 3 * 60 * 60 * 1000;
     return new Date(ms).toISOString().slice(0, 10);
   }
 
@@ -2481,11 +2604,17 @@
   // reglas_de_negocio.md sección 2, "Acceso por cliente"), así que esta
   // pantalla simplemente pide "todos los envíos del rango" y Supabase ya
   // devuelve solo los permitidos para quien está logueado.
-  const COLUMNAS_ENVIOS_LISTADO = "id_interno,tracking,id_venta_ml,cliente,localidad,zona,cadete,chofer_lightdata_id,did_cliente,origen,estado,fecha_mercadopacks,fecha_venta,fecha_estado,fecha_asignacion,fecha_a_planta,fecha_colecta,logistica_inversa,logistica_inversa_real,observaciones";
+  // `zona` (crudo de Lightdata, no confiable) ya no se trae para mostrar —
+  // "Cordón" (pedido 2026-11-23) viene de envios.cordon_id, resuelto por
+  // Localidad+CP (ver migración 2026-11-23_mapeo_localidad_cordon.sql),
+  // embebido por FK igual que envios_contacto_destinatario(direccion).
+  const COLUMNAS_ENVIOS_LISTADO = "id_interno,tracking,id_venta_ml,cliente,localidad,cordon_id,cadete,chofer_lightdata_id,did_cliente,origen,estado,fecha_mercadopacks,fecha_venta,fecha_estado,fecha_asignacion,fecha_a_planta,fecha_colecta,logistica_inversa,logistica_inversa_real,observaciones,tamano,envios_contacto_destinatario(direccion),parametros_cordones(nombre)";
 
+  // Pedido 2026-11-22: por defecto se filtra solo la última semana (antes
+  // traía 30 días) para no cargar tantos datos en pantalla de entrada.
   const stateEnviosListado = {
-    busqueda: "", estado: "", origen: "", cliente: "", localidad: "", zona: "", repartidor: "",
-    desde: fechaART(-29), hasta: fechaART(0),
+    busqueda: "", estado: "", origen: "", tamano: "", cliente: "", localidad: "", cordon: "", repartidor: "",
+    desde: fechaART(-6), hasta: fechaART(0),
     filas: [], paginaActual: 0, tamanoPagina: 10, total: 0, cargando: false,
   };
 
@@ -2494,18 +2623,20 @@
     // 2026-11-20: "un total de los registros que trajo la consulta"), no
     // solo la página actual.
     let q = sb.from("envios").select(COLUMNAS_ENVIOS_LISTADO, { count: "exact" })
-      .gte("fecha_mercadopacks", stateEnviosListado.desde)
-      .lte("fecha_mercadopacks", stateEnviosListado.hasta)
+      .gte("fecha_mercadopacks", limiteDiaART(stateEnviosListado.desde))
+      .lt("fecha_mercadopacks", limiteDiaART(diaSiguienteStr(stateEnviosListado.hasta)))
       .order("fecha_mercadopacks", { ascending: false });
     if(stateEnviosListado.estado) q = q.eq("estado", stateEnviosListado.estado);
     if(stateEnviosListado.origen) q = q.eq("origen", stateEnviosListado.origen);
+    if(stateEnviosListado.tamano) q = q.eq("tamano", stateEnviosListado.tamano);
     if(stateEnviosListado.cliente) q = q.eq("did_cliente", stateEnviosListado.cliente);
     // `ilike` (no `eq`) para localidad/zona: son texto libre de Lightdata,
     // mezcla de mayúsculas/minúsculas (Regla 15 de sección 1) — comparar
     // exacto contra el valor de `parametros_localidades`/`parametros_zonas`
     // (que sí está prolijo) fallaría en silencio contra el dato crudo.
     if(stateEnviosListado.localidad) q = q.ilike("localidad", stateEnviosListado.localidad);
-    if(stateEnviosListado.zona) q = q.ilike("zona", stateEnviosListado.zona);
+    if(stateEnviosListado.cordon === "sin_clasificar") q = q.is("cordon_id", null);
+    else if(stateEnviosListado.cordon) q = q.eq("cordon_id", stateEnviosListado.cordon);
     if(stateEnviosListado.repartidor) q = q.eq("chofer_lightdata_id", stateEnviosListado.repartidor);
     if(stateEnviosListado.busqueda){
       const b = stateEnviosListado.busqueda.replace(/[%,]/g, "");
@@ -2527,7 +2658,7 @@
     stateEnviosListado.cargando = false;
     if(error){
       console.error("Error cargando envíos:", error);
-      document.getElementById("tabla-envios-listado").innerHTML = `<tr><td colspan="10" class="sin-datos">Error cargando los datos.</td></tr>`;
+      document.getElementById("tabla-envios-listado").innerHTML = `<tr><td colspan="11" class="sin-datos">Error cargando los datos.</td></tr>`;
       return;
     }
     stateEnviosListado.filas = data || [];
@@ -2539,19 +2670,20 @@
     const tbody = document.getElementById("tabla-envios-listado");
     const filas = stateEnviosListado.filas;
     if(!filas.length){
-      tbody.innerHTML = `<tr><td colspan="10" class="sin-datos">Sin envíos para este filtro.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" class="sin-datos">Sin envíos para este filtro.</td></tr>`;
     } else {
       tbody.innerHTML = filas.map(e => `
         <tr data-id="${e.id_interno}">
+          <td>${formatearFechaHora(e.fecha_mercadopacks)}</td>
+          <td>${e.origen || "—"}</td>
           <td>${e.tracking || "—"}</td>
           <td>${e.id_venta_ml || "—"}</td>
           <td>${tituloTexto(e.cliente) || "—"}</td>
           <td>${tituloTexto(e.localidad) || "—"}</td>
-          <td>${tituloTexto(e.zona) || "—"}</td>
-          <td>${tituloTexto(nombreRepartidorFallido(e))}</td>
-          <td>${e.origen || "—"}</td>
+          <td>${direccionDe(e)}</td>
+          <td>${cordonDe(e) || '<span class="badge-pendiente-cordon">Sin clasificar</span>'}</td>
+          <td>${tituloTexto(e.tamano) || "Pequeño"}</td>
           <td>${tituloTexto(e.estado) || "—"}</td>
-          <td>${e.fecha_mercadopacks || "—"}</td>
           <td class="col-opciones">
             <span class="opciones-fila">
               <button type="button" class="btn-icono-chico ver" data-id="${e.id_interno}" title="Detalle"><i data-lucide="eye"></i></button>
@@ -2575,6 +2707,21 @@
     document.getElementById("btn-envios-listado-siguiente").disabled = paginaActual >= totalPaginas - 1;
   }
 
+  // "Fecha venta"/"Fecha estado"/"Fecha asignación"/"Fecha a planta"/
+  // "Fecha colecta" vienen de Lightdata como timestamptz completo — bug
+  // real 2026-11-23: se mostraban crudas ("2026-11-23T01:52:00+00:00") en
+  // vez de un formato legible. "Fecha Mercadopacks" NO pasa por acá: esa sí
+  // es solo fecha (sin hora), llega ya en "2026-11-22".
+  function formatearFechaHora(valor){
+    if(!valor) return "—";
+    const fecha = new Date(valor);
+    if(Number.isNaN(fecha.getTime())) return valor;
+    // timeZone explícito: regla del proyecto es ART fijo sin importar el
+    // huso horario del navegador/sistema operativo de quien mira la
+    // pantalla (mismo criterio que parsear_fecha() en la ingesta).
+    return fecha.toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
   function abrirDetalleEnvio(id){
     const e = stateEnviosListado.filas.find(x => String(x.id_interno) === String(id));
     if(!e) return;
@@ -2586,16 +2733,18 @@
       { icono: "shopping-cart", label: "ID de venta", valor: e.id_venta_ml || "—" },
       { icono: "building-2", label: "Cliente", valor: tituloTexto(e.cliente) || "—" },
       { icono: "map-pin", label: "Localidad", valor: tituloTexto(e.localidad) || "—" },
-      { icono: "map", label: "Zona", valor: tituloTexto(e.zona) || "—" },
+      { icono: "home", label: "Dirección", valor: direccionDe(e) },
+      { icono: "map", label: "Cordón", valor: cordonDe(e) || "Sin clasificar" },
+      { icono: "box", label: "Tamaño", valor: tituloTexto(e.tamano) || "Pequeño" },
       { icono: "truck", label: "Repartidor", valor: tituloTexto(nombreRepartidorFallido(e)) },
       { icono: "package", label: "Origen", valor: e.origen || "—" },
       { icono: "info", label: "Estado", valor: tituloTexto(e.estado) || "—" },
-      { icono: "calendar", label: "Fecha Mercadopacks", valor: e.fecha_mercadopacks || "—" },
-      { icono: "calendar", label: "Fecha venta", valor: e.fecha_venta || "—" },
-      { icono: "calendar", label: "Fecha estado", valor: e.fecha_estado || "—" },
-      { icono: "calendar", label: "Fecha asignación", valor: e.fecha_asignacion || "—" },
-      { icono: "calendar", label: "Fecha a planta", valor: e.fecha_a_planta || "—" },
-      { icono: "calendar", label: "Fecha colecta", valor: e.fecha_colecta || "—" },
+      { icono: "calendar", label: "Fecha Mercadopacks", valor: formatearFechaHora(e.fecha_mercadopacks) },
+      { icono: "calendar", label: "Fecha venta", valor: formatearFechaHora(e.fecha_venta) },
+      { icono: "calendar", label: "Fecha estado", valor: formatearFechaHora(e.fecha_estado) },
+      { icono: "calendar", label: "Fecha asignación", valor: formatearFechaHora(e.fecha_asignacion) },
+      { icono: "calendar", label: "Fecha a planta", valor: formatearFechaHora(e.fecha_a_planta) },
+      { icono: "calendar", label: "Fecha colecta", valor: formatearFechaHora(e.fecha_colecta) },
       { icono: "rotate-ccw", label: "Logística inversa", valor: esCambio ? "Sí" : "No" },
       { icono: "message-square", label: "Observaciones", valor: e.observaciones || "—", span: true },
     ];
@@ -2651,7 +2800,7 @@
   document.getElementById("envios-listado-desde").value = stateEnviosListado.desde;
   document.getElementById("envios-listado-hasta").value = stateEnviosListado.hasta;
   document.getElementById("envios-listado-desde").addEventListener("change", (e)=>{
-    stateEnviosListado.desde = e.target.value || fechaART(-29);
+    stateEnviosListado.desde = e.target.value || fechaART(-6);
     cargarEnviosListado(true);
   });
   document.getElementById("envios-listado-hasta").addEventListener("change", (e)=>{
@@ -2660,7 +2809,177 @@
   });
   crearComboGenerico("combo-estado-envios-listado", (valor)=>{ stateEnviosListado.estado = valor; cargarEnviosListado(true); });
   crearComboGenerico("combo-origen-envios-listado", (valor)=>{ stateEnviosListado.origen = valor; cargarEnviosListado(true); });
+  crearComboGenerico("combo-tamano-filtro-envios-listado", (valor)=>{ stateEnviosListado.tamano = valor; cargarEnviosListado(true); });
   crearPopoverGenerico("popover-filtros-envios-listado");
+
+  // ===================== Picking Tamaños =====================
+  // Puerto de la lógica de Picking.txt/Codigo.txt (planilla vieja): la
+  // pistola manda un string con prefijo GRA-/MED- (Grande/Mediano — el
+  // "Pequeño" nunca se escanea, es el default implícito de un envío que
+  // nunca pasó por acá) seguido de un JSON con el id/tracking/did del
+  // paquete. `picking_tamanos.id_normalizado` tiene un unique index parcial
+  // (excluye "Revisar_Manual") para poder hacer upsert — si el mismo
+  // paquete se escanea dos veces, el último escaneo pisa al anterior, igual
+  // que el "CORREGIDO" de la planilla vieja.
+  function detectarTamanoEscaneo(raw){
+    if(raw.startsWith("GRA-")) return "Grande";
+    if(raw.startsWith("MED-")) return "Mediano";
+    return null;
+  }
+  function extraerIdNormalizadoEscaneo(raw){
+    const matchDid = raw.match(/(?:^|[^a-zA-Z0-9_])"?did"?\s*:\s*"([^"{}\n\r]+)"/i);
+    const matchTracking = raw.match(/(?:^|[^a-zA-Z0-9_])"?tracking_number"?\s*:\s*"([^"{}\n\r]+)"/i);
+    const matchId = raw.match(/(?:^|[^a-zA-Z0-9_])"?[iï]d"?\s*:\s*"([^"{}\n\r]+)"/i);
+    if(matchDid) return { id: matchDid[1], tipo: "Directo" };
+    if(matchTracking) return { id: matchTracking[1], tipo: "Mercadolibre" };
+    if(matchId) return { id: matchId[1], tipo: "Mercadolibre" };
+    return { id: "Revisar_Manual", tipo: "Desconocido" };
+  }
+
+  async function registrarEscaneoPicking(raw){
+    const tamano = detectarTamanoEscaneo(raw);
+    if(!tamano) return { ok: false, msg: `Tamaño no detectado (${raw.slice(0, 15)}…)` };
+
+    const { id: idNormalizado, tipo: tipoEnvio } = extraerIdNormalizadoEscaneo(raw);
+
+    const filaEscaneo = { escaneo_crudo: raw, tamano, id_normalizado: idNormalizado, tipo_envio: tipoEnvio, creado_en: new Date().toISOString() };
+
+    // Dedup a mano (no `upsert({onConflict})`): el unique index de
+    // id_normalizado es PARCIAL (excluye "Revisar_Manual", que se repite
+    // legítimamente) — Postgres no puede resolver "ON CONFLICT (columna)"
+    // contra un índice parcial sin repetir su condición ahí mismo, y
+    // supabase-js no tiene forma de mandar esa condición extra. Sin esto,
+    // el upsert fallaba del lado del servidor para cualquier escaneo real
+    // (bug reportado 2026-11-22: "No se pudo guardar" en todo intento).
+    let error, esCorreccion = false;
+    if(idNormalizado !== "Revisar_Manual"){
+      const { data: existente, error: errBusqueda } = await sb.from("picking_tamanos")
+        .select("id").eq("id_normalizado", idNormalizado).maybeSingle();
+      if(errBusqueda){ console.error("Error buscando escaneo existente:", errBusqueda); return { ok: false, msg: "No se pudo guardar." }; }
+      esCorreccion = !!existente;
+      ({ error } = existente
+        ? await sb.from("picking_tamanos").update(filaEscaneo).eq("id", existente.id)
+        : await sb.from("picking_tamanos").insert(filaEscaneo));
+    } else {
+      ({ error } = await sb.from("picking_tamanos").insert(filaEscaneo));
+    }
+    if(error){ console.error("Error guardando escaneo de picking:", error); return { ok: false, msg: "No se pudo guardar." }; }
+
+    // El cruce con Envíos (punto 5) ya NO se hace desde acá — lo garantiza
+    // un trigger de Postgres en ambas direcciones (ver migración
+    // 2026-11-23_sincronizar_tamano_envios.sql), así cubre también el caso
+    // en que el envío todavía no existía al momento de escanear.
+
+    // Mismo wording que registrarEscaneoDesdePanel() de la planilla vieja
+    // (Codigo.txt): "NUEVO: ..." o "🔄 CORREGIDO a ...". Cada escaneo físico
+    // de la pistola tiene que verse como SU PROPIA línea en el historial —
+    // es un log de actividad, no una vista del estado actual de la tabla
+    // (ver Lector.html: nunca dedupeaba ni reemplazaba líneas anteriores).
+    return esCorreccion
+      ? { ok: true, msg: `🔄 CORREGIDO a ${tamano} — ${idNormalizado}` }
+      : { ok: true, msg: `NUEVO: ${tamano} — ${idNormalizado}` };
+  }
+
+  // Grilla principal (pedido 2026-11-23): ya no es una sola pantalla de
+  // escaneo — ahora es como cualquier otra pantalla del sistema (buscador +
+  // filtro de fecha + botón de acción), con una grilla de los escaneos del
+  // filtro elegido. Por default siempre arranca en "hoy" cada vez que se
+  // entra a la pantalla (el escaneo en vivo pasa a un modal aparte).
+  const statePickingTamanos = { busqueda: "", fecha: fechaART(0) };
+
+  function construirQueryPickingTamanos(){
+    const desde = statePickingTamanos.fecha + "T00:00:00";
+    const fechaSiguiente = new Date(statePickingTamanos.fecha + "T00:00:00");
+    fechaSiguiente.setDate(fechaSiguiente.getDate() + 1);
+    const hasta = fechaSiguiente.toISOString().slice(0, 10) + "T00:00:00";
+    let q = sb.from("picking_tamanos").select("*")
+      .gte("creado_en", desde).lt("creado_en", hasta)
+      .order("creado_en", { ascending: false });
+    if(statePickingTamanos.busqueda){
+      const b = statePickingTamanos.busqueda.replace(/[%,]/g, "");
+      q = q.or(`id_normalizado.ilike.%${b}%,escaneo_crudo.ilike.%${b}%`);
+    }
+    return q;
+  }
+
+  async function cargarPickingTamanosGrid(){
+    const tbody = document.getElementById("tabla-picking-tamanos");
+    const { data, error } = await construirQueryPickingTamanos();
+    if(error){
+      console.error("Error cargando picking_tamanos:", error);
+      tbody.innerHTML = `<tr><td colspan="4" class="sin-datos">Error cargando los datos.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = (data && data.length)
+      ? data.map(f => `
+        <tr>
+          <td>${new Date(f.creado_en).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</td>
+          <td>${f.tamano}</td>
+          <td>${f.id_normalizado}</td>
+          <td>${f.tipo_envio}</td>
+        </tr>
+      `).join("")
+      : `<tr><td colspan="4" class="sin-datos">Sin escaneos para este filtro.</td></tr>`;
+  }
+
+  document.getElementById("picking-tamanos-fecha").value = statePickingTamanos.fecha;
+  document.getElementById("picking-tamanos-fecha").addEventListener("change", (e)=>{
+    statePickingTamanos.fecha = e.target.value || fechaART(0);
+    cargarPickingTamanosGrid();
+  });
+  let debouncePickingTamanos = null;
+  document.getElementById("buscar-picking-tamanos").addEventListener("input", (e)=>{
+    statePickingTamanos.busqueda = e.target.value.trim();
+    clearTimeout(debouncePickingTamanos);
+    debouncePickingTamanos = setTimeout(cargarPickingTamanosGrid, 350);
+  });
+
+  // Modal de escaneo: sesión de escaneo en vivo (puerto de Lector.html —
+  // ver más abajo). El log de acciones del modal arranca vacío cada vez que
+  // se abre (no persiste entre aperturas, igual que la planilla vieja); la
+  // grilla de atrás sí persiste y se refresca al cerrar el modal.
+  const modalEscaneoPicking = document.getElementById("modal-escaneo-picking");
+  const inputPicking = document.getElementById("input-picking-tamanos");
+  function abrirModalEscaneoPicking(){
+    document.getElementById("picking-tamanos-historial").innerHTML = "";
+    modalEscaneoPicking.hidden = false;
+    inputPicking.focus();
+  }
+  function cerrarModalEscaneoPicking(){
+    modalEscaneoPicking.hidden = true;
+    cargarPickingTamanosGrid();
+  }
+  document.getElementById("btn-abrir-escaneo-picking").addEventListener("click", abrirModalEscaneoPicking);
+  document.getElementById("modal-escaneo-picking-cerrar").addEventListener("click", cerrarModalEscaneoPicking);
+  modalEscaneoPicking.addEventListener("click", (e)=>{
+    if(e.target.id === "modal-escaneo-picking") cerrarModalEscaneoPicking();
+  });
+  // Foco pegajoso (puerto de Lector.html): la pistola siempre tiene que
+  // encontrar el cursor en esta caja, sin que el operario tenga que
+  // clickearla — pero solo mientras el modal esté abierto.
+  inputPicking.addEventListener("blur", ()=>{
+    setTimeout(()=>{ if(!modalEscaneoPicking.hidden) inputPicking.focus(); }, 10);
+  });
+  inputPicking.addEventListener("keypress", async (e)=>{
+    if(e.key !== "Enter") return;
+    e.preventDefault();
+    const valor = inputPicking.value.trim();
+    inputPicking.value = "";
+    if(!valor) return;
+    const cont = document.getElementById("picking-tamanos-historial");
+    // Pedido 2026-11-23: mantener EXACTAMENTE la misma dinámica de
+    // Lector.html — cada escaneo agrega su propia línea (log de
+    // actividad, confirma que la pistola disparó), nunca se reemplaza ni
+    // se dedupea visualmente aunque sea el mismo paquete reescaneado.
+    const item = document.createElement("div");
+    item.className = "picking-item procesando";
+    item.textContent = "⏳ Procesando…";
+    cont.prepend(item);
+    const resultado = await registrarEscaneoPicking(valor);
+    item.className = "picking-item " + (resultado.ok ? "ok" : "error");
+    item.textContent = (resultado.ok ? "✅ " : "❌ ") + resultado.msg;
+    if(resultado.ok && statePickingTamanos.fecha === fechaART(0)) cargarPickingTamanosGrid();
+  });
 
   // Cliente/Localidad/Zona/Repartidor (pedido 2026-11-20): listas largas
   // que vienen de la base, no se pueden poner directo en el HTML como
@@ -2692,8 +3011,21 @@
     agregarOpcionesCombo("combo-localidad-envios-listado", abmLocalidades.obtenerActivos().map(n => ({ valor: n, texto: tituloTexto(n) })));
     crearComboGenerico("combo-localidad-envios-listado", (valor)=>{ stateEnviosListado.localidad = valor; cargarEnviosListado(true); });
 
-    agregarOpcionesCombo("combo-zona-envios-listado", abmZonas.obtenerActivos().map(n => ({ valor: n, texto: tituloTexto(n) })));
-    crearComboGenerico("combo-zona-envios-listado", (valor)=>{ stateEnviosListado.zona = valor; cargarEnviosListado(true); });
+    // Pedido 2026-11-23: este combo estaba mal conectado desde siempre —
+    // filtraba contra abmZonas (CABA/ZONA NORTE/ZONA SUR…, la asignación
+    // geográfica de repartidores) comparando `ilike` contra envios.zona
+    // (crudo de Lightdata: CABA/ZONA 1/ZONA 2/ZONA 3) — dos vocabularios
+    // que nunca podían matchear. Ahora filtra por Cordón (envios.cordon_id,
+    // ya resuelto por Localidad+CP) con un combo de opciones fijas.
+    await abmCordones.cargar();
+    // "Sin clasificar" (pedido 2026-11-23) para poder encontrar desde acá
+    // mismo los envíos que todavía no tienen cordón resuelto, sin tener
+    // que cruzar a mano con la pantalla de Localidades.
+    agregarOpcionesCombo("combo-zona-envios-listado", [
+      { valor: "sin_clasificar", texto: "Sin clasificar" },
+      ...abmCordones.obtenerActivosConId(),
+    ]);
+    crearComboGenerico("combo-zona-envios-listado", (valor)=>{ stateEnviosListado.cordon = valor; cargarEnviosListado(true); });
 
     // Repartidor: mismo roster que ya resuelve el nombre en la grilla
     // (cargarNombresPorLightdataId) — filtra por chofer_lightdata_id, no
@@ -2824,7 +3156,11 @@
   function diasDesde(fechaISO){
     if(!fechaISO) return null;
     const hoy = new Date(fechaART(0) + "T00:00:00Z");
-    const d = new Date(fechaISO + "T00:00:00Z");
+    // fecha_mercadopacks ahora es timestamptz (ver migración
+    // 2026-11-23_fecha_mercadopacks_con_hora.sql) — hay que convertir al
+    // "día ART" antes de comparar, porque un horario de la noche (ej.
+    // 23:50 ART) cae en el día SIGUIENTE en UTC.
+    const d = new Date(fechaArtDeIso(fechaISO) + "T00:00:00Z");
     return Math.round((hoy - d) / (24 * 60 * 60 * 1000));
   }
 
@@ -3208,6 +3544,16 @@
     return (fila && fila.direccion) ? tituloTexto(fila.direccion) : "—";
   }
 
+  // Cordón resuelto por Localidad+CP (pedido 2026-11-23) — reemplaza a la
+  // "Zona" cruda de Lightdata en pantalla. Embed por FK (envios.cordon_id
+  // -> parametros_cordones), mismo patrón que direccionDe() de arriba.
+  // null = todavía sin clasificar (ver pantalla de Localidades).
+  function cordonDe(envio){
+    const c = envio.parametros_cordones;
+    const fila = Array.isArray(c) ? c[0] : c;
+    return (fila && fila.nombre) ? fila.nombre : null;
+  }
+
   function claveSeleccionFallido(f){
     return `${f.envio.id_interno}::${f.seguimiento ? f.seguimiento.id : ""}`;
   }
@@ -3235,7 +3581,7 @@
       <tr>
         <td style="text-align:center;"><input type="checkbox" class="check-fila-fallido" data-clave="${clave}" ${stateFallidos.seleccionados.has(clave) ? "checked" : ""} /></td>
         <td><span class="badge ${alerta.color}">${f.dias === null ? "—" : f.dias + " d"} · ${alerta.label}</span></td>
-        <td>${f.envio.fecha_mercadopacks || "—"}</td>
+        <td>${formatearFechaHora(f.envio.fecha_mercadopacks)}</td>
         <td>${f.envio.tracking || "—"}</td>
         <td>${tituloTexto(f.envio.cliente) || "—"}</td>
         <td>${tituloTexto(f.envio.localidad) || "—"}</td>
@@ -4824,7 +5170,8 @@
     const fecha = fechaRutaActual();
     const { data, error } = await sb.from("envios")
       .select("tracking,cliente,localidad,zona,estado,fecha_estado,origen")
-      .eq("fecha_mercadopacks", fecha)
+      .gte("fecha_mercadopacks", limiteDiaART(fecha))
+      .lt("fecha_mercadopacks", limiteDiaART(diaSiguienteStr(fecha)))
       .eq("cadete", cadete)
       .not("estado", "in", '("Entregado","Entregado 2DA visita","A retirar")');
     if(miRequestId !== detalleRutaRequestId) return; // ya se abrió otro chofer mientras tanto
@@ -5835,48 +6182,69 @@
   // revertido parcialmente el 2026-11-21: la Zona vuelve a ser su propio
   // ABM parametrizable — acá solo se la referencia por FK, no se la edita
   // como texto libre). Cordón también es FK al ABM de Cordones.
+  // Pedido 2026-11-23: antes esta pantalla editaba parametros_localidades
+  // directo (1 cordón por nombre de localidad) — se separó en una tabla
+  // hija (parametros_localidad_cps) porque una misma localidad puede caer
+  // en MÁS de un Cordón según el CP (confirmado con datos reales: 8
+  // localidades de Base_Zonas tienen CPs en cordones distintos — ej.
+  // "Buenos Aires" tiene CPs que son CABA, otros GBA1). Acá se lista plano
+  // (sin agrupar/expandir, a pedido) 1 fila por combinación Localidad+CP.
   function crearAbmLocalidades(){
-    let datos = [];
+    let datosCps = [];        // parametros_localidad_cps + nombre de localidad embebido
+    let localidadesPorNombre = {}; // nombre normalizado -> { id, nombre } (para buscar/crear localidad al guardar)
     let busqueda = "";
-    let cargado = false; // mismo criterio de caching que crearAbmSimple
+    let soloPendientes = false;
+    let cargado = false;
+
+    function normalizarNombre(s){
+      return (s || "").trim().toUpperCase();
+    }
 
     async function cargar(forzar){
-      await Promise.all([abmCordones.cargar(), abmZonas.cargar()]);
+      await abmCordones.cargar();
       if(cargado && !forzar) return;
-      const { data, error } = await sb.from("parametros_localidades").select("*").order("nombre");
-      if(error){ console.error("Error cargando parametros_localidades:", error); return; }
-      datos = data || [];
+      const [{ data: cps, error: errCps }, { data: localidades, error: errLoc }] = await Promise.all([
+        sb.from("parametros_localidad_cps").select("id,cp,cordon_id,localidad_id,parametros_localidades(nombre)").order("cp"),
+        sb.from("parametros_localidades").select("id,nombre").order("nombre"),
+      ]);
+      if(errCps){ console.error("Error cargando parametros_localidad_cps:", errCps); return; }
+      if(errLoc){ console.error("Error cargando parametros_localidades:", errLoc); return; }
+      datosCps = cps || [];
+      localidadesPorNombre = {};
+      (localidades || []).forEach(l => { localidadesPorNombre[normalizarNombre(l.nombre)] = l; });
       cargado = true;
       render();
+      actualizarAvisoLocalidadesPendientes();
     }
 
+    function nombreDe(fila){
+      const l = fila.parametros_localidades;
+      return (Array.isArray(l) ? l[0] : l)?.nombre || "—";
+    }
     function labelCordon(id){
       const c = (abmCordones.obtenerActivosConId() || []).find(x => x.valor === id);
-      return c ? c.texto : "—";
-    }
-    function labelZona(id){
-      const z = (abmZonas.obtenerActivosConId() || []).find(x => x.valor === id);
-      return z ? z.texto : "—";
+      return c ? c.texto : null;
     }
 
     function render(){
-      let filas = datos;
+      let filas = datosCps;
+      if(soloPendientes) filas = filas.filter(f => f.cordon_id == null);
       if(busqueda) filas = filas.filter(f =>
-        (f.nombre || "").toLowerCase().includes(busqueda) ||
+        nombreDe(f).toLowerCase().includes(busqueda) ||
         (f.cp || "").toLowerCase().includes(busqueda)
       );
       const tbody = document.getElementById("tabla-admin-localidades");
       if(!filas.length){
-        tbody.innerHTML = `<tr><td colspan="6" class="sin-datos">Sin localidades cargadas.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" class="sin-datos">${soloPendientes ? "Sin pendientes de clasificar." : "Sin localidades cargadas."}</td></tr>`;
         return;
       }
-      tbody.innerHTML = filas.map(f => `
-        <tr class="${f.activo ? "" : "fila-inactiva"}" data-id="${f.id}">
-          <td>${f.nombre}${f.activo ? "" : '<span class="badge-inactivo">Inactivo</span>'}</td>
-          <td>${labelZona(f.zona_id)}</td>
+      tbody.innerHTML = filas.map(f => {
+        const cordon = labelCordon(f.cordon_id);
+        return `
+        <tr data-id="${f.id}">
+          <td>${tituloTexto(nombreDe(f))}</td>
           <td>${f.cp || "—"}</td>
-          <td>${labelCordon(f.cordon_id)}</td>
-          <td>${f.activo ? "Sí" : "No"}</td>
+          <td>${cordon || '<span class="badge-pendiente-cordon">Sin clasificar</span>'}</td>
           <td class="col-opciones">
             <span class="opciones-fila">
               <button type="button" class="btn-icono-chico editar" data-id="${f.id}" title="Editar"><i data-lucide="pencil"></i></button>
@@ -5884,57 +6252,101 @@
             </span>
           </td>
         </tr>
-      `).join("");
+      `;
+      }).join("");
       lucide.createIcons();
     }
 
-    function campos(){
+    function campos(valores){
       return [
         { clave: "nombre", label: "Localidad", tipo: "texto" },
-        { clave: "zona_id", label: "Zona", tipo: "select", opciones: abmZonas.obtenerActivosConId() },
         { clave: "cp", label: "CP", tipo: "texto" },
         { clave: "cordon_id", label: "Cordón", tipo: "select", opciones: abmCordones.obtenerActivosConId() },
-        { clave: "activo", label: "Activo", tipo: "checkbox" },
       ];
     }
 
+    // Busca la localidad maestra por nombre (normalizado) o la crea si no
+    // existe todavía — mismo criterio que el trigger fn_resolver_cordon_envio
+    // del lado de la base, pero para el alta manual desde esta pantalla.
+    async function resolverLocalidadId(nombre){
+      const clave = normalizarNombre(nombre);
+      const existente = localidadesPorNombre[clave];
+      if(existente) return existente.id;
+      const { data, error } = await sb.from("parametros_localidades").insert({ nombre: nombre.trim(), activo: true }).select().single();
+      if(error){ return null; }
+      localidadesPorNombre[clave] = data;
+      return data.id;
+    }
+
     function abrirAlta(){
-      abrirModalAbm("Agregar localidad", campos(), { activo: true }, async (vals)=>{
-        if(!vals.nombre){ await mostrarAviso("El nombre es obligatorio."); return false; }
-        const payload = { nombre: vals.nombre, zona_id: vals.zona_id ? Number(vals.zona_id) : null, cp: vals.cp || null, cordon_id: vals.cordon_id ? Number(vals.cordon_id) : null, activo: !!vals.activo };
-        const { data, error } = await sb.from("parametros_localidades").insert(payload).select().single();
-        if(error){ await mostrarAviso("No se pudo guardar (¿ya existe esa localidad?)."); return false; }
-        datos.push(data);
+      abrirModalAbm("Agregar localidad", campos(), {}, async (vals)=>{
+        if(!vals.nombre || !vals.cp){ await mostrarAviso("Localidad y CP son obligatorios."); return false; }
+        const localidadId = await resolverLocalidadId(vals.nombre);
+        if(!localidadId){ await mostrarAviso("No se pudo guardar la localidad."); return false; }
+        const payload = { localidad_id: localidadId, cp: vals.cp.trim(), cordon_id: vals.cordon_id ? Number(vals.cordon_id) : null };
+        const { data, error } = await sb.from("parametros_localidad_cps").insert(payload).select("id,cp,cordon_id,localidad_id,parametros_localidades(nombre)").single();
+        if(error){ await mostrarAviso("No se pudo guardar (¿ya existe esa Localidad+CP?)."); return false; }
+        datosCps.push(data);
         render();
+        actualizarAvisoLocalidadesPendientes();
       });
     }
 
     function abrirEdicion(id){
-      const fila = datos.find(f => f.id === id);
+      const fila = datosCps.find(f => f.id === id);
       if(!fila) return;
-      abrirModalAbm("Editar localidad", campos(), fila, async (vals)=>{
-        if(!vals.nombre){ await mostrarAviso("El nombre es obligatorio."); return false; }
-        const payload = { nombre: vals.nombre, zona_id: vals.zona_id ? Number(vals.zona_id) : null, cp: vals.cp || null, cordon_id: vals.cordon_id ? Number(vals.cordon_id) : null, activo: !!vals.activo };
-        const { error } = await sb.from("parametros_localidades").update(payload).eq("id", id);
+      abrirModalAbm("Editar localidad", campos(), { nombre: nombreDe(fila), cp: fila.cp, cordon_id: fila.cordon_id }, async (vals)=>{
+        if(!vals.nombre || !vals.cp){ await mostrarAviso("Localidad y CP son obligatorios."); return false; }
+        const localidadId = await resolverLocalidadId(vals.nombre);
+        if(!localidadId){ await mostrarAviso("No se pudo guardar la localidad."); return false; }
+        const payload = { localidad_id: localidadId, cp: vals.cp.trim(), cordon_id: vals.cordon_id ? Number(vals.cordon_id) : null };
+        const { error } = await sb.from("parametros_localidad_cps").update(payload).eq("id", id);
         if(error){ await mostrarAviso("No se pudo guardar."); return false; }
-        Object.assign(fila, payload);
+        Object.assign(fila, payload, { parametros_localidades: { nombre: vals.nombre.trim() } });
         render();
+        actualizarAvisoLocalidadesPendientes();
       });
     }
 
     async function borrar(id){
       if(!(await mostrarConfirmacion("¿Borrar este registro? No se puede deshacer."))) return;
-      const { error } = await sb.from("parametros_localidades").delete().eq("id", id);
+      const { error } = await sb.from("parametros_localidad_cps").delete().eq("id", id);
       if(error){ console.error(error); await mostrarAviso("No se pudo borrar."); return; }
-      datos = datos.filter(f => f.id !== id);
+      datosCps = datosCps.filter(f => f.id !== id);
       render();
+      actualizarAvisoLocalidadesPendientes();
     }
 
     document.getElementById("buscar-admin-localidades").addEventListener("input", (e)=>{
       busqueda = e.target.value.toLowerCase();
       render();
     });
+    document.getElementById("btn-ver-solo-pendientes-localidades").addEventListener("click", (e)=>{
+      soloPendientes = !soloPendientes;
+      e.currentTarget.setAttribute("aria-expanded", String(soloPendientes));
+      e.currentTarget.innerHTML = soloPendientes
+        ? '<i data-lucide="x"></i>Ver todos'
+        : '<i data-lucide="filter"></i>Ver solo pendientes';
+      lucide.createIcons();
+      render();
+    });
     document.getElementById("btn-agregar-localidad").addEventListener("click", abrirAlta);
+    document.getElementById("btn-resincronizar-cordones").addEventListener("click", async (e)=>{
+      const btn = e.currentTarget;
+      const textoOriginal = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = "Resincronizando…";
+      try {
+        const { data, error } = await sb.rpc("resincronizar_cordones_envios");
+        if(error){ console.error("Error resincronizando cordones:", error); await mostrarAviso("No se pudo resincronizar."); return; }
+        await cargar(true);
+        await mostrarAviso(`Listo: ${data.actualizados} envío${data.actualizados === 1 ? "" : "s"} actualizado${data.actualizados === 1 ? "" : "s"}, ${data.pendientes_creados} combinación${data.pendientes_creados === 1 ? "" : "es"} nueva${data.pendientes_creados === 1 ? "" : "s"} encolada${data.pendientes_creados === 1 ? "" : "s"} para clasificar.`);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = textoOriginal;
+        lucide.createIcons();
+      }
+    });
     document.getElementById("tabla-admin-localidades").addEventListener("click", (e)=>{
       const btnEditar = e.target.closest(".btn-icono-chico.editar");
       const btnBorrar = e.target.closest(".btn-icono-chico.borrar");
@@ -5944,8 +6356,21 @@
 
     return {
       cargar,
-      obtenerActivos: () => datos.filter(f => f.activo).map(f => f.nombre),
+      obtenerActivos: () => Object.values(localidadesPorNombre).map(l => l.nombre),
+      obtenerPendientes: () => datosCps.filter(f => f.cordon_id == null).length,
     };
+  }
+
+  // Mismo patrón que actualizarAvisoChoferesPendientes() (ver más abajo):
+  // badge en el ítem principal "Configuración" del sidebar + en el
+  // sub-ítem "Localidades" del menú interno.
+  function actualizarAvisoLocalidadesPendientes(){
+    const pendientes = abmLocalidades.obtenerPendientes();
+    const el = document.getElementById("contador-localidades-pendientes-submenu");
+    el.hidden = pendientes === 0;
+    el.textContent = pendientes;
+    pendientesConfigState.localidades = pendientes;
+    actualizarIconoPendientesConfig();
   }
 
   const abmLocalidades = crearAbmLocalidades();
@@ -6089,17 +6514,29 @@
   // Choferes que se dieron de alta automáticamente desde Lightdata
   // (sincronizar_lightdata.py, ver integracion_usuarios_lightdata.md) y
   // todavía no tienen vehículo/zona/turno/localidad propios.
+  // Pedido 2026-11-23: el sidebar ya NO muestra números sueltos para
+  // "Configuración" (antes se veían 2 badges numéricos pegados, ruidoso) —
+  // un solo ícono de alerta avisa que hay algo pendiente en alguna
+  // sub-sección, sin decir cuánto. El número exacto sigue viéndose en el
+  // sub-ítem puntual (Repartidores/Localidades) una vez adentro, que es
+  // donde sí es útil saber cuántos hay.
+  let pendientesConfigState = { choferes: 0, localidades: 0 };
+  function actualizarIconoPendientesConfig(){
+    const total = pendientesConfigState.choferes + pendientesConfigState.localidades;
+    document.getElementById("icono-pendientes-config").hidden = total === 0;
+  }
+
   function actualizarAvisoChoferesPendientes(){
     const pendientes = adminChoferesData.filter(f => f.pendiente_completar).length;
     const aviso = document.getElementById("aviso-choferes-pendientes");
     aviso.hidden = pendientes === 0;
     document.getElementById("aviso-choferes-pendientes-texto").textContent =
       `${pendientes} repartidor${pendientes === 1 ? "" : "es"} pendiente${pendientes === 1 ? "" : "s"} de completar`;
-    for(const id of ["contador-choferes-pendientes", "contador-choferes-pendientes-submenu"]){
-      const el = document.getElementById(id);
-      el.hidden = pendientes === 0;
-      el.textContent = pendientes;
-    }
+    const elSubmenu = document.getElementById("contador-choferes-pendientes-submenu");
+    elSubmenu.hidden = pendientes === 0;
+    elSubmenu.textContent = pendientes;
+    pendientesConfigState.choferes = pendientes;
+    actualizarIconoPendientesConfig();
   }
 
   function renderAdminChoferes(){
