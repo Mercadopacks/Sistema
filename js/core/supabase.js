@@ -9,4 +9,13 @@
 export const SUPABASE_URL = "https://pxbovlghjljrbrpjtcpr.supabase.co";
 export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ap5oFuGA3ByxzbewtCVjmA_aP4IRY4M";
 
-export const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Pedido 2026-11-25: la sesión se guarda en sessionStorage (no en
+// localStorage, el default de supabase-js) para que cada PESTAÑA tenga su
+// propia sesión — así se puede entrar con un usuario A en una pestaña y
+// un usuario B en otra sin que cerrar sesión en una cierre la otra.
+// Trade-off aceptado: la sesión ya no sobrevive a cerrar la pestaña (antes
+// sí, por eso el login persistía al reabrir el navegador); ahora hay que
+// loguearse de nuevo en cada pestaña nueva.
+export const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: { storage: window.sessionStorage },
+});
