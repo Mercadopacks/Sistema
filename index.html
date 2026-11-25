@@ -84,6 +84,8 @@
   }
   .btn-icono:hover{background:#2a2a2a;}
   .btn-icono svg{width:18px; height:18px;}
+  .btn-icono-dorado{background:var(--dorado); color:var(--negro);}
+  .btn-icono-dorado:hover{background:#dba900;}
 
   /* ===================== App shell: sidebar + contenido ===================== */
   /* height:100vh (fijo) + overflow:hidden en vez de min-height: el
@@ -263,26 +265,28 @@
   .tabla-detalle-liquidacion th:nth-child(5), .tabla-detalle-liquidacion td:nth-child(5){white-space:normal; min-width:180px;}
   .tabla-detalle-liquidacion th.col-num, .tabla-detalle-liquidacion td.col-num{text-align:right;}
 
-  /* Pedido 2026-11-25 (rediseño Liquidación Clientes / Mis Liquidaciones):
-     encabezado unificado (datos a la izquierda, resumen total + acciones
-     PDF a la derecha) + fila de tarjetas (una por cordón activo — dinámico,
-     nunca asumir una cantidad fija — más la de Extras) + alineación
-     tabular para todo importe/cantidad (formato monetario argentino ya lo
-     da formatearMoneda(), acá solo la alineación numérica). */
+  /* Pedido 2026-11-25 (rediseño Liquidación Clientes / Mis Liquidaciones,
+     3ra vuelta — sigue al pie de la letra una referencia visual que pasó
+     el usuario, reinterpretada con los tokens de ESTE proyecto, nunca con
+     los de Tailwind/Inter de esa referencia): 2 tarjetas separadas
+     (encabezado+resumen, y Detalle de envíos aparte), chips de
+     servicio/tipo de liquidación, bullet + chip de cantidad en cada
+     tarjeta de zona, columna ID de venta + badge de Zona en el detalle. */
   .col-num{font-variant-numeric:tabular-nums;}
 
-  /* 2da vuelta (QA, mismo pedido): seguía sin entrar en una línea y el
-     encabezado se veía deslavado comparado con una referencia visual que
-     pasó el usuario — se achica tipografía/padding de las tarjetas (de
-     ~280px a ~205px mínimo, texto 11px en vez de 12.5px) para que las 5
-     entren sin scroll en anchos de escritorio habituales, y el "resumen
-     total" pasa a un único bloque oscuro con acento dorado a la
-     izquierda (antes 2 bloques sueltos) — reinterpretado con los tokens
-     de ESTE proyecto (--negro/--dorado/Nunito), no con los de
-     Tailwind/Inter de la referencia que pasó (ese es de otro stack, acá
-     no se usa). */
-  .liquidacion-header-unificado{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px;}
-  .liquidacion-header-datos{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;}
+  .liquidacion-header-unificado{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:14px;}
+  .liquidacion-header-datos{display:flex; flex-direction:column; gap:6px;}
+  .liquidacion-header-titulo-fila{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .liquidacion-header-titulo-fila h2{margin:0; font-size:18px;}
+  .liq-chip{
+    display:inline-flex; align-items:center; font-size:11px; font-weight:700;
+    padding:3px 10px; border-radius:20px; white-space:nowrap;
+  }
+  .liq-chip-gris{background:var(--fondo); color:#666; border:1px solid var(--borde);}
+  .liq-chip-dorado{background:rgba(246,190,5,.16); color:#8a6a00; border:1px solid rgba(246,190,5,.5);}
+  .liquidacion-header-fechas{display:flex; align-items:center; gap:7px; font-size:12.5px; color:#666;}
+  .liquidacion-header-fechas i{width:14px; height:14px;}
+  .liquidacion-header-fechas-sep{color:var(--borde);}
   .liquidacion-header-resumen{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .liquidacion-header-resumen-total{
     position:relative; display:flex; align-items:center; overflow:hidden;
@@ -297,43 +301,30 @@
   .liquidacion-header-resumen-valor{font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; color:#fff;}
   .liquidacion-header-resumen-destacado .liquidacion-header-resumen-valor{font-size:19px; color:var(--dorado);}
 
-  /* Bug real 2026-11-25 (QA post-release): los montos envolvían en 2
-     líneas dentro de columnas angostas ("$" en una línea, "3.770,00" en
-     la siguiente) — se veía todo encimado/ilegible. `white-space:nowrap`
-     en toda celda de estas tarjetas lo evita. El corte seco de la
-     última tarjeta visible (se notaba "partida" a la mitad) se resuelve
-     con scroll-snap (nunca para a mitad de tarjeta) + un degradé en el
-     borde derecho que avisa que hay más contenido para scrollear — el
-     contenedor en sí SÍ puede scrollear horizontal (pedido explícito del
-     diseño) en anchos angostos, lo que no puede pasar es que se vea roto
-     en el reposo inicial. */
-  .tarjetas-resumen-liquidacion-wrap{position:relative; margin-bottom:16px;}
+  .liq-resumen-section-header{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px;}
+  .liq-resumen-section-titulo{font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.03em; color:#555;}
+  .tarjeta-resumen-aviso{
+    display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#8a6a00;
+    background:rgba(246,190,5,.14); border:1px solid rgba(246,190,5,.4); border-radius:20px; padding:4px 11px;
+  }
+  .tarjeta-resumen-aviso i{width:13px; height:13px; flex-shrink:0;}
+
+  /* Sin degradé/fade (se quitó 2026-11-25, 3ra vuelta: había causado 3
+     rondas de reportes de "texto superpuesto/difuminado" — scroll-snap +
+     anchos reales por columna ya comunican "hay más tarjetas" sin tapar
+     texto legible con un overlay). */
+  .tarjetas-resumen-liquidacion-wrap{margin-bottom:16px;}
   .tarjetas-resumen-liquidacion-fila{
-    display:flex; gap:8px; overflow-x:auto; padding-bottom:6px;
+    display:flex; gap:10px; overflow-x:auto; padding-bottom:6px;
     scroll-snap-type:x proximity; scroll-padding-left:2px;
   }
-  /* El degradé SOLO se muestra si de verdad hay overflow (clase
-     "hay-overflow", la pone cargarFilasDetalle()/renderResumenLiquidacion()
-     comparando scrollWidth vs clientWidth después de pintar) — bug real:
-     antes se mostraba siempre, tapando la última columna de la tarjeta
-     Extras aunque las 5 tarjetas entraran justas sin necesitar scroll. */
-  .tarjetas-resumen-liquidacion-wrap.hay-overflow::after{
-    content:""; position:absolute; top:0; right:0; bottom:6px; width:28px;
-    background:linear-gradient(to right, transparent, #fff);
-    pointer-events:none;
-  }
-  /* Ancho mínimo real 2026-11-25 (3ra vuelta): con las 4 columnas de
-     moneda (Tamaño/Cant./Precio/Total) un ancho de ~190px NO alcanza
-     para montos reales de 6-7 cifras ("$ 150.800,00") — la tabla se
-     desbordaba y la tarjeta SIGUIENTE (fondo blanco opaco) tapaba
-     visualmente el sobrante, pareciendo "cortado a la mitad". 240px es
-     el mínimo real para que entren sin recortarse; `overflow:hidden` en
-     la tarjeta es una red de seguridad (si algún monto excepcional
-     todavía no entrara, se recorta DENTRO de su propia tarjeta — nunca
-     sangra sobre la vecina). A este ancho entran 4 en la mayoría de los
-     anchos de escritorio y la 5ta pide un scroll corto (scroll-snap +
-     degradé ya cubren ese caso, es el comportamiento que el propio
-     diseño pide como aceptable). */
+  /* Ancho mínimo real (3ra vuelta, verificado con Playwright): con las 4
+     columnas de moneda (Tamaño/Cant./Precio/Total) un ancho de ~190px NO
+     alcanza para montos reales de 6-7 cifras ("$ 150.800,00") — la tabla
+     se desbordaba y la tarjeta siguiente (fondo blanco opaco) tapaba
+     visualmente el sobrante, pareciendo "cortado". 280px es el mínimo
+     real para que entren sin recortarse; `overflow:hidden` en la tarjeta
+     es una red de seguridad. */
   .tarjeta-resumen-liquidacion{
     background:#fff; border:1px solid var(--borde); border-radius:10px;
     min-width:280px; flex:1 1 280px; display:flex; flex-direction:column;
@@ -344,6 +335,9 @@
     padding:7px 9px; border-bottom:1px solid var(--borde); background:#f8f7f2;
     border-radius:10px 10px 0 0; white-space:nowrap; gap:6px; font-size:12.5px;
   }
+  .tarjeta-resumen-titulo{display:inline-flex; align-items:center; gap:6px;}
+  .tarjeta-resumen-bullet{width:7px; height:7px; border-radius:50%; background:var(--dorado); flex-shrink:0;}
+  .tarjeta-resumen-bullet-negro{background:var(--negro);}
   .tarjeta-resumen-total-chico{
     font-size:10.5px; color:#777; font-weight:700; background:var(--fondo);
     padding:2px 7px; border-radius:20px; white-space:nowrap;
@@ -375,11 +369,36 @@
   }
   .tabla-tarjeta-resumen th.col-num, .tabla-tarjeta-resumen td.col-num{text-align:right;}
   .tabla-tarjeta-resumen tr.fila-sin-movimiento{color:#bbb;}
+  .tabla-tarjeta-resumen td.monto-negativo{color:#b42318;}
   .tarjeta-resumen-pie{
     display:flex; justify-content:space-between; align-items:center; gap:8px;
     padding:8px 10px; font-weight:800; border-top:1px solid var(--borde);
     font-size:11.5px; white-space:nowrap; background:var(--fondo); border-radius:0 0 10px 10px;
   }
+  .tarjeta-resumen-pie-izq{display:inline-flex; align-items:center; gap:6px;}
+  .tarjeta-resumen-pie-chip{
+    display:inline-flex; align-items:center; justify-content:center; min-width:18px;
+    font-size:10.5px; font-weight:800; background:#fff; border:1px solid var(--borde);
+    border-radius:20px; padding:1px 6px; color:#555;
+  }
+
+  /* Tarjeta de Detalle de envíos, separada de la del resumen (pedido
+     explícito: dividir en 2 .card). */
+  .liq-detalle-header{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px;}
+  .liq-detalle-header-titulo{display:flex; align-items:center; gap:8px;}
+  .liq-detalle-titulo{font-size:15px; font-weight:800;}
+  .liq-detalle-subtotal-filtrado{font-size:12.5px; color:#666;}
+  .liq-detalle-subtotal-filtrado strong{font-variant-numeric:tabular-nums; color:var(--negro);}
+  .tabla-detalle-liquidacion th.col-num, .tabla-detalle-liquidacion td.col-num{text-align:right;}
+  .badge-zona-detalle{
+    display:inline-flex; align-items:center; font-size:10.5px; font-weight:700;
+    padding:2px 9px; border-radius:20px; white-space:nowrap;
+  }
+  .badge-zona-detalle.negro{background:var(--negro); color:#fff;}
+  .badge-zona-detalle.dorado{background:var(--dorado); color:var(--negro);}
+  .badge-zona-detalle.gris{background:var(--fondo); color:#555; border:1px solid var(--borde);}
+  .badge-zona-detalle.azul{background:#dbeafe; color:#1e40af;}
+  .badge-zona-detalle.verde{background:#dcfce7; color:#166534;}
   /* Reserva el mismo alto siempre (no solo "hasta 460px") para que
      filtrar/buscar y quedarse con pocas filas no encoja la caja — pedido
      2026-11-15: a medida que se escribía en el buscador de "Choferes en

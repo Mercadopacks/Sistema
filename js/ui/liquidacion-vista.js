@@ -1,11 +1,14 @@
 // Vista compartida de Liquidación (tarjetas de resumen + detalle paginado
 // + PDF), usada tanto por Liquidación Clientes (admin, con acciones de
 // guardar/confirmar) como por Mis Liquidaciones (cliente, 100% lectura).
-// Pedido 2026-11-25 (rediseño): encabezado unificado, 5+ tarjetas en fila
-// (una por cordón activo + Extras — dinámico, los cordones son un ABM
-// abierto, nunca asumir una cantidad fija) y detalle con buscador/
-// filtros/paginación (client-side: el período de una liquidación es
-// acotado, no hace falta paginar en el servidor).
+// Pedido 2026-11-25 (rediseño, 3ra vuelta): sigue al pie de la letra una
+// referencia visual que pasó el usuario — 2 tarjetas separadas (encabezado
+// + resumen por zonas, y Detalle de envíos aparte), chips de servicio/tipo
+// de liquidación, bullet + chip de cantidad en cada tarjeta de zona, aviso
+// dinámico de ítems con tarifa $0,00, filtro de Fecha como combo propio
+// (NUNCA <select> nativo, regla del proyecto) con las fechas reales del
+// período, columna "ID Venta" en el detalle, y zona como badge. Se saca
+// el botón de "Vista previa PDF" (pedido explícito, solo queda Descargar).
 import { formatearFecha, formatearMoneda, tituloTexto } from "../core/formato.js";
 import { crearComboGenerico, agregarOpcionesCombo } from "./combos.js";
 
@@ -24,35 +27,33 @@ export function agruparFilasResumen(filas){
   return grupos;
 }
 
-export function filaConcepto(label, cantidad, precio, monto){
-  const claseMonto = monto < 0 ? "col-num monto-negativo" : "col-num";
-  return `
-    <tr>
-      <td class="col-concepto">${label}</td>
-      <td class="col-num">${cantidad == null ? "-" : cantidad}</td>
-      <td class="col-num">${precio == null ? "-" : formatearMoneda(precio)}</td>
-      <td class="${claseMonto}">${formatearMoneda(monto)}</td>
-    </tr>
-  `;
-}
-export function filaSeccion(nombre){
-  return `<tr class="fila-seccion-liquidacion"><td colspan="4">${nombre}</td></tr>`;
-}
-export function filaSubtotal(nombre, monto){
-  const claseMonto = monto < 0 ? "col-num monto-negativo" : "col-num";
-  return `<tr class="fila-subtotal-liquidacion"><td colspan="3" style="text-align:right;">Subtotal ${nombre}</td><td class="${claseMonto}">${formatearMoneda(monto)}</td></tr>`;
+// Cuánto quedó con tarifa $0,00 (paquetes y colectas) — aviso dinámico
+// arriba de las tarjetas, igual a la referencia ("16 paquetes... figuran
+// con tarifa $0,00") pero sin el desglose Mediano/Grande de esa
+// referencia: acá solo existen 2 categorías (Pequeños/Grandes).
+function calcularAvisoTarifaCero(filasResumen){
+  let paquetes = 0, colectas = 0;
+  agruparFilasResumen(filasResumen || []).forEach(g => {
+    g.filas.forEach(f => {
+      const cant = Number(f.cantidad) || 0;
+      const sinPrecio = f.precio == null || Number(f.precio) === 0;
+      if(g.grupo === "Extras"){
+        if(f.item === "Colectas" && sinPrecio) colectas += cant;
+      } else if(sinPrecio && cant > 0){
+        paquetes += cant;
+      }
+    });
+  });
+  return { paquetes, colectas };
 }
 
-// Tarjeta de zona (cordón): tabla Tamaño | Cant. | Precio | Total, siempre
-// con las 2 categorías (Pequeños/Grandes) aunque alguna tenga cantidad 0
-// (atenuada visualmente, clase "fila-sin-movimiento").
 function tarjetaZona(grupo, filas){
   const total = filas.reduce((acc, f) => acc + (Number(f.cantidad) || 0), 0);
   const subtotal = filas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
   return `
-    <div class="tarjeta-resumen-liquidacion">
+    <article class="tarjeta-resumen-liquidacion">
       <div class="tarjeta-resumen-header">
-        <span>${grupo}</span>
+        <span class="tarjeta-resumen-titulo"><span class="tarjeta-resumen-bullet"></span>Envíos ${grupo}</span>
         <span class="tarjeta-resumen-total-chico">${total} paq.</span>
       </div>
       <table class="tabla-tarjeta-resumen">
@@ -69,10 +70,10 @@ function tarjetaZona(grupo, filas){
         </tbody>
       </table>
       <div class="tarjeta-resumen-pie">
-        <span>Subtotal</span>
-        <span>${total} paq. — ${formatearMoneda(subtotal)}</span>
+        <span class="tarjeta-resumen-pie-izq">Subtotal <span class="tarjeta-resumen-pie-chip">${total}</span></span>
+        <span>${formatearMoneda(subtotal)}</span>
       </div>
-    </div>
+    </article>
   `;
 }
 
@@ -81,8 +82,11 @@ function tarjetaZona(grupo, filas){
 function tarjetaExtras(filas){
   const subtotal = filas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
   return `
-    <div class="tarjeta-resumen-liquidacion">
-      <div class="tarjeta-resumen-header"><span>Extras</span></div>
+    <article class="tarjeta-resumen-liquidacion">
+      <div class="tarjeta-resumen-header">
+        <span class="tarjeta-resumen-titulo"><span class="tarjeta-resumen-bullet tarjeta-resumen-bullet-negro"></span>Extras</span>
+        <span class="tarjeta-resumen-total-chico">Servicios</span>
+      </div>
       <table class="tabla-tarjeta-resumen tabla-tarjeta-resumen-extras">
         <thead><tr><th>Concepto</th><th class="col-num">Cant.</th><th class="col-num">Importe</th></tr></thead>
         <tbody>
@@ -99,43 +103,42 @@ function tarjetaExtras(filas){
         <span>Subtotal Extras</span>
         <span>${formatearMoneda(subtotal)}</span>
       </div>
-    </div>
+    </article>
   `;
 }
 
-// Pinta la fila de tarjetas (zonas dinámicas + Extras) en el contenedor
-// `${prefijo}-tarjetas`, y la tabla "clásica" de resumen (secciones +
-// subtotales) en `${prefijo}-tabla-resumen` para quien la siga usando.
+// Pinta la fila de tarjetas (zonas dinámicas + Extras) + el aviso de
+// tarifa $0,00 en el contenedor `${prefijo}-tarjetas`/`${prefijo}-aviso-cero`.
 export function renderResumenLiquidacion(prefijo, filasResumen){
   const grupos = agruparFilasResumen(filasResumen || []);
   const contTarjetas = document.getElementById(`${prefijo}-tarjetas`);
   if(contTarjetas){
     contTarjetas.innerHTML = grupos.map(g => g.grupo === "Extras" ? tarjetaExtras(g.filas) : tarjetaZona(g.grupo, g.filas)).join("");
-    // Bug real: el degradé de "hay más para scrollear" se mostraba
-    // siempre, aunque las tarjetas entraran justas sin overflow real —
-    // tapaba la última columna de la tarjeta de más a la derecha.
-    const wrap = contTarjetas.closest(".tarjetas-resumen-liquidacion-wrap");
-    if(wrap) wrap.classList.toggle("hay-overflow", contTarjetas.scrollWidth > contTarjetas.clientWidth + 1);
   }
-  const tbody = document.getElementById(`${prefijo}-tabla-resumen`);
-  if(tbody){
-    tbody.innerHTML = !grupos.length
-      ? `<tr><td colspan="4" class="sin-datos">Sin datos para este período.</td></tr>`
-      : grupos.map(g => {
-          const subtotal = g.filas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
-          return filaSeccion(g.grupo) + g.filas.map(f => filaConcepto(f.item, f.cantidad, f.precio, f.monto)).join("") + filaSubtotal(g.grupo, subtotal);
-        }).join("");
+  const aviso = document.getElementById(`${prefijo}-aviso-cero`);
+  if(aviso){
+    const { paquetes, colectas } = calcularAvisoTarifaCero(filasResumen);
+    if(paquetes > 0 || colectas > 0){
+      const partes = [];
+      if(paquetes > 0) partes.push(`${paquetes} paquete${paquetes === 1 ? "" : "s"}`);
+      if(colectas > 0) partes.push(`${colectas} colecta${colectas === 1 ? "" : "s"}`);
+      aviso.querySelector(".tarjeta-resumen-aviso-texto").textContent = `${partes.join(" y ")} figuran con tarifa $0,00`;
+      aviso.hidden = false;
+    } else {
+      aviso.hidden = true;
+    }
   }
 }
 
 // ===================== Detalle: buscador + filtros + paginación (client-side) =====================
 
-const COLUMNAS_DETALLE = ["Nro", "Fecha", "Tipo", "Cuenta", "Dirección", "Localidad", "Zona", "Tamaño", "Monto"];
+const COLUMNAS_DETALLE = ["N°", "Fecha", "Tipo", "Cuenta", "ID Venta", "Dirección", "Localidad", "Zona", "Tamaño", "Importe"];
+const BADGES_ZONA = ["negro", "dorado", "gris", "azul", "verde"];
 
 export function crearEstadoDetalle(){
   return {
     filas: [], filtradas: [], pagina: 0, tamanoPagina: 25,
-    busqueda: "", desde: "", hasta: "", zona: "", tamano: "",
+    busqueda: "", fecha: "", zona: "", tamano: "",
   };
 }
 
@@ -143,16 +146,22 @@ function aplicarFiltros(estado){
   const b = (estado.busqueda || "").toLowerCase();
   estado.filtradas = estado.filas.filter(f => {
     if(b){
-      const texto = `${f.direccion || ""} ${f.localidad || ""} ${f.cuenta || ""}`.toLowerCase();
+      const texto = `${f.direccion || ""} ${f.localidad || ""} ${f.cuenta || ""} ${f.id_venta || ""}`.toLowerCase();
       if(!texto.includes(b)) return false;
     }
-    if(estado.desde && f.fecha && f.fecha < estado.desde) return false;
-    if(estado.hasta && f.fecha && f.fecha > estado.hasta) return false;
+    if(estado.fecha && f.fecha !== estado.fecha) return false;
     if(estado.zona && f.zona !== estado.zona) return false;
     if(estado.tamano && f.tamano !== estado.tamano) return false;
     return true;
   });
   estado.pagina = 0;
+}
+
+// Devuelve un color consistente (no aleatorio) para el badge de Zona,
+// según el orden en que aparece esa zona por primera vez en las filas.
+function colorZona(zona, ordenZonas){
+  const i = ordenZonas.indexOf(zona);
+  return BADGES_ZONA[i >= 0 ? i % BADGES_ZONA.length : 0];
 }
 
 function renderDetalle(prefijo, estado){
@@ -163,17 +172,19 @@ function renderDetalle(prefijo, estado){
   estado.pagina = Math.min(estado.pagina, totalPaginas - 1);
   const desde = estado.pagina * tam;
   const pagina = estado.filtradas.slice(desde, desde + tam);
+  const ordenZonas = [...new Set(estado.filas.map(f => f.zona).filter(Boolean))];
   tbody.innerHTML = !pagina.length
-    ? `<tr><td colspan="9" class="sin-datos">${total ? "Sin resultados para el filtro." : "Sin envíos ni extras en este período."}</td></tr>`
+    ? `<tr><td colspan="10" class="sin-datos">${total ? "Sin resultados para el filtro." : "Sin envíos ni extras en este período."}</td></tr>`
     : pagina.map((f, i) => `
         <tr>
           <td>${desde + i + 1}</td>
           <td>${formatearFecha(f.fecha)}</td>
           <td>${f.tipo}</td>
           <td>${f.cuenta || "—"}</td>
+          <td>${f.id_venta || "—"}</td>
           <td>${tituloTexto(f.direccion) || "—"}</td>
           <td>${tituloTexto(f.localidad) || "—"}</td>
-          <td>${f.zona || "—"}</td>
+          <td>${f.zona ? `<span class="badge-zona-detalle ${colorZona(f.zona, ordenZonas)}">${f.zona}</span>` : "—"}</td>
           <td>${f.tamano || "—"}</td>
           <td class="col-num">${formatearMoneda(f.monto)}</td>
         </tr>
@@ -185,19 +196,46 @@ function renderDetalle(prefijo, estado){
   document.getElementById(`${prefijo}-btn-detalle-anterior`).disabled = estado.pagina <= 0;
   document.getElementById(`${prefijo}-btn-detalle-siguiente`).disabled = estado.pagina >= totalPaginas - 1;
   const btnLimpiar = document.getElementById(`${prefijo}-btn-detalle-limpiar`);
-  const hayFiltro = !!(estado.busqueda || estado.desde || estado.hasta || estado.zona || estado.tamano);
+  const hayFiltro = !!(estado.busqueda || estado.fecha || estado.zona || estado.tamano);
   btnLimpiar.hidden = !hayFiltro;
+
+  // Contador + subtotal filtrado del título de la sección (pedido:
+  // "Detalle de envíos [N envíos]" y "Subtotal filtrado: $X" arriba de
+  // los filtros, igual a la referencia).
+  const contador = document.getElementById(`${prefijo}-detalle-contador`);
+  if(contador) contador.textContent = `${total} ${total === 1 ? "envío" : "envíos"}`;
+  const subtotalFiltrado = estado.filtradas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
+  const elSubtotal = document.getElementById(`${prefijo}-detalle-subtotal-filtrado`);
+  if(elSubtotal) elSubtotal.textContent = formatearMoneda(subtotalFiltrado);
+}
+
+// El combo de Fecha depende de los datos (las fechas reales del período
+// cargado) — a diferencia de Zona/Tamaño, no se puede armar una sola vez
+// al montar la vista. Se reconstruye entero (mismo patrón que el combo de
+// período de Liquidación Clientes) cada vez que cambian las filas.
+function repoblarComboFecha(prefijo, estado){
+  const cont = document.getElementById(`${prefijo}-combo-fecha`);
+  const fechas = [...new Set(estado.filas.map(f => f.fecha).filter(Boolean))].sort();
+  cont.outerHTML = `
+    <div class="combo-filtro" id="${prefijo}-combo-fecha">
+      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Fecha: Todas</button>
+      <ul class="combo-filtro-lista" role="listbox" hidden>
+        <li data-valor="" aria-selected="true">Todas</li>
+        ${fechas.map(f => `<li data-valor="${f}">${formatearFecha(f)}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+  crearComboGenerico(`${prefijo}-combo-fecha`, (valor)=>{ estado.fecha = valor; aplicarFiltros(estado); renderDetalle(prefijo, estado); });
 }
 
 // Carga filas nuevas (al cambiar de período/cliente) — resetea filtros y
 // paginación.
 export function cargarFilasDetalle(prefijo, estado, filas){
   estado.filas = filas || [];
-  estado.busqueda = ""; estado.desde = ""; estado.hasta = ""; estado.zona = ""; estado.tamano = "";
+  estado.busqueda = ""; estado.fecha = ""; estado.zona = ""; estado.tamano = "";
   const buscador = document.getElementById(`${prefijo}-detalle-buscar`);
   if(buscador) buscador.value = "";
-  const df = document.getElementById(`${prefijo}-detalle-desde`); if(df) df.value = "";
-  const dh = document.getElementById(`${prefijo}-detalle-hasta`); if(dh) dh.value = "";
+  repoblarComboFecha(prefijo, estado);
   aplicarFiltros(estado);
   renderDetalle(prefijo, estado);
 }
@@ -209,12 +247,6 @@ function vincularDetalle(prefijo, estado, zonasDisponibles){
     estado.busqueda = e.target.value.trim();
     clearTimeout(debounce);
     debounce = setTimeout(()=>{ aplicarFiltros(estado); renderDetalle(prefijo, estado); }, 300);
-  });
-  document.getElementById(`${prefijo}-detalle-desde`).addEventListener("change", (e)=>{
-    estado.desde = e.target.value || ""; aplicarFiltros(estado); renderDetalle(prefijo, estado);
-  });
-  document.getElementById(`${prefijo}-detalle-hasta`).addEventListener("change", (e)=>{
-    estado.hasta = e.target.value || ""; aplicarFiltros(estado); renderDetalle(prefijo, estado);
   });
   // `agregarOpcionesCombo` SIEMPRE antes de `crearComboGenerico` para ese
   // mismo combo: los listeners de cada <li> se enganchan una sola vez al
@@ -237,7 +269,10 @@ function vincularDetalle(prefijo, estado, zonasDisponibles){
   });
 }
 
-// ===================== Esqueleto de la pantalla (header + tarjetas + detalle) =====================
+// ===================== Esqueleto de la pantalla =====================
+// Pedido 2026-11-25 (3ra vuelta): 2 tarjetas SEPARADAS (antes, todo vivía
+// en un único .card) — encabezado + resumen por un lado, Detalle de
+// envíos por el otro, igual a la referencia.
 
 // `opciones.conAcciones` agrega el footer de Guardar borrador/Confirmar
 // liquidación (Liquidación Clientes admin); Mis Liquidaciones no lo pasa.
@@ -248,37 +283,68 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
     <div class="card">
       <div class="liquidacion-header-unificado">
         <div class="liquidacion-header-datos">
-          <h3 id="${prefijo}-nombre" style="margin:0;"></h3>
-          <span class="texto-muted" id="${prefijo}-periodo"></span>
-          <span id="${prefijo}-estado"></span>
+          <div class="liquidacion-header-titulo-fila">
+            <h2 id="${prefijo}-nombre"></h2>
+            <span class="liq-chip liq-chip-gris" id="${prefijo}-chip-servicio"></span>
+            <span class="liq-chip liq-chip-dorado" id="${prefijo}-chip-tipo"></span>
+            <span id="${prefijo}-estado"></span>
+          </div>
+          <div class="liquidacion-header-fechas">
+            <i data-lucide="calendar"></i>
+            <span>Fecha inicio: <strong id="${prefijo}-fecha-inicio"></strong></span>
+            <span class="liquidacion-header-fechas-sep">|</span>
+            <span>Fecha fin: <strong id="${prefijo}-fecha-fin"></strong></span>
+          </div>
         </div>
         <div class="liquidacion-header-resumen">
           <div class="liquidacion-header-resumen-total">
             <div class="liquidacion-header-resumen-dato">
-              <span class="liquidacion-header-resumen-label">Paquetes</span>
+              <span class="liquidacion-header-resumen-label">Total envíos</span>
               <span class="liquidacion-header-resumen-valor" id="${prefijo}-total-paquetes">—</span>
             </div>
             <div class="liquidacion-header-resumen-dato liquidacion-header-resumen-destacado">
-              <span class="liquidacion-header-resumen-label">Monto a pagar</span>
+              <span class="liquidacion-header-resumen-label">Monto total a pagar</span>
               <span class="liquidacion-header-resumen-valor" id="${prefijo}-monto-a-pagar">—</span>
             </div>
           </div>
-          <button type="button" class="btn-icono" id="${prefijo}-btn-pdf-vista" data-tip="Vista previa PDF"><i data-lucide="eye"></i></button>
-          <button type="button" class="btn-icono" id="${prefijo}-btn-pdf-descargar" data-tip="Descargar PDF"><i data-lucide="download"></i></button>
+          <button type="button" class="btn-icono btn-icono-dorado" id="${prefijo}-btn-pdf-descargar" data-tip="Descargar PDF"><i data-lucide="download"></i></button>
         </div>
       </div>
+
       <div id="${prefijo}-combos-extra" class="buscar-mas-filtrar" style="margin-bottom:10px;"></div>
+
+      <div class="liq-resumen-section-header">
+        <span class="liq-resumen-section-titulo">Resumen por zonas y extras</span>
+        <span class="tarjeta-resumen-aviso" id="${prefijo}-aviso-cero" hidden>
+          <i data-lucide="info"></i><span class="tarjeta-resumen-aviso-texto"></span>
+        </span>
+      </div>
       <div class="tarjetas-resumen-liquidacion-wrap">
         <div class="tarjetas-resumen-liquidacion-fila" id="${prefijo}-tarjetas"></div>
       </div>
-      <p style="font-weight:700; margin:20px 0 8px;">Detalle de envíos</p>
+
+      ${opciones.conAcciones ? `
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+          <button type="button" class="btn-secundario-modal" id="${prefijo}-btn-guardar-borrador" hidden>Guardar borrador</button>
+          <button type="button" class="btn-primario" id="${prefijo}-btn-confirmar" hidden>Confirmar liquidación</button>
+        </div>
+      ` : ""}
+    </div>
+
+    <div class="card">
+      <div class="liq-detalle-header">
+        <div class="liq-detalle-header-titulo">
+          <span class="liq-detalle-titulo">Detalle de envíos</span>
+          <span class="tarjeta-resumen-pie-chip" id="${prefijo}-detalle-contador"></span>
+        </div>
+        <div class="liq-detalle-subtotal-filtrado">Subtotal filtrado: <strong id="${prefijo}-detalle-subtotal-filtrado"></strong></div>
+      </div>
       <div class="buscar-mas-filtrar" style="margin-bottom:10px;">
-        <input id="${prefijo}-detalle-buscar" class="buscador" placeholder="Buscar por dirección, localidad o cuenta…" />
-        <span class="rango-fechas-envios-listado">
-          <input type="date" id="${prefijo}-detalle-desde" />
-          <span style="color:#777;">a</span>
-          <input type="date" id="${prefijo}-detalle-hasta" />
-        </span>
+        <input id="${prefijo}-detalle-buscar" class="buscador" placeholder="Buscar por dirección, localidad o N°…" />
+        <div class="combo-filtro" id="${prefijo}-combo-fecha">
+          <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Fecha: Todas</button>
+          <ul class="combo-filtro-lista" role="listbox" hidden><li data-valor="" aria-selected="true">Todas</li></ul>
+        </div>
         <div class="combo-filtro" id="${prefijo}-combo-zona">
           <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Zona</button>
           <ul class="combo-filtro-lista" role="listbox" hidden><li data-valor="" aria-selected="true">Todas</li></ul>
@@ -295,7 +361,7 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
       </div>
       <div class="tabla-scroll">
         <table class="tabla-detalle-liquidacion">
-          <thead><tr>${COLUMNAS_DETALLE.map((c, i) => `<th${i === 0 || i === 8 ? ' class="col-num"' : ""}>${c}</th>`).join("")}</tr></thead>
+          <thead><tr>${COLUMNAS_DETALLE.map((c, i) => `<th${i === 0 || i === COLUMNAS_DETALLE.length - 1 ? ' class="col-num"' : ""}>${c}</th>`).join("")}</tr></thead>
           <tbody id="${prefijo}-tabla-detalle"></tbody>
         </table>
       </div>
@@ -314,12 +380,6 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
           <button type="button" class="btn-icono" id="${prefijo}-btn-detalle-siguiente"><i data-lucide="chevron-right"></i></button>
         </div>
       </div>
-      ${opciones.conAcciones ? `
-        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-          <button type="button" class="btn-secundario-modal" id="${prefijo}-btn-guardar-borrador" hidden>Guardar borrador</button>
-          <button type="button" class="btn-primario" id="${prefijo}-btn-confirmar" hidden>Confirmar liquidación</button>
-        </div>
-      ` : ""}
     </div>
   `;
   const estadoDetalle = crearEstadoDetalle();
@@ -329,8 +389,6 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
 }
 
 // ===================== PDF =====================
-
-const NOMBRES_MES_PDF = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
 // Arma el detalle diario agregado (Fecha x Zona x Tamaño) a partir del
 // detalle itemizado YA CARGADO en pantalla (pedido explícito: el PDF sale
@@ -388,10 +446,9 @@ export async function generarPdfLiquidacion({ cliente, servicio, fechaInicio, fe
   doc.setFont(undefined, "normal");
 
   const diario = armarDetalleDiarioPdf(filasDetalle || [], zonas);
-  // Pedido 2026-11-25 (QA post-release): nada de texto repetido para
-  // simular una celda combinada — "Pequeños"/"Grandes"/etc. van con
-  // colSpan/rowSpan reales (igual que el PDF de referencia: "PEQUEÑOS"
-  // ocupa una sola celda ancha arriba de sus 4 zonas, no se repite 4 veces).
+  // "Pequeños"/"Grandes" van con colSpan/rowSpan reales (igual que el
+  // PDF de referencia: "PEQUEÑOS" ocupa una sola celda ancha arriba de
+  // sus zonas, no se repite por cada una).
   doc.autoTable({
     startY: 30,
     head: [

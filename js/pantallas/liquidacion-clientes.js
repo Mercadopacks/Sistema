@@ -294,7 +294,6 @@ async function asegurarVistaLiqClienteMontada(){
     conAcciones: true,
     zonas: abmCordones.obtenerActivosConId().map(c => c.texto),
   });
-  document.getElementById("liq-cliente-btn-pdf-vista").addEventListener("click", ()=> abrirOGenerarPdf("vista"));
   document.getElementById("liq-cliente-btn-pdf-descargar").addEventListener("click", ()=> abrirOGenerarPdf("descargar"));
   document.getElementById("liq-cliente-btn-guardar-borrador").addEventListener("click", async ()=>{
     const btn = document.getElementById("liq-cliente-btn-guardar-borrador");
@@ -337,7 +336,11 @@ async function abrirPantallaLiquidacionCliente(periodo){
   liquidacionClienteAbriendo = periodo;
   navegarA("detalle-liquidacion-cliente");
   document.getElementById("liq-cliente-nombre").textContent = tituloTexto(periodo.cliente);
-  document.getElementById("liq-cliente-periodo").textContent = `${labelServicio(periodo.tipo_servicio)} · ${formatearFecha(periodo.fecha_inicio)} a ${formatearFecha(periodo.fecha_fin)}`;
+  document.getElementById("liq-cliente-chip-servicio").textContent = labelServicio(periodo.tipo_servicio);
+  document.getElementById("liq-cliente-chip-tipo").textContent = `Liquidación ${periodo.tipo_servicio === "fulfillment" ? "Mensual" : "Semanal"}`;
+  document.getElementById("liq-cliente-fecha-inicio").textContent = formatearFecha(periodo.fecha_inicio);
+  document.getElementById("liq-cliente-fecha-fin").textContent = formatearFecha(periodo.fecha_fin);
+  document.getElementById("liq-cliente-estado").textContent = "";
   document.getElementById("liq-cliente-btn-guardar-borrador").hidden = !!periodo.soloLectura;
   document.getElementById("liq-cliente-btn-confirmar").hidden = !!periodo.soloLectura;
 

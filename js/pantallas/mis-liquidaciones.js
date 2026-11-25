@@ -74,7 +74,6 @@ async function asegurarVistaMisLiqMontada(){
     conAcciones: false,
     zonas: abmCordones.obtenerActivosConId().map(c => c.texto),
   });
-  document.getElementById("mis-liq-btn-pdf-vista").addEventListener("click", ()=> abrirOGenerarPdf("vista"));
   document.getElementById("mis-liq-btn-pdf-descargar").addEventListener("click", ()=> abrirOGenerarPdf("descargar"));
 }
 
@@ -152,8 +151,10 @@ async function cargarPeriodoActual(){
   repoblarComboPeriodo();
   const did = stateMisLiquidaciones.didActual;
   const p = periodoPara(stateMisLiquidaciones.servicio, stateMisLiquidaciones.fechaReferencia);
-  document.getElementById("mis-liq-periodo").textContent =
-    `${stateMisLiquidaciones.servicio === "fulfillment" ? "Fulfillment" : "Última milla"} · ${labelPeriodoPara(stateMisLiquidaciones.servicio, p)}`;
+  document.getElementById("mis-liq-chip-servicio").textContent = stateMisLiquidaciones.servicio === "fulfillment" ? "Fulfillment" : "Última milla";
+  document.getElementById("mis-liq-chip-tipo").textContent = `Liquidación ${stateMisLiquidaciones.servicio === "fulfillment" ? "Mensual" : "Semanal"}`;
+  document.getElementById("mis-liq-fecha-inicio").textContent = formatearFecha(p.inicio);
+  document.getElementById("mis-liq-fecha-fin").textContent = formatearFecha(p.fin);
 
   const [{ data: liquidacion }, { data: resumen, error: errResumen }, { data: detalle, error: errDetalle }, { data: totales, error: errTotales }] = await Promise.all([
     sb.from("liquidaciones_clientes").select("*").eq("did_cliente", did).eq("fecha_inicio", p.inicio).eq("fecha_fin", p.fin).maybeSingle(),
