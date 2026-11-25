@@ -9,6 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+<!-- Pedido 2026-11-25: PDF de Liquidación (vista previa + descarga), ver js/ui/liquidacion-vista.js -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root{
     --dorado:#F6BE05; --negro:#111; --fondo:#efeeea; --borde:#ddd9d0;
@@ -259,6 +262,44 @@
   .tabla-detalle-liquidacion th, .tabla-detalle-liquidacion td{white-space:nowrap;}
   .tabla-detalle-liquidacion th:nth-child(5), .tabla-detalle-liquidacion td:nth-child(5){white-space:normal; min-width:180px;}
   .tabla-detalle-liquidacion th.col-num, .tabla-detalle-liquidacion td.col-num{text-align:right;}
+
+  /* Pedido 2026-11-25 (rediseño Liquidación Clientes / Mis Liquidaciones):
+     encabezado unificado (datos a la izquierda, resumen total + acciones
+     PDF a la derecha) + fila de tarjetas (una por cordón activo — dinámico,
+     nunca asumir una cantidad fija — más la de Extras) + alineación
+     tabular para todo importe/cantidad (formato monetario argentino ya lo
+     da formatearMoneda(), acá solo la alineación numérica). */
+  .col-num{font-variant-numeric:tabular-nums;}
+  .liquidacion-header-unificado{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px;}
+  .liquidacion-header-datos{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;}
+  .liquidacion-header-resumen{display:flex; align-items:center; gap:18px; flex-wrap:wrap;}
+  .liquidacion-header-resumen-dato{display:flex; flex-direction:column; align-items:flex-end; line-height:1.3;}
+  .liquidacion-header-resumen-label{font-size:11px; color:#777; text-transform:uppercase; letter-spacing:.03em;}
+  .liquidacion-header-resumen-valor{font-size:16px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .liquidacion-header-resumen-destacado .liquidacion-header-resumen-valor{
+    font-size:22px; font-weight:800; color:var(--negro); background:var(--dorado);
+    padding:2px 12px; border-radius:6px;
+  }
+  .tarjetas-resumen-liquidacion-fila{display:flex; gap:14px; overflow-x:auto; padding-bottom:6px; margin-bottom:16px;}
+  .tarjeta-resumen-liquidacion{
+    background:#fff; border:1px solid var(--borde); border-radius:10px;
+    min-width:230px; flex:1 1 230px; display:flex; flex-direction:column;
+  }
+  .tarjeta-resumen-header{
+    display:flex; justify-content:space-between; align-items:center; font-weight:800;
+    padding:10px 12px; border-bottom:1px solid var(--borde); background:#f8f7f2;
+    border-radius:10px 10px 0 0;
+  }
+  .tarjeta-resumen-total-chico{font-size:12px; color:#777; font-weight:600;}
+  .tabla-tarjeta-resumen{width:100%; border-collapse:collapse;}
+  .tabla-tarjeta-resumen th, .tabla-tarjeta-resumen td{padding:5px 10px; font-size:12.5px;}
+  .tabla-tarjeta-resumen th{color:#777; font-weight:700; text-align:left;}
+  .tabla-tarjeta-resumen th.col-num, .tabla-tarjeta-resumen td.col-num{text-align:right;}
+  .tabla-tarjeta-resumen tr.fila-sin-movimiento{opacity:.45;}
+  .tarjeta-resumen-pie{
+    display:flex; justify-content:space-between; padding:9px 12px; font-weight:800;
+    border-top:1px solid var(--borde); font-size:13px;
+  }
   /* Reserva el mismo alto siempre (no solo "hasta 460px") para que
      filtrar/buscar y quedarse con pocas filas no encoja la caja — pedido
      2026-11-15: a medida que se escribía en el buscador de "Choferes en
@@ -1146,83 +1187,27 @@
            totales y el detalle itemizado día por día (estilo la
            liquidación de repartidor que pasó el usuario como
            referencia). -->
-      <div id="vista-detalle-liquidacion-cliente" hidden>
-        <div class="card">
-          <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
-            <h3 id="detalle-liq-cliente-nombre" style="margin:0;"></h3>
-            <span class="texto-muted" id="detalle-liq-cliente-periodo"></span>
-          </div>
-          <!-- Pedido 2026-11-24 (6ta vuelta): resumen tipo "RESUMEN DE
-               LIQUIDACION" (Grupo/Tamaño-Item/Cantidad/Precio/Monto) igual
-               al diagrama que pasó el usuario — reemplaza la tabla simple
-               "Item/Cantidad/Monto". Para Fulfillment, Almacenamiento y
-               Despacho Unitario se arman con inputs editables (cantidad y
-               precio varían cada liquidación, no toman el precio fijo del
-               cliente) — ver renderResumenMatrizLiquidacion(). Sin
-               tabla-scroll a propósito (pedido 2026-11-24: debe entrar
-               todo en pantalla sin scroll, a diferencia del detalle). -->
-          <p style="font-weight:700; margin:0 0 8px;">Resumen de liquidación</p>
-          <div style="border:1px solid var(--borde); border-radius:8px; margin-bottom:20px;">
-            <table class="tabla-resumen-liquidacion">
-              <thead><tr><th>Concepto</th><th class="col-num">Cantidad</th><th class="col-num">Precio</th><th class="col-num">Monto</th></tr></thead>
-              <tbody id="tabla-resumen-liquidacion-cliente"></tbody>
-              <tfoot>
-                <tr><td colspan="3" style="text-align:right;">Total Paquetes</td><td class="col-num" id="detalle-liq-total-paquetes"></td></tr>
-                <tr class="fila-total-liquidacion"><td colspan="3" style="text-align:right;">MONTO TOTAL A PAGAR</td><td class="col-num" id="detalle-liq-monto-a-pagar"></td></tr>
-              </tfoot>
-            </table>
-          </div>
-          <p style="font-weight:700; margin:0 0 8px;">Detalle</p>
-          <div class="tabla-scroll">
-            <table class="tabla-detalle-liquidacion">
-              <thead><tr><th class="col-num">Nro</th><th>Fecha</th><th>Tipo</th><th>Cuenta</th><th>Dirección</th><th>Localidad</th><th>Cordón</th><th>Tamaño</th><th class="col-num">Monto</th></tr></thead>
-              <tbody id="tabla-detalle-liquidacion-cliente"></tbody>
-            </table>
-          </div>
-          <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-            <button type="button" class="btn-secundario-modal" id="btn-guardar-borrador-liquidacion" hidden>Guardar borrador</button>
-            <button type="button" class="btn-primario" id="btn-confirmar-liquidacion" hidden>Confirmar liquidación</button>
-          </div>
-        </div>
-      </div>
+      <!-- Pedido 2026-11-25 (rediseño): el contenido se monta vía JS
+           (montarVistaLiquidacion(), js/ui/liquidacion-vista.js) — mismo
+           esqueleto compartido con Mis Liquidaciones, con sus acciones de
+           guardar/confirmar (ocultas si soloLectura). -->
+      <div id="vista-detalle-liquidacion-cliente" hidden></div>
 
       <!-- Pedido 2026-11-25: "Mis Liquidaciones" — vista de SOLO LECTURA
            para usuarios tipo_usuario="cliente", acotada a su(s) propio(s)
-           did_cliente. Mismo formato que el detalle de arriba, sin
-           ninguna acción de escritura (ver js/pantallas/mis-liquidaciones.js). -->
+           did_cliente. Mismo esqueleto compartido que el detalle de
+           arriba (montarVistaLiquidacion), sin acciones de escritura —
+           ver js/pantallas/mis-liquidaciones.js. -->
       <div id="vista-mis-liquidaciones" hidden>
         <div id="mis-liquidaciones-sin-acceso" class="card" hidden>
           <p class="sin-datos">Tu usuario no tiene ninguna cuenta de cliente asociada. Pedile a un administrativo que la vincule en Configuración → Usuarios.</p>
         </div>
         <div id="mis-liquidaciones-contenido" hidden>
-          <div class="card">
-            <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
-              <h3 id="mis-liq-cliente-nombre" style="margin:0;"></h3>
-              <span class="texto-muted" id="mis-liq-periodo-label"></span>
-              <span id="mis-liq-estado"></span>
-            </div>
-            <div class="buscar-mas-filtrar" style="margin-bottom:14px;">
-              <div id="combo-mis-liquidaciones-cliente-wrap"></div>
-              <div id="combo-mis-liquidaciones-periodo-wrap"></div>
-            </div>
-            <p style="font-weight:700; margin:0 0 8px;">Resumen de liquidación</p>
-            <div style="border:1px solid var(--borde); border-radius:8px; margin-bottom:20px;">
-              <table class="tabla-resumen-liquidacion">
-                <thead><tr><th>Concepto</th><th class="col-num">Cantidad</th><th class="col-num">Precio</th><th class="col-num">Monto</th></tr></thead>
-                <tbody id="tabla-mis-liquidaciones-resumen"></tbody>
-                <tfoot>
-                  <tr class="fila-total-liquidacion"><td colspan="3" style="text-align:right;">MONTO A PAGAR</td><td class="col-num" id="mis-liq-monto-a-pagar"></td></tr>
-                </tfoot>
-              </table>
-            </div>
-            <p style="font-weight:700; margin:0 0 8px;">Detalle</p>
-            <div class="tabla-scroll">
-              <table class="tabla-detalle-liquidacion">
-                <thead><tr><th class="col-num">Nro</th><th>Fecha</th><th>Tipo</th><th>Dirección</th><th>Localidad</th><th>Cordón</th><th>Tamaño</th><th class="col-num">Monto</th></tr></thead>
-                <tbody id="tabla-mis-liquidaciones-detalle"></tbody>
-              </table>
-            </div>
+          <div class="buscar-mas-filtrar" style="margin-bottom:14px;">
+            <div id="combo-mis-liquidaciones-cliente-wrap"></div>
+            <div id="combo-mis-liquidaciones-periodo-wrap"></div>
           </div>
+          <div id="mis-liquidaciones-contenedor"></div>
         </div>
       </div>
 

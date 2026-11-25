@@ -7,6 +7,8 @@ import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { crearComboGenerico, crearPopoverGenerico } from "../ui/combos.js";
 import { fechaART, lunesDeSemana } from "../core/fechas.js";
 import { navegarA } from "../core/navegacion.js";
+import { abmCordones } from "../admin/abm-simple.js";
+import { montarVistaLiquidacion, renderResumenLiquidacion, cargarFilasDetalle, generarPdfLiquidacion } from "../ui/liquidacion-vista.js";
 
 // ===================== Liquidación Clientes =====================
 // Pedido 2026-11-23 (3ra vuelta): primero se elige el Servicio (filtra
@@ -278,13 +280,66 @@ document.getElementById("tabla-liquidacion-clientes").addEventListener("click", 
   await abrirPantallaLiquidacionCliente(periodo);
 });
 
+let vistaLiqClienteMontada = false;
+let estadoDetalleLiqCliente = null;
+
+// Monta el esqueleto compartido (header unificado + tarjetas + detalle
+// paginado, ver js/ui/liquidacion-vista.js) UNA SOLA VEZ — con acciones
+// de guardar/confirmar, a diferencia de Mis Liquidaciones.
+async function asegurarVistaLiqClienteMontada(){
+  if(vistaLiqClienteMontada) return;
+  vistaLiqClienteMontada = true;
+  await abmCordones.cargar();
+  estadoDetalleLiqCliente = montarVistaLiquidacion("vista-detalle-liquidacion-cliente", "liq-cliente", {
+    conAcciones: true,
+    zonas: abmCordones.obtenerActivosConId().map(c => c.texto),
+  });
+  document.getElementById("liq-cliente-btn-pdf-vista").addEventListener("click", ()=> abrirOGenerarPdf("vista"));
+  document.getElementById("liq-cliente-btn-pdf-descargar").addEventListener("click", ()=> abrirOGenerarPdf("descargar"));
+  document.getElementById("liq-cliente-btn-guardar-borrador").addEventListener("click", async ()=>{
+    const btn = document.getElementById("liq-cliente-btn-guardar-borrador");
+    btn.disabled = true;
+    const ok = await guardarLiquidacionCliente("borrador");
+    btn.disabled = false;
+    if(ok){
+      await mostrarAviso("Borrador guardado — podés continuarlo después.");
+      navegarA("liquidacion-clientes");
+      cargarLiquidacionClientes();
+    }
+  });
+  document.getElementById("liq-cliente-btn-confirmar").addEventListener("click", async ()=>{
+    if(!(await mostrarConfirmacion("¿Confirmar esta liquidación? No se puede deshacer."))) return;
+    const btn = document.getElementById("liq-cliente-btn-confirmar");
+    btn.disabled = true;
+    const ok = await guardarLiquidacionCliente("generada");
+    btn.disabled = false;
+    if(ok){
+      navegarA("liquidacion-clientes");
+      cargarLiquidacionClientes();
+    }
+  });
+}
+
+async function abrirOGenerarPdf(accion){
+  const periodo = liquidacionClienteAbriendo;
+  if(!periodo || !periodo.matrizFilas) return;
+  await generarPdfLiquidacion({
+    cliente: periodo.cliente, servicio: periodo.tipo_servicio,
+    fechaInicio: periodo.fecha_inicio, fechaFin: periodo.fecha_fin,
+    filasResumen: periodo.matrizFilas, filasDetalle: periodo.detalleFilas || [],
+    totalPaquetes: document.getElementById("liq-cliente-total-paquetes").textContent,
+    montoAPagar: periodo.montoTotalCalculado, accion,
+  });
+}
+
 async function abrirPantallaLiquidacionCliente(periodo){
+  await asegurarVistaLiqClienteMontada();
   liquidacionClienteAbriendo = periodo;
   navegarA("detalle-liquidacion-cliente");
-  document.getElementById("detalle-liq-cliente-nombre").textContent = tituloTexto(periodo.cliente);
-  document.getElementById("detalle-liq-cliente-periodo").textContent = `${labelServicio(periodo.tipo_servicio)} · ${formatearFecha(periodo.fecha_inicio)} a ${formatearFecha(periodo.fecha_fin)}`;
-  document.getElementById("btn-guardar-borrador-liquidacion").hidden = !!periodo.soloLectura;
-  document.getElementById("btn-confirmar-liquidacion").hidden = !!periodo.soloLectura;
+  document.getElementById("liq-cliente-nombre").textContent = tituloTexto(periodo.cliente);
+  document.getElementById("liq-cliente-periodo").textContent = `${labelServicio(periodo.tipo_servicio)} · ${formatearFecha(periodo.fecha_inicio)} a ${formatearFecha(periodo.fecha_fin)}`;
+  document.getElementById("liq-cliente-btn-guardar-borrador").hidden = !!periodo.soloLectura;
+  document.getElementById("liq-cliente-btn-confirmar").hidden = !!periodo.soloLectura;
 
   const reg = periodo.registroExistente;
   periodo.pallets = reg ? (reg.cantidad_pallets || 0) : 0;
@@ -305,29 +360,12 @@ async function abrirPantallaLiquidacionCliente(periodo){
 
 async function cargarDetalleItemizadoLiquidacion(){
   const periodo = liquidacionClienteAbriendo;
-  const tbody = document.getElementById("tabla-detalle-liquidacion-cliente");
   const { data, error } = await sb.rpc("detalle_liquidacion_cliente", {
     p_did_cliente: periodo.did_cliente, p_fecha_inicio: periodo.fecha_inicio, p_fecha_fin: periodo.fecha_fin,
   });
-  if(error){ console.error("Error cargando detalle de liquidación:", error); tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">No se pudo cargar el detalle.</td></tr>`; return; }
-  const filas = data || [];
-  if(!filas.length){
-    tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">Sin envíos ni extras en este período.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = filas.map((f, i) => `
-    <tr>
-      <td>${i + 1}</td>
-      <td>${formatearFecha(f.fecha)}</td>
-      <td>${f.tipo}</td>
-      <td>${f.cuenta || "—"}</td>
-      <td>${tituloTexto(f.direccion) || "—"}</td>
-      <td>${f.localidad || "—"}</td>
-      <td>${f.zona || "—"}</td>
-      <td>${f.tamano || "—"}</td>
-      <td>${formatearMoneda(f.monto)}</td>
-    </tr>
-  `).join("");
+  if(error){ console.error("Error cargando detalle de liquidación:", error); periodo.detalleFilas = []; }
+  else periodo.detalleFilas = data || [];
+  cargarFilasDetalle("liq-cliente", estadoDetalleLiqCliente, periodo.detalleFilas);
 }
 
 async function cargarResumenMatrizLiquidacion(){
@@ -340,49 +378,14 @@ async function cargarResumenMatrizLiquidacion(){
   renderResumenMatrizLiquidacion();
 }
 
-// Agrupa filas consecutivas del mismo "grupo" con rowspan (columna
-// "Grupo" fusionada, igual al Excel de referencia) — asume que las
-// filas ya vienen ordenadas por grupo (ver "order by" del RPC).
-// Bug real 2026-11-24: ese rowspan hacía que las filas 2ª/3ª de cada
-// grupo tuvieran MENOS <td> que la 1ª, así que cualquier CSS por
-// posición (:nth-child) apuntaba a la columna equivocada — se veía
-// todo corrido. Se reemplaza por completo: cada grupo es una fila
-// divisoria de ancho completo (sin columna "Grupo"), seguida de sus
-// filas de detalle (siempre 4 columnas, iguales) y un subtotal — formato
-// estándar de liquidación por secciones, sin ambigüedad de columnas.
-function agruparFilasResumen(filas){
-  const grupos = [];
-  filas.forEach(f => {
-    const ultimo = grupos[grupos.length - 1];
-    if(ultimo && ultimo.grupo === f.grupo) ultimo.filas.push(f);
-    else grupos.push({ grupo: f.grupo, filas: [f] });
-  });
-  return grupos;
-}
-
-function filaConcepto(label, cantidad, precio, monto){
-  const claseMonto = monto < 0 ? "col-num monto-negativo" : "col-num";
-  return `
-    <tr>
-      <td class="col-concepto">${label}</td>
-      <td class="col-num">${cantidad == null ? "-" : cantidad}</td>
-      <td class="col-num">${precio == null ? "-" : formatearMoneda(precio)}</td>
-      <td class="${claseMonto}">${formatearMoneda(monto)}</td>
-    </tr>
-  `;
-}
-function filaSeccion(nombre){
-  return `<tr class="fila-seccion-liquidacion"><td colspan="4">${nombre}</td></tr>`;
-}
-function filaSubtotal(nombre, monto){
-  const claseMonto = monto < 0 ? "col-num monto-negativo" : "col-num";
-  return `<tr class="fila-subtotal-liquidacion"><td colspan="3" style="text-align:right;">Subtotal ${nombre}</td><td class="${claseMonto}">${formatearMoneda(monto)}</td></tr>`;
-}
-
 // Pedido 2026-11-24: Almacenamiento/Despacho Unitario de Fulfillment se
 // arman acá (no vienen del RPC) porque su Precio (y opcionalmente su
 // Cantidad, para Almacenamiento) son editables POR LIQUIDACIÓN — varían
 // cada mes, no toman el precio fijo configurado en Precios por Cliente.
+// Rediseño 2026-11-25: las tarjetas de zona/extras las pinta el módulo
+// compartido (renderResumenLiquidacion); acá solo se arma el panel
+// aparte de Fulfillment (no es una tarjeta más — tiene inputs editables
+// y vive siempre, tenga o no cordones configurados).
 function renderResumenMatrizLiquidacion(){
   const periodo = liquidacionClienteAbriendo;
   if(!periodo || !periodo.matrizFilas || !periodo.totalesCalculados) return;
@@ -400,48 +403,47 @@ function renderResumenMatrizLiquidacion(){
   const montoDespacho = cantidadDespacho * periodo.precioDespacho;
   const montoDeposito = periodo.pallets * periodo.precioDeposito;
 
-  const tbody = document.getElementById("tabla-resumen-liquidacion-cliente");
-  const htmlPorGrupo = agruparFilasResumen(periodo.matrizFilas).map(g => {
-    const subtotal = g.filas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
-    return filaSeccion(g.grupo)
-      + g.filas.map(f => filaConcepto(f.item, f.cantidad, f.precio, f.monto)).join("")
-      + filaSubtotal(g.grupo, subtotal);
-  }).join("");
-  const htmlFulfillment = !esFulfillment ? "" : (
-    filaSeccion("Servicio de Fulfillment")
-    + `
-      <tr>
-        <td class="col-concepto">Almacenamiento</td>
-        <td class="col-num"><input type="number" min="0" step="1" class="cel-input" id="detalle-liq-input-pallets" value="${periodo.pallets}" ${soloLectura ? "disabled" : ""} style="width:80px; text-align:right;" /></td>
-        <td class="col-num"><input type="text" class="cel-input" id="detalle-liq-input-precio-deposito" value="${formatearMoneda(periodo.precioDeposito)}" ${soloLectura ? "disabled" : ""} style="width:110px; text-align:right;" /></td>
-        <td class="col-num">${formatearMoneda(montoDeposito)}</td>
-      </tr>
-      <tr>
-        <td class="col-concepto">Despacho Unitario</td>
-        <td class="col-num">${cantidadDespacho}</td>
-        <td class="col-num"><input type="text" class="cel-input" id="detalle-liq-input-precio-despacho" value="${formatearMoneda(periodo.precioDespacho)}" ${soloLectura ? "disabled" : ""} style="width:110px; text-align:right;" /></td>
-        <td class="col-num">${formatearMoneda(montoDespacho)}</td>
-      </tr>
-    `
-    + filaSubtotal("Fulfillment", montoDeposito + montoDespacho)
-  );
-  tbody.innerHTML = htmlPorGrupo + htmlFulfillment;
+  renderResumenLiquidacion("liq-cliente", periodo.matrizFilas);
+
+  const contCombosExtra = document.getElementById("liq-cliente-combos-extra");
+  contCombosExtra.innerHTML = !esFulfillment ? "" : `
+    <div class="tarjeta-resumen-liquidacion" style="flex:0 0 auto; min-width:320px;">
+      <div class="tarjeta-resumen-header"><span>Servicio de Fulfillment</span></div>
+      <table class="tabla-tarjeta-resumen">
+        <tbody>
+          <tr>
+            <td>Almacenamiento (pallets)</td>
+            <td class="col-num"><input type="number" min="0" step="1" class="cel-input" id="liq-cliente-input-pallets" value="${periodo.pallets}" ${soloLectura ? "disabled" : ""} style="width:70px; text-align:right;" /></td>
+            <td class="col-num"><input type="text" class="cel-input" id="liq-cliente-input-precio-deposito" value="${formatearMoneda(periodo.precioDeposito)}" ${soloLectura ? "disabled" : ""} style="width:100px; text-align:right;" /></td>
+            <td class="col-num">${formatearMoneda(montoDeposito)}</td>
+          </tr>
+          <tr>
+            <td>Despacho Unitario</td>
+            <td class="col-num">${cantidadDespacho}</td>
+            <td class="col-num"><input type="text" class="cel-input" id="liq-cliente-input-precio-despacho" value="${formatearMoneda(periodo.precioDespacho)}" ${soloLectura ? "disabled" : ""} style="width:100px; text-align:right;" /></td>
+            <td class="col-num">${formatearMoneda(montoDespacho)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="tarjeta-resumen-pie"><span>Subtotal Fulfillment</span><span>${formatearMoneda(montoDeposito + montoDespacho)}</span></div>
+    </div>
+  `;
 
   const montoTotal = t.total_envios + t.total_turbo + t.total_adicional - t.total_descuento + montoDeposito + montoDespacho;
-  document.getElementById("detalle-liq-total-paquetes").textContent = cantidadPaquetesEnvios;
-  document.getElementById("detalle-liq-monto-a-pagar").textContent = formatearMoneda(montoTotal);
+  document.getElementById("liq-cliente-total-paquetes").textContent = cantidadPaquetesEnvios;
+  document.getElementById("liq-cliente-monto-a-pagar").textContent = formatearMoneda(montoTotal);
   periodo.montoTotalCalculado = montoTotal;
 
   if(!soloLectura && esFulfillment){
-    document.getElementById("detalle-liq-input-pallets").addEventListener("change", (e)=>{
+    document.getElementById("liq-cliente-input-pallets").addEventListener("change", (e)=>{
       periodo.pallets = Number(e.target.value) || 0;
       renderResumenMatrizLiquidacion();
     });
-    document.getElementById("detalle-liq-input-precio-deposito").addEventListener("change", (e)=>{
+    document.getElementById("liq-cliente-input-precio-deposito").addEventListener("change", (e)=>{
       periodo.precioDeposito = parsearMoneda(e.target.value) || 0;
       renderResumenMatrizLiquidacion();
     });
-    document.getElementById("detalle-liq-input-precio-despacho").addEventListener("change", (e)=>{
+    document.getElementById("liq-cliente-input-precio-despacho").addEventListener("change", (e)=>{
       periodo.precioDespacho = parsearMoneda(e.target.value) || 0;
       renderResumenMatrizLiquidacion();
     });
@@ -494,27 +496,5 @@ async function guardarLiquidacionCliente(estado){
   return guardarTotalesLiquidacionCliente(periodo, periodo.totalesCalculados, estado);
 }
 
-document.getElementById("btn-guardar-borrador-liquidacion").addEventListener("click", async ()=>{
-  const btn = document.getElementById("btn-guardar-borrador-liquidacion");
-  btn.disabled = true;
-  const ok = await guardarLiquidacionCliente("borrador");
-  btn.disabled = false;
-  if(ok){
-    await mostrarAviso("Borrador guardado — podés continuarlo después.");
-    navegarA("liquidacion-clientes");
-    cargarLiquidacionClientes();
-  }
-});
-document.getElementById("btn-confirmar-liquidacion").addEventListener("click", async ()=>{
-  if(!(await mostrarConfirmacion("¿Confirmar esta liquidación? No se puede deshacer."))) return;
-  const btn = document.getElementById("btn-confirmar-liquidacion");
-  btn.disabled = true;
-  const ok = await guardarLiquidacionCliente("generada");
-  btn.disabled = false;
-  if(ok){
-    navegarA("liquidacion-clientes");
-    cargarLiquidacionClientes();
-  }
-});
 
 export { cargarLiquidacionClientes };

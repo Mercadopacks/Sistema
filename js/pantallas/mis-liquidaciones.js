@@ -12,13 +12,21 @@
 // guard de autorización — ver migración
 // 2026-11-25b_mis_liquidaciones_seguridad.sql — porque precios_cliente*
 // está bloqueado por RLS para cualquiera que no sea admin.
+// Rediseño 2026-11-25: usa el mismo esqueleto compartido que Liquidación
+// Clientes (encabezado unificado, tarjetas de zona dinámicas + Extras,
+// detalle paginado, PDF) — ver js/ui/liquidacion-vista.js — montado SIN
+// `conAcciones` (ninguna escritura).
 import { sb } from "../core/supabase.js";
 import { formatearFecha, formatearMoneda, tituloTexto } from "../core/formato.js";
 import { crearComboGenerico } from "../ui/combos.js";
 import { fechaART, lunesDeSemana } from "../core/fechas.js";
 import { stateSesion } from "../core/sesion.js";
+import { abmCordones } from "../admin/abm-simple.js";
+import { montarVistaLiquidacion, renderResumenLiquidacion, cargarFilasDetalle, agruparFilasResumen, generarPdfLiquidacion } from "../ui/liquidacion-vista.js";
 
 const stateMisLiquidaciones = { clientes: [], didActual: null, servicio: "ultima_milla", fechaReferencia: null };
+let vistaMisLiqMontada = false;
+let estadoDetalleMisLiq = null;
 
 function sumarDias(fechaStr, n){
   const d = new Date(fechaStr + "T00:00:00Z");
@@ -58,32 +66,22 @@ function labelEstadoLiquidacion(estado){
   return { texto: "En curso", clase: "amarillo" };
 }
 
-function agruparFilasResumen(filas){
-  const grupos = [];
-  filas.forEach(f => {
-    const ultimo = grupos[grupos.length - 1];
-    if(ultimo && ultimo.grupo === f.grupo) ultimo.filas.push(f);
-    else grupos.push({ grupo: f.grupo, filas: [f] });
+async function asegurarVistaMisLiqMontada(){
+  if(vistaMisLiqMontada) return;
+  vistaMisLiqMontada = true;
+  await abmCordones.cargar();
+  estadoDetalleMisLiq = montarVistaLiquidacion("mis-liquidaciones-contenedor", "mis-liq", {
+    conAcciones: false,
+    zonas: abmCordones.obtenerActivosConId().map(c => c.texto),
   });
-  return grupos;
+  document.getElementById("mis-liq-btn-pdf-vista").addEventListener("click", ()=> abrirOGenerarPdf("vista"));
+  document.getElementById("mis-liq-btn-pdf-descargar").addEventListener("click", ()=> abrirOGenerarPdf("descargar"));
 }
-function filaConcepto(label, cantidad, precio, monto){
-  const claseMonto = monto < 0 ? "col-num monto-negativo" : "col-num";
-  return `
-    <tr>
-      <td class="col-concepto">${label}</td>
-      <td class="col-num">${cantidad == null ? "-" : cantidad}</td>
-      <td class="col-num">${precio == null ? "-" : formatearMoneda(precio)}</td>
-      <td class="${claseMonto}">${formatearMoneda(monto)}</td>
-    </tr>
-  `;
-}
-function filaSeccion(nombre){
-  return `<tr class="fila-seccion-liquidacion"><td colspan="4">${nombre}</td></tr>`;
-}
-function filaSubtotal(nombre, monto){
-  const claseMonto = monto < 0 ? "col-num monto-negativo" : "col-num";
-  return `<tr class="fila-subtotal-liquidacion"><td colspan="3" style="text-align:right;">Subtotal ${nombre}</td><td class="${claseMonto}">${formatearMoneda(monto)}</td></tr>`;
+
+let ultimoPeriodoCargado = null;
+async function abrirOGenerarPdf(accion){
+  if(!ultimoPeriodoCargado) return;
+  await generarPdfLiquidacion({ ...ultimoPeriodoCargado, accion });
 }
 
 async function resolverClientesPropios(){
@@ -142,7 +140,7 @@ function repoblarComboPeriodo(){
 
 async function cargarDatosClienteActual(){
   const did = stateMisLiquidaciones.didActual;
-  document.getElementById("mis-liq-cliente-nombre").textContent = tituloTexto((stateMisLiquidaciones.clientes.find(c => c.did === did) || {}).nombre_fantasia || "");
+  document.getElementById("mis-liq-nombre").textContent = tituloTexto((stateMisLiquidaciones.clientes.find(c => c.did === did) || {}).nombre_fantasia || "");
   const { data: tipo, error } = await sb.rpc("tipo_servicio_cliente", { p_did_cliente: did });
   if(error) console.error("Error obteniendo tipo de servicio:", error);
   stateMisLiquidaciones.servicio = tipo || "ultima_milla";
@@ -154,13 +152,8 @@ async function cargarPeriodoActual(){
   repoblarComboPeriodo();
   const did = stateMisLiquidaciones.didActual;
   const p = periodoPara(stateMisLiquidaciones.servicio, stateMisLiquidaciones.fechaReferencia);
-  document.getElementById("mis-liq-periodo-label").textContent =
+  document.getElementById("mis-liq-periodo").textContent =
     `${stateMisLiquidaciones.servicio === "fulfillment" ? "Fulfillment" : "Última milla"} · ${labelPeriodoPara(stateMisLiquidaciones.servicio, p)}`;
-
-  const tbodyResumen = document.getElementById("tabla-mis-liquidaciones-resumen");
-  const tbodyDetalle = document.getElementById("tabla-mis-liquidaciones-detalle");
-  tbodyResumen.innerHTML = `<tr><td colspan="4" class="sin-datos">Cargando…</td></tr>`;
-  tbodyDetalle.innerHTML = `<tr><td colspan="8" class="sin-datos">Cargando…</td></tr>`;
 
   const [{ data: liquidacion }, { data: resumen, error: errResumen }, { data: detalle, error: errDetalle }, { data: totales, error: errTotales }] = await Promise.all([
     sb.from("liquidaciones_clientes").select("*").eq("did_cliente", did).eq("fecha_inicio", p.inicio).eq("fecha_fin", p.fin).maybeSingle(),
@@ -179,29 +172,22 @@ async function cargarPeriodoActual(){
   const montoAPagar = (estado === "generada" && liquidacion) ? liquidacion.monto_a_pagar : (totales ? totales.monto_a_pagar : 0);
   document.getElementById("mis-liq-monto-a-pagar").textContent = formatearMoneda(montoAPagar || 0);
 
-  const filas = resumen || [];
-  tbodyResumen.innerHTML = !filas.length
-    ? `<tr><td colspan="4" class="sin-datos">Sin datos para este período.</td></tr>`
-    : agruparFilasResumen(filas).map(g => {
-        const subtotal = g.filas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
-        return filaSeccion(g.grupo) + g.filas.map(f => filaConcepto(f.item, f.cantidad, f.precio, f.monto)).join("") + filaSubtotal(g.grupo, subtotal);
-      }).join("");
+  const filasResumen = resumen || [];
+  const cantidadPaquetes = agruparFilasResumen(filasResumen)
+    .filter(g => g.grupo !== "Extras")
+    .reduce((acc, g) => acc + g.filas.reduce((a, f) => a + (Number(f.cantidad) || 0), 0), 0)
+    + (filasResumen.find(f => f.item === "Turbos")?.cantidad || 0);
+  document.getElementById("mis-liq-total-paquetes").textContent = cantidadPaquetes;
 
+  renderResumenLiquidacion("mis-liq", filasResumen);
   const filasDetalle = detalle || [];
-  tbodyDetalle.innerHTML = !filasDetalle.length
-    ? `<tr><td colspan="8" class="sin-datos">Sin envíos ni extras en este período.</td></tr>`
-    : filasDetalle.map((f, i) => `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${formatearFecha(f.fecha)}</td>
-          <td>${f.tipo}</td>
-          <td>${tituloTexto(f.direccion) || "—"}</td>
-          <td>${f.localidad || "—"}</td>
-          <td>${f.zona || "—"}</td>
-          <td>${f.tamano || "—"}</td>
-          <td>${formatearMoneda(f.monto)}</td>
-        </tr>
-      `).join("");
+  cargarFilasDetalle("mis-liq", estadoDetalleMisLiq, filasDetalle);
+
+  ultimoPeriodoCargado = {
+    cliente: (stateMisLiquidaciones.clientes.find(c => c.did === did) || {}).nombre_fantasia || "",
+    servicio: stateMisLiquidaciones.servicio, fechaInicio: p.inicio, fechaFin: p.fin,
+    filasResumen, filasDetalle, totalPaquetes: cantidadPaquetes, montoAPagar: montoAPagar || 0,
+  };
 }
 
 async function cargarMisLiquidaciones(){
@@ -209,6 +195,7 @@ async function cargarMisLiquidaciones(){
   document.getElementById("mis-liquidaciones-sin-acceso").hidden = !!clientes.length;
   document.getElementById("mis-liquidaciones-contenido").hidden = !clientes.length;
   if(!clientes.length) return;
+  await asegurarVistaMisLiqMontada();
 
   stateMisLiquidaciones.clientes = clientes;
   if(!stateMisLiquidaciones.didActual || !clientes.some(c => c.did === stateMisLiquidaciones.didActual)){
