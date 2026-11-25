@@ -5,8 +5,8 @@
 // es de solo lectura para quien lo importa, así que Envíos, Usuarios y Adicionales
 // no podrían reasignar un `let` exportado — sí pueden reasignar una propiedad de
 // un objeto exportado (`catalogos.clientes = data || []`), que es lo que hacen.
-// La referencia a clavesAVistasLabel/labelsAVistasClave de abajo apunta a la
-// sección Usuarios de index.html.
+// La referencia a clavesAVistasLabel/labelsAVistasClave de abajo apunta a
+// js/admin/usuarios.js (antes sección Usuarios de index.html, Etapa 5c).
 
   export const catalogos = { clientes: [] };   // clientes: [{did, nombre_fantasia, codigo}]
 

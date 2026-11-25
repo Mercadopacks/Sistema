@@ -6,7 +6,7 @@
 // protección real la dan las políticas RLS de Supabase (solo usuarios
 // autenticados pueden leer `envios`/`envios_historial`), no el secreto
 // de esta clave.
-const SUPABASE_URL = "https://pxbovlghjljrbrpjtcpr.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ap5oFuGA3ByxzbewtCVjmA_aP4IRY4M";
+export const SUPABASE_URL = "https://pxbovlghjljrbrpjtcpr.supabase.co";
+export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ap5oFuGA3ByxzbewtCVjmA_aP4IRY4M";
 
 export const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
