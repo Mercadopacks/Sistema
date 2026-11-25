@@ -82,7 +82,7 @@ function tarjetaZona(grupo, filas){
 function tarjetaExtras(filas){
   const subtotal = filas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
   return `
-    <article class="tarjeta-resumen-liquidacion">
+    <article class="tarjeta-resumen-liquidacion tarjeta-resumen-liquidacion-extras">
       <div class="tarjeta-resumen-header">
         <span class="tarjeta-resumen-titulo"><span class="tarjeta-resumen-bullet tarjeta-resumen-bullet-negro"></span>Extras</span>
         <span class="tarjeta-resumen-total-chico">Servicios</span>
@@ -107,13 +107,20 @@ function tarjetaExtras(filas){
   `;
 }
 
-// Pinta la fila de tarjetas (zonas dinámicas + Extras) + el aviso de
-// tarifa $0,00 en el contenedor `${prefijo}-tarjetas`/`${prefijo}-aviso-cero`.
+// Pinta la fila de tarjetas (zonas dinámicas en una grilla de 2 columnas +
+// Extras aparte a la derecha, ocupando todo el alto — pedido 2026-11-25,
+// 4ta vuelta) + el aviso de tarifa $0,00 en el contenedor
+// `${prefijo}-tarjetas`/`${prefijo}-aviso-cero`.
 export function renderResumenLiquidacion(prefijo, filasResumen){
   const grupos = agruparFilasResumen(filasResumen || []);
+  const gruposZonas = grupos.filter(g => g.grupo !== "Extras");
+  const grupoExtras = grupos.find(g => g.grupo === "Extras");
   const contTarjetas = document.getElementById(`${prefijo}-tarjetas`);
   if(contTarjetas){
-    contTarjetas.innerHTML = grupos.map(g => g.grupo === "Extras" ? tarjetaExtras(g.filas) : tarjetaZona(g.grupo, g.filas)).join("");
+    contTarjetas.innerHTML = `
+      <div class="tarjetas-zonas-grid">${gruposZonas.map(g => tarjetaZona(g.grupo, g.filas)).join("")}</div>
+      ${grupoExtras ? tarjetaExtras(grupoExtras.filas) : ""}
+    `;
   }
   const aviso = document.getElementById(`${prefijo}-aviso-cero`);
   if(aviso){
@@ -138,7 +145,7 @@ const BADGES_ZONA = ["negro", "dorado", "gris", "azul", "verde"];
 export function crearEstadoDetalle(){
   return {
     filas: [], filtradas: [], pagina: 0, tamanoPagina: 25,
-    busqueda: "", fecha: "", zona: "", tamano: "",
+    busqueda: "", fecha: "", zona: "", tamano: "", tipo: "",
   };
 }
 
@@ -152,9 +159,28 @@ function aplicarFiltros(estado){
     if(estado.fecha && f.fecha !== estado.fecha) return false;
     if(estado.zona && f.zona !== estado.zona) return false;
     if(estado.tamano && f.tamano !== estado.tamano) return false;
+    if(estado.tipo && f.tipo !== estado.tipo) return false;
     return true;
   });
   estado.pagina = 0;
+}
+
+// El combo de Tipo también depende de los datos (qué tipos de fila
+// aparecen realmente en este período: Envío/Turbo y los tipos de extra
+// configurados) — mismo patrón que el combo de Fecha.
+function repoblarComboTipo(prefijo, estado){
+  const cont = document.getElementById(`${prefijo}-combo-tipo`);
+  const tipos = [...new Set(estado.filas.map(f => f.tipo).filter(Boolean))];
+  cont.outerHTML = `
+    <div class="combo-filtro" id="${prefijo}-combo-tipo">
+      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Tipo: Todos</button>
+      <ul class="combo-filtro-lista" role="listbox" hidden>
+        <li data-valor="" aria-selected="true">Todos</li>
+        ${tipos.map(t => `<li data-valor="${t}">${t}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+  crearComboGenerico(`${prefijo}-combo-tipo`, (valor)=>{ estado.tipo = valor; aplicarFiltros(estado); renderDetalle(prefijo, estado); });
 }
 
 // Devuelve un color consistente (no aleatorio) para el badge de Zona,
@@ -196,7 +222,7 @@ function renderDetalle(prefijo, estado){
   document.getElementById(`${prefijo}-btn-detalle-anterior`).disabled = estado.pagina <= 0;
   document.getElementById(`${prefijo}-btn-detalle-siguiente`).disabled = estado.pagina >= totalPaginas - 1;
   const btnLimpiar = document.getElementById(`${prefijo}-btn-detalle-limpiar`);
-  const hayFiltro = !!(estado.busqueda || estado.fecha || estado.zona || estado.tamano);
+  const hayFiltro = !!(estado.busqueda || estado.fecha || estado.zona || estado.tamano || estado.tipo);
   btnLimpiar.hidden = !hayFiltro;
 
   // Contador + subtotal filtrado del título de la sección (pedido:
@@ -232,10 +258,11 @@ function repoblarComboFecha(prefijo, estado){
 // paginación.
 export function cargarFilasDetalle(prefijo, estado, filas){
   estado.filas = filas || [];
-  estado.busqueda = ""; estado.fecha = ""; estado.zona = ""; estado.tamano = "";
+  estado.busqueda = ""; estado.fecha = ""; estado.zona = ""; estado.tamano = ""; estado.tipo = "";
   const buscador = document.getElementById(`${prefijo}-detalle-buscar`);
   if(buscador) buscador.value = "";
   repoblarComboFecha(prefijo, estado);
+  repoblarComboTipo(prefijo, estado);
   aplicarFiltros(estado);
   renderDetalle(prefijo, estado);
 }
@@ -299,12 +326,18 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
         <div class="liquidacion-header-resumen">
           <div class="liquidacion-header-resumen-total">
             <div class="liquidacion-header-resumen-dato">
-              <span class="liquidacion-header-resumen-label">Total envíos</span>
-              <span class="liquidacion-header-resumen-valor" id="${prefijo}-total-paquetes">—</span>
+              <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="package"></i></span>
+              <span class="liquidacion-header-resumen-dato-texto">
+                <span class="liquidacion-header-resumen-label">Total envíos</span>
+                <span class="liquidacion-header-resumen-valor" id="${prefijo}-total-paquetes">—</span>
+              </span>
             </div>
             <div class="liquidacion-header-resumen-dato liquidacion-header-resumen-destacado">
-              <span class="liquidacion-header-resumen-label">Monto total a pagar</span>
-              <span class="liquidacion-header-resumen-valor" id="${prefijo}-monto-a-pagar">—</span>
+              <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="circle-dollar-sign"></i></span>
+              <span class="liquidacion-header-resumen-dato-texto">
+                <span class="liquidacion-header-resumen-label">Monto total a pagar</span>
+                <span class="liquidacion-header-resumen-valor" id="${prefijo}-monto-a-pagar">—</span>
+              </span>
             </div>
           </div>
           <button type="button" class="btn-icono btn-icono-dorado" id="${prefijo}-btn-pdf-descargar" data-tip="Descargar PDF"><i data-lucide="download"></i></button>
@@ -344,6 +377,10 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
         <div class="combo-filtro" id="${prefijo}-combo-fecha">
           <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Fecha: Todas</button>
           <ul class="combo-filtro-lista" role="listbox" hidden><li data-valor="" aria-selected="true">Todas</li></ul>
+        </div>
+        <div class="combo-filtro" id="${prefijo}-combo-tipo">
+          <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Tipo: Todos</button>
+          <ul class="combo-filtro-lista" role="listbox" hidden><li data-valor="" aria-selected="true">Todos</li></ul>
         </div>
         <div class="combo-filtro" id="${prefijo}-combo-zona">
           <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Zona</button>

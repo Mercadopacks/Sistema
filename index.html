@@ -287,18 +287,29 @@
   .liquidacion-header-fechas{display:flex; align-items:center; gap:7px; font-size:12.5px; color:#666;}
   .liquidacion-header-fechas i{width:14px; height:14px;}
   .liquidacion-header-fechas-sep{color:var(--borde);}
-  .liquidacion-header-resumen{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .liquidacion-header-resumen{display:flex; align-items:stretch; gap:10px; flex-wrap:wrap;}
+  /* 4ta vuelta: se saca la franja dorada lateral (se veía pegada/forzada)
+     — ahora cada dato lleva su propio ícono circular como separador visual,
+     con el mismo tono dorado reservado solo para el valor destacado
+     (Monto a pagar), igual que el resto del sistema usa el dorado como
+     acento de "lo más importante", no como decoración de borde. */
   .liquidacion-header-resumen-total{
-    position:relative; display:flex; align-items:center; overflow:hidden;
-    background:var(--negro); border-radius:10px; padding:9px 18px 9px 14px;
+    display:flex; align-items:stretch; overflow:hidden;
+    background:var(--negro); border-radius:10px;
   }
-  .liquidacion-header-resumen-total::before{
-    content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--dorado);
+  .liquidacion-header-resumen-dato{display:flex; align-items:center; gap:9px; line-height:1.3; padding:10px 16px;}
+  .liquidacion-header-resumen-dato + .liquidacion-header-resumen-dato{border-left:1px solid rgba(255,255,255,.12);}
+  .liquidacion-header-resumen-dato-icono{
+    width:28px; height:28px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.08);
   }
-  .liquidacion-header-resumen-dato{display:flex; flex-direction:column; line-height:1.3; padding:0 14px;}
-  .liquidacion-header-resumen-dato + .liquidacion-header-resumen-dato{border-left:1px solid rgba(255,255,255,.15);}
+  .liquidacion-header-resumen-dato-icono svg{width:14px; height:14px; color:#ccc;}
+  .liquidacion-header-resumen-dato-texto{display:flex; flex-direction:column;}
   .liquidacion-header-resumen-label{font-size:10px; color:#aaa; text-transform:uppercase; letter-spacing:.04em; font-weight:700;}
   .liquidacion-header-resumen-valor{font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; color:#fff;}
+  .liquidacion-header-resumen-destacado{background:rgba(246,190,5,.08);}
+  .liquidacion-header-resumen-destacado .liquidacion-header-resumen-dato-icono{background:rgba(246,190,5,.18);}
+  .liquidacion-header-resumen-destacado .liquidacion-header-resumen-dato-icono svg{color:var(--dorado);}
   .liquidacion-header-resumen-destacado .liquidacion-header-resumen-valor{font-size:19px; color:var(--dorado);}
 
   .liq-resumen-section-header{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px;}
@@ -307,29 +318,26 @@
     display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#8a6a00;
     background:rgba(246,190,5,.14); border:1px solid rgba(246,190,5,.4); border-radius:20px; padding:4px 11px;
   }
-  .tarjeta-resumen-aviso i{width:13px; height:13px; flex-shrink:0;}
+  .tarjeta-resumen-aviso i{width:14px; height:14px; flex-shrink:0;}
 
-  /* Sin degradé/fade (se quitó 2026-11-25, 3ra vuelta: había causado 3
-     rondas de reportes de "texto superpuesto/difuminado" — scroll-snap +
-     anchos reales por columna ya comunican "hay más tarjetas" sin tapar
-     texto legible con un overlay). */
+  /* 4ta vuelta: las zonas pasan a una grilla de 2 columnas (2 filas de
+     cards, ej. CABA/GBA1 arriba y GBA2/GBA3 abajo) y Extras se saca de esa
+     grilla, a la derecha, ocupando todo el alto de las 2 filas — layout
+     pedido explícitamente por el usuario. Sin degradé/fade (se quitó en
+     la 3ra vuelta: había causado 3 rondas de reportes de "texto
+     superpuesto/difuminado" — ya no hace falta, no hay scroll horizontal
+     por defecto con este layout). */
   .tarjetas-resumen-liquidacion-wrap{margin-bottom:16px;}
-  .tarjetas-resumen-liquidacion-fila{
-    display:flex; gap:10px; overflow-x:auto; padding-bottom:6px;
-    scroll-snap-type:x proximity; scroll-padding-left:2px;
+  .tarjetas-resumen-liquidacion-fila{display:flex; align-items:stretch; gap:10px;}
+  .tarjetas-zonas-grid{
+    display:grid; grid-template-columns:repeat(2, minmax(260px, 1fr));
+    grid-auto-rows:1fr; gap:10px; flex:1 1 auto; min-width:0;
   }
-  /* Ancho mínimo real (3ra vuelta, verificado con Playwright): con las 4
-     columnas de moneda (Tamaño/Cant./Precio/Total) un ancho de ~190px NO
-     alcanza para montos reales de 6-7 cifras ("$ 150.800,00") — la tabla
-     se desbordaba y la tarjeta siguiente (fondo blanco opaco) tapaba
-     visualmente el sobrante, pareciendo "cortado". 280px es el mínimo
-     real para que entren sin recortarse; `overflow:hidden` en la tarjeta
-     es una red de seguridad. */
   .tarjeta-resumen-liquidacion{
     background:#fff; border:1px solid var(--borde); border-radius:10px;
-    min-width:280px; flex:1 1 280px; display:flex; flex-direction:column;
-    scroll-snap-align:start; overflow:hidden;
+    display:flex; flex-direction:column; overflow:hidden;
   }
+  .tarjeta-resumen-liquidacion-extras{width:260px; flex-shrink:0;}
   .tarjeta-resumen-header{
     display:flex; justify-content:space-between; align-items:center; font-weight:800;
     padding:7px 9px; border-bottom:1px solid var(--borde); background:#f8f7f2;
