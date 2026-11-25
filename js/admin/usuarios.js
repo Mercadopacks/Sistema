@@ -168,6 +168,13 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
     abrirModalAbm(`Editar usuario: ${usuario.nombre} ${usuario.apellido}`, [
       { clave: "nombre", label: "Nombre", tipo: "texto" },
       { clave: "apellido", label: "Apellido", tipo: "texto" },
+      // Pedido 2026-11-25: cambiar email/contraseña de un usuario ya
+      // creado no se puede hacer con un simple `update` de la tabla (son
+      // datos de Supabase Auth, no de perfiles_usuario) — requiere la
+      // Edge Function editar-usuario (service role), igual que el alta
+      // usa crear-usuario. Contraseña vacía = no se cambia.
+      { clave: "email", label: "Email", tipo: "texto" },
+      { clave: "password", label: "Nueva contraseña (vacío = no cambiarla, mínimo 6 caracteres)", tipo: "texto" },
       { clave: "tipo_usuario", label: "Tipo de usuario", tipo: "select", opciones: TIPOS_USUARIO_OPCIONES },
       {
         clave: "sector_id", label: "Sector", tipo: "select",
@@ -193,6 +200,32 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
       if(esCliente && !clientesIds.length){
         await mostrarAviso("Un usuario tipo Cliente necesita al menos un cliente asociado.");
         return false;
+      }
+      const emailNuevo = (vals.email || "").trim();
+      const passwordNueva = vals.password || "";
+      if(passwordNueva && passwordNueva.length < 6){
+        await mostrarAviso("La nueva contraseña debe tener al menos 6 caracteres.");
+        return false;
+      }
+      const cambioEmail = emailNuevo && emailNuevo !== usuario.email;
+      if(cambioEmail || passwordNueva){
+        const { data: sesionActual } = await sb.auth.getSession();
+        const token = sesionActual && sesionActual.session ? sesionActual.session.access_token : null;
+        if(!token){ await mostrarAviso("Tu sesión expiró — volvé a iniciar sesión."); return false; }
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/editar-usuario`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, apikey: SUPABASE_PUBLISHABLE_KEY },
+          body: JSON.stringify({
+            auth_user_id: usuario.auth_user_id,
+            email: cambioEmail ? emailNuevo : undefined,
+            password: passwordNueva || undefined,
+          }),
+        });
+        const resultado = await resp.json().catch(() => ({}));
+        if(!resp.ok){
+          await mostrarAviso(resultado.error || "No se pudo cambiar el email/contraseña.");
+          return false;
+        }
       }
       const payload = {
         nombre: vals.nombre, apellido: vals.apellido,
