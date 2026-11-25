@@ -20,7 +20,14 @@
     { valor: "cliente", texto: "Cliente" },
   ];
 
+  // `paraCliente: true` marca las vistas pensadas para tipo_usuario=
+  // "cliente" (hoy solo Mis Liquidaciones) — el resto son de personal
+  // administrativo. El ABM de Usuarios usa esta marca para no poder
+  // ofrecer vistas de un tipo al usuario del otro tipo (pedido
+  // 2026-11-25: nada impedía antes asignarle "Liquidación Clientes"
+  // completa, con edición, a un usuario tipo "cliente").
   export const VISTAS_DISPONIBLES = [
+    { clave: "mis-liquidaciones", label: "Mis Liquidaciones", paraCliente: true },
     { clave: "envios", label: "Dashboard de Envíos" },
     { clave: "envios-listado", label: "Envíos" },
     { clave: "fallidos", label: "Fallidos y Cambios" },

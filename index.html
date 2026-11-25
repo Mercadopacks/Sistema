@@ -778,6 +778,12 @@
       </button>
     </div>
     <nav>
+      <!-- Pedido 2026-11-25: solo lo ve un tipo_usuario="cliente" (vía
+           "Vistas permitidas" en Usuarios) — el resto de los nav-item de
+           acá abajo son de personal administrativo. -->
+      <button class="nav-item" data-vista="mis-liquidaciones">
+        <i data-lucide="receipt"></i><span class="texto">Mis Liquidaciones</span>
+      </button>
       <button class="nav-item activo" data-vista="envios">
         <i data-lucide="package"></i><span class="texto">Dashboard de Envíos</span>
       </button>
@@ -1176,6 +1182,46 @@
           <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
             <button type="button" class="btn-secundario-modal" id="btn-guardar-borrador-liquidacion" hidden>Guardar borrador</button>
             <button type="button" class="btn-primario" id="btn-confirmar-liquidacion" hidden>Confirmar liquidación</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pedido 2026-11-25: "Mis Liquidaciones" — vista de SOLO LECTURA
+           para usuarios tipo_usuario="cliente", acotada a su(s) propio(s)
+           did_cliente. Mismo formato que el detalle de arriba, sin
+           ninguna acción de escritura (ver js/pantallas/mis-liquidaciones.js). -->
+      <div id="vista-mis-liquidaciones" hidden>
+        <div id="mis-liquidaciones-sin-acceso" class="card" hidden>
+          <p class="sin-datos">Tu usuario no tiene ninguna cuenta de cliente asociada. Pedile a un administrativo que la vincule en Configuración → Usuarios.</p>
+        </div>
+        <div id="mis-liquidaciones-contenido" hidden>
+          <div class="card">
+            <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+              <h3 id="mis-liq-cliente-nombre" style="margin:0;"></h3>
+              <span class="texto-muted" id="mis-liq-periodo-label"></span>
+              <span id="mis-liq-estado"></span>
+            </div>
+            <div class="buscar-mas-filtrar" style="margin-bottom:14px;">
+              <div id="combo-mis-liquidaciones-cliente-wrap"></div>
+              <div id="combo-mis-liquidaciones-periodo-wrap"></div>
+            </div>
+            <p style="font-weight:700; margin:0 0 8px;">Resumen de liquidación</p>
+            <div style="border:1px solid var(--borde); border-radius:8px; margin-bottom:20px;">
+              <table class="tabla-resumen-liquidacion">
+                <thead><tr><th>Concepto</th><th class="col-num">Cantidad</th><th class="col-num">Precio</th><th class="col-num">Monto</th></tr></thead>
+                <tbody id="tabla-mis-liquidaciones-resumen"></tbody>
+                <tfoot>
+                  <tr class="fila-total-liquidacion"><td colspan="3" style="text-align:right;">MONTO A PAGAR</td><td class="col-num" id="mis-liq-monto-a-pagar"></td></tr>
+                </tfoot>
+              </table>
+            </div>
+            <p style="font-weight:700; margin:0 0 8px;">Detalle</p>
+            <div class="tabla-scroll">
+              <table class="tabla-detalle-liquidacion">
+                <thead><tr><th class="col-num">Nro</th><th>Fecha</th><th>Tipo</th><th>Dirección</th><th>Localidad</th><th>Cordón</th><th>Tamaño</th><th class="col-num">Monto</th></tr></thead>
+                <tbody id="tabla-mis-liquidaciones-detalle"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -2297,6 +2343,8 @@ import { moduloExtrasClientes, moduloExtrasRepartidores } from "./js/pantallas/e
 import { cargarAdminUsuarios } from "./js/admin/usuarios.js";
 // Etapa 7b: Liquidación Clientes en js/.
 import { cargarLiquidacionClientes } from "./js/pantallas/liquidacion-clientes.js";
+// Pedido 2026-11-25: Mis Liquidaciones (solo lectura, acotada al propio cliente) en js/.
+import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
 (function(){
   "use strict";
 
@@ -2423,6 +2471,7 @@ import { cargarLiquidacionClientes } from "./js/pantallas/liquidacion-clientes.j
   });
 
   const vistas = {
+    "mis-liquidaciones": { titulo: "Mis Liquidaciones", icono: "receipt", el: document.getElementById("vista-mis-liquidaciones") },
     "envios": { titulo: "Dashboard de Envíos", icono: "package", el: document.getElementById("vista-envios") },
     "envios-listado": { titulo: "Envíos", icono: "list", el: document.getElementById("vista-envios-listado") },
     "fallidos": { titulo: "Fallidos y Cambios", icono: "rotate-ccw", el: document.getElementById("vista-fallidos") },
@@ -2493,6 +2542,7 @@ import { cargarLiquidacionClientes } from "./js/pantallas/liquidacion-clientes.j
     btnVolver.hidden = !vistas[v].volver;
     btnVolver.onclick = vistas[v].volver ? () => seleccionarVista(vistas[v].volver) : null;
     lucide.createIcons();
+    if(v === "mis-liquidaciones") cargarMisLiquidaciones();
     if(v === "envios") cargarResumenEnvios();
     if(v === "envios-listado") inicializarFiltrosEnviosListado().then(()=> cargarEnviosListado(true));
     if(v === "fallidos") cargarFallidos();

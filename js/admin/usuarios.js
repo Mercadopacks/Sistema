@@ -42,6 +42,19 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
   function labelsAVistasClave(labels){
     return (labels || []).map(l => (VISTAS_DISPONIBLES.find(v => v.label === l) || {}).clave).filter(Boolean);
   }
+  // Pedido 2026-11-25: el multiselect de "Vistas permitidas" ofrece TODAS
+  // las vistas sin filtrar por el Tipo de usuario elegido en el mismo
+  // modal (el componente de ABM no soporta opciones dinámicas según otro
+  // campo) — antes nada impedía guardar una vista de personal
+  // administrativo (ej. "Liquidación Clientes" completa, con edición)
+  // para un usuario tipo "Cliente", o "Mis Liquidaciones" para uno
+  // administrativo. Se filtra acá al guardar, no en el multiselect.
+  function vistasValidasPara(esCliente, claves){
+    return (claves || []).filter(c => {
+      const v = VISTAS_DISPONIBLES.find(x => x.clave === c);
+      return v && !!v.paraCliente === esCliente;
+    });
+  }
 
   export async function cargarAdminUsuarios(){
     const [{ data, error }, { data: sectores, error: errSectores }, { data: clientes, error: errClientes }] = await Promise.all([
@@ -187,7 +200,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
         sector_id: esCliente ? null : (vals.sector_id || null),
         clientes_lightdata_ids: esCliente ? clientesIds : null,
         es_admin: !!vals.es_admin, activo: !!vals.activo,
-        vistas_permitidas: labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean)),
+        vistas_permitidas: vistasValidasPara(esCliente, labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean))),
       };
       const { error } = await sb.from("perfiles_usuario").update(payload).eq("id", usuario.id);
       if(error){ console.error(error); await mostrarAviso("No se pudo guardar — ¿tu usuario tiene permiso de administrador?"); return false; }
@@ -246,7 +259,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
           tipo_usuario: esCliente ? "cliente" : "administrativo",
           sector_id: esCliente ? null : (vals.sector_id || null),
           clientes_lightdata_ids: esCliente ? clientesIds : null,
-          vistas_permitidas: labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean)),
+          vistas_permitidas: vistasValidasPara(esCliente, labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean))),
         }),
       });
       const resultado = await resp.json().catch(() => ({}));
