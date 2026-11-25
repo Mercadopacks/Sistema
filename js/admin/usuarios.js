@@ -49,10 +49,17 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
   // administrativo (ej. "Liquidación Clientes" completa, con edición)
   // para un usuario tipo "Cliente", o "Mis Liquidaciones" para uno
   // administrativo. Se filtra acá al guardar, no en el multiselect.
+  // 2da vuelta (mismo día): la primera versión bloqueaba TODO lo que no
+  // fuera `paraCliente` para un cliente — tapaba también vistas
+  // inofensivas como Envíos (bug real reportado: tildar "Mis
+  // Liquidaciones" + "Envíos" guardaba solo la primera). Ahora a un
+  // cliente solo se le sacan las `soloAdmin` (Configuración, Liquidación
+  // Clientes/Repartidores y sus Adicionales); el resto queda libre.
   function vistasValidasPara(esCliente, claves){
     return (claves || []).filter(c => {
       const v = VISTAS_DISPONIBLES.find(x => x.clave === c);
-      return v && !!v.paraCliente === esCliente;
+      if(!v) return false;
+      return esCliente ? !v.soloAdmin : !v.paraCliente;
     });
   }
 

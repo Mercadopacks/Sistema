@@ -20,12 +20,20 @@
     { valor: "cliente", texto: "Cliente" },
   ];
 
-  // `paraCliente: true` marca las vistas pensadas para tipo_usuario=
-  // "cliente" (hoy solo Mis Liquidaciones) — el resto son de personal
-  // administrativo. El ABM de Usuarios usa esta marca para no poder
-  // ofrecer vistas de un tipo al usuario del otro tipo (pedido
-  // 2026-11-25: nada impedía antes asignarle "Liquidación Clientes"
-  // completa, con edición, a un usuario tipo "cliente").
+  // `paraCliente: true` marca la(s) vista(s) pensadas para tipo_usuario=
+  // "cliente" (hoy solo Mis Liquidaciones) — no tiene sentido ofrecérsela
+  // a un usuario administrativo. `soloAdmin: true` marca las vistas que
+  // manejan datos de MÁS DE UN cliente/repartidor o permiten escritura
+  // administrativa (Configuración completa, Liquidación Clientes/
+  // Repartidores con edición, sus Adicionales) — nunca se le deben poder
+  // asignar a un usuario tipo "cliente", sin importar qué tilde un admin
+  // por error en "Vistas permitidas" de Usuarios. El resto de las vistas
+  // (Envíos, Fallidos, Picking, Seguimiento de Repartidores) quedan
+  // libres para cualquier tipo de usuario — ya están acotadas por RLS a
+  // nivel de fila (ver puede_ver_envio_de_cliente()), así que no hace
+  // falta bloquearlas acá también (pedido 2026-11-25, 2da vuelta: la
+  // primera versión de este filtro bloqueaba TODO lo que no fuera
+  // paraCliente, lo cual también tapaba vistas inofensivas como Envíos).
   export const VISTAS_DISPONIBLES = [
     { clave: "mis-liquidaciones", label: "Mis Liquidaciones", paraCliente: true },
     { clave: "envios", label: "Dashboard de Envíos" },
@@ -35,16 +43,16 @@
     { clave: "repa-ruta", label: "Seguimiento en Ruta" },
     { clave: "repa-asistencia", label: "Asistencia de Repartidores" },
     { clave: "repa-vivo", label: "Operación en vivo" },
-    { clave: "liquidacion-clientes", label: "Liquidación Clientes" },
-    { clave: "liquidacion-repartidores", label: "Liquidación Repartidores" },
+    { clave: "liquidacion-clientes", label: "Liquidación Clientes", soloAdmin: true },
+    { clave: "liquidacion-repartidores", label: "Liquidación Repartidores", soloAdmin: true },
     // Pedido 2026-11-23: 2 vistas separadas a propósito (no una con
     // selector adentro) — son 2 sectores distintos los que cargan extras
     // de clientes vs. de repartidores y no pueden entrar al mismo panel;
     // separarlas como vistas permite que "Vistas permitidas" (Usuarios)
     // le dé acceso a una sin la otra.
-    { clave: "extras-liquidacion-clientes", label: "Adicionales (Clientes)" },
-    { clave: "extras-liquidacion-repartidores", label: "Adicionales (Repartidores)" },
-    { clave: "admin", label: "Administración" },
+    { clave: "extras-liquidacion-clientes", label: "Adicionales (Clientes)", soloAdmin: true },
+    { clave: "extras-liquidacion-repartidores", label: "Adicionales (Repartidores)", soloAdmin: true },
+    { clave: "admin", label: "Administración", soloAdmin: true },
   ];
 
   export const stateSesion = { perfil: null, bloqueado: false };
