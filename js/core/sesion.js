@@ -63,9 +63,17 @@
     document.querySelectorAll("[data-vista]").forEach(btn=>{
       btn.hidden = !puedeVerVista(btn.dataset.vista);
     });
-    const grupo = document.querySelector(".nav-group-label");
-    if(grupo){
-      const algunaVisible = ["repa-ruta","repa-asistencia","repa-vivo"].some(v => puedeVerVista(v));
-      grupo.hidden = !algunaVisible;
-    }
+    // Bug real 2026-11-25: esto solo escondía el encabezado del PRIMER
+    // grupo del sidebar ("Seguimiento de Repartidores", hardcodeado) — el
+    // de "Liquidaciones" nunca se ocultaba, así que un usuario tipo
+    // cliente (sin acceso a ninguna vista de ese grupo) veía el título
+    // "Liquidaciones" vacío, sin nada debajo. Se generaliza a CUALQUIER
+    // .nav-group: se esconde su encabezado si ninguno de sus
+    // [data-vista] internos quedó visible tras el filtro de arriba.
+    document.querySelectorAll(".nav-group").forEach(grupoEl=>{
+      const label = grupoEl.querySelector(".nav-group-label");
+      if(!label) return;
+      const algunaVisible = [...grupoEl.querySelectorAll("[data-vista]")].some(b => !b.hidden);
+      label.hidden = !algunaVisible;
+    });
   }
