@@ -2281,6 +2281,8 @@ import { cargarAsistencia, cargarOperacionVivo } from "./js/pantallas/asistencia
 import { cargarAdminChoferes } from "./js/admin/choferes.js";
 import { cargarAdminAlertas } from "./js/admin/alertas.js";
 import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin/fallidos-config.js";
+// Etapa 4b: catálogo compartido de clientes (antes un `let` del IIFE reasignado por 3 pantallas) + labelCliente/nombreCliente en js/.
+import { catalogos, labelCliente, nombreCliente } from "./js/core/catalogos.js";
 (function(){
   "use strict";
 
@@ -2783,12 +2785,12 @@ import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin
     if(filtrosEnviosListadoListos) return;
     filtrosEnviosListadoListos = true;
 
-    if(!clientesDisponibles.length){
+    if(!catalogos.clientes.length){
       const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia");
       if(error) console.error("Error cargando lightdata_clientes para el filtro:", error);
-      else clientesDisponibles = data || [];
+      else catalogos.clientes = data || [];
     }
-    agregarOpcionesCombo("combo-cliente-envios-listado", clientesDisponibles.map(c => ({ valor: c.did, texto: nombreCliente(c) })));
+    agregarOpcionesCombo("combo-cliente-envios-listado", catalogos.clientes.map(c => ({ valor: c.did, texto: nombreCliente(c) })));
     crearComboGenerico("combo-cliente-envios-listado", (valor)=>{ stateEnviosListado.cliente = valor; cargarEnviosListado(true); });
 
     agregarOpcionesCombo("combo-localidad-envios-listado", abmLocalidades.obtenerActivos().map(n => ({ valor: n, texto: tituloTexto(n) })));
@@ -2835,26 +2837,13 @@ import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin
   // cargan junto con los usuarios porque el modal de alta/edición las
   // necesita ya resueltas (combo/multiselect) antes de abrirse.
   let sectoresDisponibles = [];   // [{id, nombre}]
-  let clientesDisponibles = [];   // [{did, nombre_fantasia, codigo}]
+  // clientes: viven en catalogos.clientes (js/core/catalogos.js, Etapa 4b), compartidos con Envíos y Adicionales.
 
-  // El multiselect genérico del modal trabaja con labels (string = value),
-  // no con pares {id,nombre} — mismo patrón que clavesAVistasLabel/
-  // labelsAVistasClave de arriba, pero para clientes. El label combina
-  // código + nombre de fantasía para distinguir clientes con nombres
-  // parecidos.
-  function labelCliente(c){ return c.codigo ? `${c.codigo} - ${c.nombre_fantasia || "(sin nombre)"}` : (c.nombre_fantasia || `Cliente ${c.did}`); }
-  // Pedido 2026-11-24: en la mayoría de las pantallas el código de cliente
-  // adelante es ruido — labelCliente() sigue existiendo tal cual para el
-  // multiselect de "Clientes asociados" de Usuarios (ahí el código es lo
-  // que evita colisiones entre 2 clientes con el mismo nombre de fantasía,
-  // ver nota arriba), nombreCliente() es la versión limpia para todo lo
-  // demás (combos de selección por did, títulos de modal, grillas).
-  function nombreCliente(c){ return (c && (c.nombre_fantasia || c.codigo)) || `Cliente ${c ? c.did : ""}`; }
   function didsClienteALabel(dids){
-    return (dids || []).map(d => { const c = clientesDisponibles.find(x => x.did === d); return c ? labelCliente(c) : null; }).filter(Boolean);
+    return (dids || []).map(d => { const c = catalogos.clientes.find(x => x.did === d); return c ? labelCliente(c) : null; }).filter(Boolean);
   }
   function labelsClienteADid(labels){
-    return (labels || []).map(l => { const c = clientesDisponibles.find(x => labelCliente(x) === l); return c ? c.did : null; }).filter(d => d != null);
+    return (labels || []).map(l => { const c = catalogos.clientes.find(x => labelCliente(x) === l); return c ? c.did : null; }).filter(d => d != null);
   }
 
   // Convierte la lista de claves guardadas (ej. ["envios","fallidos"]) a
@@ -3348,7 +3337,7 @@ import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin
     if(errClientes) console.error("Error cargando lightdata_clientes:", errClientes);
     adminUsuariosData = data || [];
     sectoresDisponibles = sectores || [];
-    clientesDisponibles = clientes || [];
+    catalogos.clientes = clientes || [];
     renderAdminUsuarios();
   }
 
@@ -3457,7 +3446,7 @@ import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin
       },
       {
         clave: "clientes", label: "Clientes asociados", tipo: "multiselect", span: true,
-        opciones: clientesDisponibles.map(labelCliente),
+        opciones: catalogos.clientes.map(labelCliente),
         mostrarSi: v => v.tipo_usuario === "cliente",
       },
       { clave: "es_admin", label: "Administrador (ve todas las vistas)", tipo: "checkbox" },
@@ -3509,7 +3498,7 @@ import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin
       },
       {
         clave: "clientes", label: "Clientes asociados", tipo: "multiselect", span: true,
-        opciones: clientesDisponibles.map(labelCliente),
+        opciones: catalogos.clientes.map(labelCliente),
         mostrarSi: v => v.tipo_usuario === "cliente",
       },
       { clave: "vistas", label: "Vistas permitidas", tipo: "multiselect", opciones: VISTAS_DISPONIBLES.map(v => v.label) },
@@ -3581,10 +3570,10 @@ import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin
   let repartidoresDisponibles = []; // [{id, nombre}]
 
   async function cargarClientesDisponibles(){
-    if(clientesDisponibles.length) return;
+    if(catalogos.clientes.length) return;
     const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia");
     if(error){ console.error("Error cargando lightdata_clientes:", error); return; }
-    clientesDisponibles = data || [];
+    catalogos.clientes = data || [];
   }
   async function cargarRepartidoresDisponibles(){
     if(repartidoresDisponibles.length) return;
@@ -3622,7 +3611,7 @@ import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin
     if(modalExtraLiquidacionWireado) return;
     modalExtraLiquidacionWireado = true;
     await Promise.all([cargarClientesDisponibles(), cargarRepartidoresDisponibles()]);
-    agregarOpcionesCombo("combo-extra-liquidacion-cliente", clientesDisponibles.map(c => ({ valor: c.did, texto: nombreCliente(c) })));
+    agregarOpcionesCombo("combo-extra-liquidacion-cliente", catalogos.clientes.map(c => ({ valor: c.did, texto: nombreCliente(c) })));
     crearComboGenerico("combo-extra-liquidacion-cliente", (valor)=>{
       document.getElementById("combo-extra-liquidacion-cliente").dataset.valorActual = valor;
     });
@@ -3843,7 +3832,7 @@ import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin
       const comboCliente = document.getElementById("combo-extra-liquidacion-cliente");
       const clienteActual = fila ? fila.did_cliente : "";
       comboCliente.dataset.valorActual = clienteActual;
-      const cliObj = clientesDisponibles.find(c => String(c.did) === String(clienteActual));
+      const cliObj = catalogos.clientes.find(c => String(c.did) === String(clienteActual));
       comboCliente.querySelector(".combo-filtro-btn").textContent = cliObj ? nombreCliente(cliObj) : "Elegir…";
       comboCliente.querySelectorAll("li").forEach(li => li.setAttribute("aria-selected", String(li.dataset.valor === String(clienteActual))));
     } else {
