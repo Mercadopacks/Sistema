@@ -10,6 +10,22 @@ import { abmLocalidades } from "../admin/abm-localidades.js";
 import { fechaART, limiteDiaART, diaSiguienteStr } from "../core/fechas.js";
 import { stateFallidos, tieneLogisticaInversaReal, cargarNombresPorLightdataId, nombreRepartidorFallido, direccionDe, cordonDe } from "./fallidos.js";
 import { catalogos, nombreCliente } from "../core/catalogos.js";
+import { stateSesion } from "../core/sesion.js";
+
+  // Pedido 2026-11-25: de cara a un usuario tipo_usuario="cliente" los
+  // tamaños se agrupan en Pequeños/Grandes (Grandes = Mediano Y Grande
+  // reales), igual que en Mis Liquidaciones y el ABM de precios — para
+  // personal administrativo esta misma pantalla sigue mostrando los 3
+  // tamaños reales tal cual (acá sí hace falta la distinción operativa).
+  // No se toca `envios.tamano` en la base, solo cómo se muestra/filtra.
+  function esUsuarioCliente(){
+    return !!(stateSesion.perfil && stateSesion.perfil.tipo_usuario === "cliente");
+  }
+  function labelTamanoEnvio(tamano){
+    const t = tituloTexto(tamano) || "Pequeño";
+    if(!esUsuarioCliente()) return t;
+    return t === "Pequeño" ? "Pequeños" : "Grandes";
+  }
 
   // ======================================================================
   // Envíos (listado) — pedido 2026-11-20. Distinto del Dashboard de
@@ -44,7 +60,10 @@ import { catalogos, nombreCliente } from "../core/catalogos.js";
       .order("fecha_mercadopacks", { ascending: false });
     if(stateEnviosListado.estado) q = q.eq("estado", stateEnviosListado.estado);
     if(stateEnviosListado.origen) q = q.eq("origen", stateEnviosListado.origen);
-    if(stateEnviosListado.tamano) q = q.eq("tamano", stateEnviosListado.tamano);
+    // "Grandes" (opción agrupada del filtro para usuarios cliente, ver
+    // esUsuarioCliente()) matchea los 2 tamaños reales Mediano Y Grande.
+    if(stateEnviosListado.tamano === "Grandes") q = q.in("tamano", ["Mediano", "Grande"]);
+    else if(stateEnviosListado.tamano) q = q.eq("tamano", stateEnviosListado.tamano);
     if(stateEnviosListado.cliente) q = q.eq("did_cliente", stateEnviosListado.cliente);
     // `ilike` (no `eq`) para localidad/zona: son texto libre de Lightdata,
     // mezcla de mayúsculas/minúsculas (Regla 15 de sección 1) — comparar
@@ -98,7 +117,7 @@ import { catalogos, nombreCliente } from "../core/catalogos.js";
           <td>${tituloTexto(e.localidad) || "—"}</td>
           <td>${direccionDe(e)}</td>
           <td>${cordonDe(e) || '<span class="badge-pendiente-cordon">Sin clasificar</span>'}</td>
-          <td>${tituloTexto(e.tamano) || "Pequeño"}</td>
+          <td>${labelTamanoEnvio(e.tamano)}</td>
           <td>${tituloTexto(e.estado) || "—"}</td>
           <td class="col-opciones">
             <span class="opciones-fila">
@@ -136,7 +155,7 @@ import { catalogos, nombreCliente } from "../core/catalogos.js";
       { icono: "map-pin", label: "Localidad", valor: tituloTexto(e.localidad) || "—" },
       { icono: "home", label: "Dirección", valor: direccionDe(e) },
       { icono: "map", label: "Cordón", valor: cordonDe(e) || "Sin clasificar" },
-      { icono: "box", label: "Tamaño", valor: tituloTexto(e.tamano) || "Pequeño" },
+      { icono: "box", label: "Tamaño", valor: labelTamanoEnvio(e.tamano) },
       { icono: "truck", label: "Repartidor", valor: tituloTexto(nombreRepartidorFallido(e)) },
       { icono: "package", label: "Origen", valor: e.origen || "—" },
       { icono: "info", label: "Estado", valor: tituloTexto(e.estado) || "—" },
@@ -222,6 +241,27 @@ import { catalogos, nombreCliente } from "../core/catalogos.js";
   export async function inicializarFiltrosEnviosListado(){
     if(filtrosEnviosListadoListos) return;
     filtrosEnviosListadoListos = true;
+
+    // Pedido 2026-11-25: para un usuario cliente, el combo de filtro de
+    // Tamaño pasa de 3 opciones (Pequeño/Mediano/Grande) a 2 (Pequeños/
+    // Grandes) — hay que reconstruir el contenedor entero y volver a
+    // llamar crearComboGenerico (mismo patrón que repoblarComboPeriodo en
+    // Liquidación Clientes): los listeners de los <li> se enganchan una
+    // sola vez al crearse, así que un <li> nuevo pegado con innerHTML no
+    // tendría click funcionando si no se recrea el combo entero.
+    if(esUsuarioCliente()){
+      document.getElementById("combo-tamano-filtro-envios-listado").outerHTML = `
+        <div class="combo-filtro" id="combo-tamano-filtro-envios-listado">
+          <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+          <ul class="combo-filtro-lista" role="listbox" hidden>
+            <li data-valor="" aria-selected="true">Todos</li>
+            <li data-valor="Pequeño">Pequeños</li>
+            <li data-valor="Grandes">Grandes</li>
+          </ul>
+        </div>
+      `;
+      crearComboGenerico("combo-tamano-filtro-envios-listado", (valor)=>{ stateEnviosListado.tamano = valor; cargarEnviosListado(true); });
+    }
 
     if(!catalogos.clientes.length){
       const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia");
