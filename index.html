@@ -2269,6 +2269,7 @@ import { abmTurnos } from "./js/admin/abm-turnos.js";
 import { pendientesConfigState, actualizarIconoPendientesConfig } from "./js/admin/pendientes-config.js";
 // Etapa 3a: fechas/porcentajes compartidos + Dashboard de Envíos, Picking Tamaños y Seguimiento en ruta en js/.
 import { fechaART, limiteDiaART, diaSiguienteStr, fechaArtDeIso, lunesDeSemana } from "./js/core/fechas.js";
+import { registrarNavegador } from "./js/core/navegacion.js";
 import { _pct, _fmtPct } from "./js/core/porcentajes.js";
 import { cargarResumenEnvios } from "./js/pantallas/dashboard-envios.js";
 import { statePickingTamanos, cargarPickingTamanosGrid } from "./js/pantallas/picking-tamanos.js";
@@ -2509,6 +2510,7 @@ import { cargarAdminUsuarios } from "./js/admin/usuarios.js";
     if(v === "extras-liquidacion-repartidores") moduloExtrasRepartidores.inicializar().then(()=> moduloExtrasRepartidores.cargar());
     if(v === "admin") seleccionarModoAdmin(modoAdminActual);
   }
+  registrarNavegador(seleccionarVista);
 
   document.querySelectorAll(".nav-item, .nav-subitem").forEach(btn=>{
     btn.addEventListener("click", ()=> seleccionarVista(btn.dataset.vista));
