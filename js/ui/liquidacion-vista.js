@@ -343,7 +343,9 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
           <button type="button" class="btn-icono btn-icono-dorado" id="${prefijo}-btn-pdf-descargar" data-tip="Descargar PDF"><i data-lucide="download"></i></button>
         </div>
       </div>
+    </div>
 
+    <div class="card">
       <div id="${prefijo}-combos-extra" class="buscar-mas-filtrar" style="margin-bottom:10px;"></div>
 
       <div class="liq-resumen-section-header">

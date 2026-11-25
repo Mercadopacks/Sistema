@@ -287,7 +287,14 @@
   .liquidacion-header-fechas{display:flex; align-items:center; gap:7px; font-size:12.5px; color:#666;}
   .liquidacion-header-fechas i{width:14px; height:14px;}
   .liquidacion-header-fechas-sep{color:var(--borde);}
-  .liquidacion-header-resumen{display:flex; align-items:stretch; gap:10px; flex-wrap:wrap;}
+  /* Bug real (4ta vuelta): con align-items:stretch el botón de descarga
+     se estiraba a todo el alto del bloque oscuro (quedaba "alargado",
+     mucho más alto que cualquier otro .btn-icono del sistema). Los
+     .btn-icono del resto del dashboard miden 36px de alto (9px padding +
+     18px de ícono) — acá se corrige con align-items:center en el
+     contenedor y align-self:center en el botón puntual. */
+  .liquidacion-header-resumen{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .liquidacion-header-resumen > .btn-icono{align-self:center;}
   /* 4ta vuelta: se saca la franja dorada lateral (se veía pegada/forzada)
      — ahora cada dato lleva su propio ícono circular como separador visual,
      con el mismo tono dorado reservado solo para el valor destacado
@@ -337,7 +344,11 @@
     background:#fff; border:1px solid var(--borde); border-radius:10px;
     display:flex; flex-direction:column; overflow:hidden;
   }
-  .tarjeta-resumen-liquidacion-extras{width:260px; flex-shrink:0;}
+  /* Extras un poco más ancha que las de zona + su tabla ocupa todo el
+     alto disponible (footer "Subtotal Extras" siempre pegado abajo, en
+     vez de quedar flotando a mitad de tarjeta cuando hay pocas filas). */
+  .tarjeta-resumen-liquidacion-extras{width:300px; flex-shrink:0;}
+  .tarjeta-resumen-liquidacion-extras .tabla-tarjeta-resumen-extras{flex:1 1 auto;}
   .tarjeta-resumen-header{
     display:flex; justify-content:space-between; align-items:center; font-weight:800;
     padding:7px 9px; border-bottom:1px solid var(--borde); background:#f8f7f2;
