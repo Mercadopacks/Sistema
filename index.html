@@ -934,12 +934,6 @@
       </button>
     </div>
     <nav>
-      <!-- Pedido 2026-11-25: solo lo ve un tipo_usuario="cliente" (vía
-           "Vistas permitidas" en Usuarios) — el resto de los nav-item de
-           acá abajo son de personal administrativo. -->
-      <button class="nav-item" data-vista="mis-liquidaciones">
-        <i data-lucide="receipt"></i><span class="texto">Mis Liquidaciones</span>
-      </button>
       <button class="nav-item activo" data-vista="envios">
         <i data-lucide="package"></i><span class="texto">Dashboard de Envíos</span>
       </button>
@@ -972,6 +966,12 @@
           <i data-lucide="receipt"></i><span class="texto">Liquidaciones</span>
           <i data-lucide="chevron-down" class="chevron"></i>
         </div>
+        <!-- Pedido 2026-11-25: "Mis Liquidaciones" solo lo ve un
+             tipo_usuario="cliente" (vía "Vistas permitidas" en Usuarios)
+             — los otros 2 subitems son de personal administrativo. -->
+        <button class="nav-subitem" data-vista="mis-liquidaciones">
+          <i data-lucide="receipt"></i><span class="texto">Mis Liquidaciones</span>
+        </button>
         <button class="nav-subitem" data-vista="liquidacion-clientes">
           <i data-lucide="building-2"></i><span class="texto">Liquidación Clientes</span>
         </button>
@@ -2618,7 +2618,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
   function seleccionarVista(v){
     document.querySelectorAll(".nav-item, .nav-subitem").forEach(b=>b.classList.toggle("activo", b.dataset.vista === v));
     document.querySelector('.nav-group-label[data-grupo="repartidores"]').classList.toggle("activo", v === "repa-ruta" || v === "repa-asistencia" || v === "repa-vivo");
-    document.querySelector('.nav-group-label[data-grupo="liquidaciones"]').classList.toggle("activo", v === "liquidacion-clientes" || v === "detalle-liquidacion-cliente" || v === "liquidacion-repartidores" || v === "extras-liquidacion-clientes" || v === "extras-liquidacion-repartidores");
+    document.querySelector('.nav-group-label[data-grupo="liquidaciones"]').classList.toggle("activo", v === "mis-liquidaciones" || v === "liquidacion-clientes" || v === "detalle-liquidacion-cliente" || v === "liquidacion-repartidores" || v === "extras-liquidacion-clientes" || v === "extras-liquidacion-repartidores");
     document.querySelector('.nav-subitem[data-vista="liquidacion-clientes"]').classList.toggle("activo", v === "liquidacion-clientes" || v === "detalle-liquidacion-cliente");
     Object.entries(vistas).forEach(([key, cfg])=>{ cfg.el.hidden = key !== v; });
     document.getElementById("titulo-vista").textContent = vistas[v].titulo;
@@ -2668,15 +2668,25 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
     btn.addEventListener("click", ()=> seleccionarVista(btn.dataset.vista));
   });
 
-  // Clic en el grupo "Seguimiento de Repartidores" (el título, no un
-  // sub-ítem puntual) solo despliega/colapsa sus 3 sub-ítems — para entrar
-  // a una sección hay que clickear el sub-ítem en sí (pedido 2026-11-16).
-  document.querySelector('.nav-group-label[data-grupo="repartidores"]').addEventListener("click", ()=>{
-    document.querySelector('.nav-group-label[data-grupo="repartidores"]').closest(".nav-group").classList.toggle("abierto");
-  });
-  document.querySelector('.nav-group-label[data-grupo="liquidaciones"]').addEventListener("click", ()=>{
-    document.querySelector('.nav-group-label[data-grupo="liquidaciones"]').closest(".nav-group").classList.toggle("abierto");
-  });
+  // Clic en el grupo "Seguimiento de Repartidores"/"Liquidaciones" (el
+  // título, no un sub-ítem puntual) solo despliega/colapsa sus sub-ítems —
+  // para entrar a una sección hay que clickear el sub-ítem en sí (pedido
+  // 2026-11-16). Bug real 2026-11-25: con el sidebar colapsado (68px) los
+  // sub-ítems están siempre en display:none sin importar la clase
+  // "abierto" — tocar el grupo ahí no hacía nada visible. Si el sidebar
+  // está colapsado, el clic lo expande primero (mismo toggle que el botón
+  // de abrir/cerrar) y recién después abre el grupo, para que los
+  // sub-ítems ya se vean desplegados apenas se expande.
+  function alternarGrupoNav(grupo){
+    if(sidebar.classList.contains("colapsado")){
+      sidebar.classList.remove("colapsado");
+      grupo.closest(".nav-group").classList.add("abierto");
+      return;
+    }
+    grupo.closest(".nav-group").classList.toggle("abierto");
+  }
+  document.querySelector('.nav-group-label[data-grupo="repartidores"]').addEventListener("click", (e)=> alternarGrupoNav(e.currentTarget));
+  document.querySelector('.nav-group-label[data-grupo="liquidaciones"]').addEventListener("click", (e)=> alternarGrupoNav(e.currentTarget));
 
   // Submenú de Configuración, DENTRO de la pantalla (ver .config-sidebar).
   document.querySelectorAll(".config-nav-item").forEach(btn=>{
