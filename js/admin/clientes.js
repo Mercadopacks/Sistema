@@ -338,6 +338,16 @@ import { nombreCliente } from "../core/catalogos.js";
     await Promise.all([abmCordones.cargar(), abmTamanosPaquete.cargar()]);
     const cordones = abmCordones.obtenerActivosConId();
     const tamanos = abmTamanosPaquete.obtenerActivosConId();
+    // De cara al cliente solo se manejan 2 categorías de tamaño: "Pequeños"
+    // y "Grandes" (Grandes agrupa los tamaños reales Mediano Y Grande —
+    // esos 2 siguen existiendo tal cual para Repartidores/Picking, acá
+    // solo se unifican al mostrar/cargar el precio). Ver migración
+    // 2026-11-25_tamanos_cliente_pequeno_grande.sql.
+    const idPorNombreTamano = Object.fromEntries(tamanos.map(t => [t.texto, t.valor]));
+    const categoriasCliente = [
+      { texto: "Pequeños", ids: [idPorNombreTamano["Pequeño"]].filter(v => v != null) },
+      { texto: "Grandes", ids: [idPorNombreTamano["Mediano"], idPorNombreTamano["Grande"]].filter(v => v != null) },
+    ];
 
     const { data: cab } = await sb.from("precios_cliente").select("*").eq("did_cliente", did).maybeSingle();
     let envios = [], flete = [];
@@ -348,9 +358,12 @@ import { nombreCliente } from "../core/catalogos.js";
       ]);
       envios = e || []; flete = f || [];
     }
-    const precioEnvio = (tamanoId, cordonId) => {
-      const f = envios.find(x => x.tamano_paquete_id === tamanoId && x.cordon_id === cordonId);
-      return formatearMoneda(f ? f.precio : null);
+    const precioEnvioCategoria = (categoria, cordonId) => {
+      for(const tamanoId of categoria.ids){
+        const f = envios.find(x => x.tamano_paquete_id === tamanoId && x.cordon_id === cordonId);
+        if(f) return formatearMoneda(f.precio);
+      }
+      return formatearMoneda(null);
     };
     const precioFlete = (cordonId) => {
       const f = flete.find(x => x.cordon_id === cordonId);
@@ -370,18 +383,18 @@ import { nombreCliente } from "../core/catalogos.js";
     document.getElementById("modal-precios-cliente-turbo").value = formatearMoneda(cab ? cab.precio_turbo_envio : null);
     document.getElementById("modal-precios-cliente-colecta").value = formatearMoneda(cab ? cab.precio_colecta : null);
 
-    if(!cordones.length || !tamanos.length){
-      document.getElementById("precios-cliente-matriz-envios").innerHTML = `<p class="sin-datos">Cargá al menos un Tamaño de paquete y un Cordón en Configuración antes de armar el tarifario.</p>`;
+    if(!cordones.length || !tamanos.length || categoriasCliente.some(cat => !cat.ids.length)){
+      document.getElementById("precios-cliente-matriz-envios").innerHTML = `<p class="sin-datos">Cargá los Tamaños de paquete (Pequeño, Mediano y Grande) y al menos un Cordón en Configuración antes de armar el tarifario.</p>`;
       document.getElementById("precios-cliente-matriz-flete").innerHTML = "";
     } else {
       document.getElementById("precios-cliente-matriz-envios").innerHTML = `
         <table>
           <thead><tr><th>Tamaño \\ Cordón</th>${cordones.map(c => `<th>${c.texto}</th>`).join("")}</tr></thead>
           <tbody>
-            ${tamanos.map(t => `
+            ${categoriasCliente.map(cat => `
               <tr>
-                <td>${t.texto}</td>
-                ${cordones.map(c => `<td><input type="text" inputmode="decimal" class="cel-input input-moneda precio-envio-input" data-tamano="${t.valor}" data-cordon="${c.valor}" value="${precioEnvio(t.valor, c.valor)}" /></td>`).join("")}
+                <td>${cat.texto}</td>
+                ${cordones.map(c => `<td><input type="text" inputmode="decimal" class="cel-input input-moneda precio-envio-input" data-tamanos="${cat.ids.join(",")}" data-cordon="${c.valor}" value="${precioEnvioCategoria(cat, c.valor)}" /></td>`).join("")}
               </tr>
             `).join("")}
           </tbody>
@@ -446,7 +459,7 @@ import { nombreCliente } from "../core/catalogos.js";
       const filasEnvio = [...document.querySelectorAll(".precio-envio-input")]
         .map(inp => ({ inp, precio: parsearMoneda(inp.value) }))
         .filter(x => x.precio != null)
-        .map(x => ({ precios_cliente_id: cab.id, tamano_paquete_id: Number(x.inp.dataset.tamano), cordon_id: Number(x.inp.dataset.cordon), precio: x.precio }));
+        .flatMap(x => x.inp.dataset.tamanos.split(",").map(Number).map(tamanoId => ({ precios_cliente_id: cab.id, tamano_paquete_id: tamanoId, cordon_id: Number(x.inp.dataset.cordon), precio: x.precio })));
       const filasFlete = [...document.querySelectorAll(".precio-flete-input")]
         .map(inp => ({ inp, precio: parsearMoneda(inp.value) }))
         .filter(x => x.precio != null)
