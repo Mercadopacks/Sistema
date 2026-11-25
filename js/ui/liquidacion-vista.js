@@ -113,14 +113,9 @@ function tarjetaExtras(filas){
 // `${prefijo}-tarjetas`/`${prefijo}-aviso-cero`.
 export function renderResumenLiquidacion(prefijo, filasResumen){
   const grupos = agruparFilasResumen(filasResumen || []);
-  const gruposZonas = grupos.filter(g => g.grupo !== "Extras");
-  const grupoExtras = grupos.find(g => g.grupo === "Extras");
   const contTarjetas = document.getElementById(`${prefijo}-tarjetas`);
   if(contTarjetas){
-    contTarjetas.innerHTML = `
-      <div class="tarjetas-zonas-grid">${gruposZonas.map(g => tarjetaZona(g.grupo, g.filas)).join("")}</div>
-      ${grupoExtras ? tarjetaExtras(grupoExtras.filas) : ""}
-    `;
+    contTarjetas.innerHTML = grupos.map(g => g.grupo === "Extras" ? tarjetaExtras(g.filas) : tarjetaZona(g.grupo, g.filas)).join("");
   }
   const aviso = document.getElementById(`${prefijo}-aviso-cero`);
   if(aviso){
@@ -225,11 +220,12 @@ function renderDetalle(prefijo, estado){
   const hayFiltro = !!(estado.busqueda || estado.fecha || estado.zona || estado.tamano || estado.tipo);
   btnLimpiar.hidden = !hayFiltro;
 
-  // Contador + subtotal filtrado del título de la sección (pedido:
-  // "Detalle de envíos [N envíos]" y "Subtotal filtrado: $X" arriba de
-  // los filtros, igual a la referencia).
-  const contador = document.getElementById(`${prefijo}-detalle-contador`);
-  if(contador) contador.textContent = `${total} ${total === 1 ? "envío" : "envíos"}`;
+  // Bug real 2026-11-25 (5ta vuelta): el chip de cantidad contaba TODAS
+  // las filas del detalle (envíos + turbos + colectas + adicionales +
+  // descuentos) y se mostraba como "N envíos" — llevaba a comparar ese
+  // número contra "Total envíos" del encabezado (que sí excluye extras) y
+  // parecer una inconsistencia. Se saca el chip por completo; el único
+  // número que queda acá es el subtotal filtrado, sin ambigüedad.
   const subtotalFiltrado = estado.filtradas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
   const elSubtotal = document.getElementById(`${prefijo}-detalle-subtotal-filtrado`);
   if(elSubtotal) elSubtotal.textContent = formatearMoneda(subtotalFiltrado);
@@ -368,10 +364,7 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
 
     <div class="card">
       <div class="liq-detalle-header">
-        <div class="liq-detalle-header-titulo">
-          <span class="liq-detalle-titulo">Detalle de envíos</span>
-          <span class="tarjeta-resumen-pie-chip" id="${prefijo}-detalle-contador"></span>
-        </div>
+        <span class="liq-detalle-titulo">Detalle de liquidación</span>
         <div class="liq-detalle-subtotal-filtrado">Subtotal filtrado: <strong id="${prefijo}-detalle-subtotal-filtrado"></strong></div>
       </div>
       <div class="buscar-mas-filtrar" style="margin-bottom:10px;">

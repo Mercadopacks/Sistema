@@ -274,7 +274,7 @@
      tarjeta de zona, columna ID de venta + badge de Zona en el detalle. */
   .col-num{font-variant-numeric:tabular-nums;}
 
-  .liquidacion-header-unificado{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:14px;}
+  .liquidacion-header-unificado{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;}
   .liquidacion-header-datos{display:flex; flex-direction:column; gap:6px;}
   .liquidacion-header-titulo-fila{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
   .liquidacion-header-titulo-fila h2{margin:0; font-size:18px;}
@@ -295,29 +295,24 @@
      contenedor y align-self:center en el botón puntual. */
   .liquidacion-header-resumen{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .liquidacion-header-resumen > .btn-icono{align-self:center;}
-  /* 4ta vuelta: se saca la franja dorada lateral (se veía pegada/forzada)
-     — ahora cada dato lleva su propio ícono circular como separador visual,
-     con el mismo tono dorado reservado solo para el valor destacado
-     (Monto a pagar), igual que el resto del sistema usa el dorado como
-     acento de "lo más importante", no como decoración de borde. */
+  /* 5ta vuelta: mismo estilo para los 2 datos (fondo negro, título
+     blanco, ícono blanco, número en dorado) — separados por una línea
+     blanca, sin un bloque "destacado" aparte. */
   .liquidacion-header-resumen-total{
     display:flex; align-items:stretch; overflow:hidden;
     background:var(--negro); border-radius:10px;
   }
   .liquidacion-header-resumen-dato{display:flex; align-items:center; gap:9px; line-height:1.3; padding:10px 16px;}
-  .liquidacion-header-resumen-dato + .liquidacion-header-resumen-dato{border-left:1px solid rgba(255,255,255,.12);}
+  .liquidacion-header-resumen-dato + .liquidacion-header-resumen-dato{border-left:1px solid rgba(255,255,255,.3);}
   .liquidacion-header-resumen-dato-icono{
     width:28px; height:28px; border-radius:50%; flex-shrink:0;
-    display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.08);
+    display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.1);
   }
-  .liquidacion-header-resumen-dato-icono svg{width:14px; height:14px; color:#ccc;}
+  .liquidacion-header-resumen-dato-icono svg{width:14px; height:14px; color:#fff;}
   .liquidacion-header-resumen-dato-texto{display:flex; flex-direction:column;}
-  .liquidacion-header-resumen-label{font-size:10px; color:#aaa; text-transform:uppercase; letter-spacing:.04em; font-weight:700;}
-  .liquidacion-header-resumen-valor{font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; color:#fff;}
-  .liquidacion-header-resumen-destacado{background:rgba(246,190,5,.08);}
-  .liquidacion-header-resumen-destacado .liquidacion-header-resumen-dato-icono{background:rgba(246,190,5,.18);}
-  .liquidacion-header-resumen-destacado .liquidacion-header-resumen-dato-icono svg{color:var(--dorado);}
-  .liquidacion-header-resumen-destacado .liquidacion-header-resumen-valor{font-size:19px; color:var(--dorado);}
+  .liquidacion-header-resumen-label{font-size:10px; color:#fff; text-transform:uppercase; letter-spacing:.04em; font-weight:700;}
+  .liquidacion-header-resumen-valor{font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--dorado);}
+  .liquidacion-header-resumen-destacado .liquidacion-header-resumen-valor{font-size:19px;}
 
   .liq-resumen-section-header{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px;}
   .liq-resumen-section-titulo{font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.03em; color:#555;}
@@ -327,28 +322,30 @@
   }
   .tarjeta-resumen-aviso i{width:14px; height:14px; flex-shrink:0;}
 
-  /* 4ta vuelta: las zonas pasan a una grilla de 2 columnas (2 filas de
-     cards, ej. CABA/GBA1 arriba y GBA2/GBA3 abajo) y Extras se saca de esa
-     grilla, a la derecha, ocupando todo el alto de las 2 filas — layout
-     pedido explícitamente por el usuario. Sin degradé/fade (se quitó en
-     la 3ra vuelta: había causado 3 rondas de reportes de "texto
-     superpuesto/difuminado" — ya no hace falta, no hay scroll horizontal
-     por defecto con este layout). */
-  .tarjetas-resumen-liquidacion-wrap{margin-bottom:16px;}
-  .tarjetas-resumen-liquidacion-fila{display:flex; align-items:stretch; gap:10px;}
-  .tarjetas-zonas-grid{
-    display:grid; grid-template-columns:repeat(2, minmax(260px, 1fr));
-    grid-auto-rows:1fr; gap:10px; flex:1 1 auto; min-width:0;
+  /* 5ta vuelta: vuelve a una sola línea (como pidió el usuario) — las
+     cards se achican (`flex:1 1 0`, sin min-width grande) para adaptarse
+     al ancho disponible con el sidebar cerrado; si el sidebar está
+     expandido y no entran, recién ahí aparece scroll horizontal (nunca
+     recorte ni overlap, por el mismo motivo que ya se documentó antes:
+     `overflow:hidden` por tarjeta + `table-layout:fixed` por columna). */
+  .tarjetas-resumen-liquidacion-wrap{margin-bottom:0;}
+  .tarjetas-resumen-liquidacion-fila{
+    display:flex; align-items:stretch; gap:10px; overflow-x:auto; padding-bottom:2px;
   }
+  /* min-width calculado para que con el sidebar COLAPSADO (68px, más
+     ancho disponible) las 5 tarjetas entren sin scroll y legibles, y con
+     el sidebar EXPANDIDO (264px, menos ancho) recién ahí dispare el
+     scroll horizontal en vez de achicarse hasta truncar texto — nunca un
+     punto intermedio donde se vean a medias. */
   .tarjeta-resumen-liquidacion{
     background:#fff; border:1px solid var(--borde); border-radius:10px;
     display:flex; flex-direction:column; overflow:hidden;
+    flex:1 1 0; min-width:225px;
   }
-  /* Extras un poco más ancha que las de zona + su tabla ocupa todo el
-     alto disponible (footer "Subtotal Extras" siempre pegado abajo, en
-     vez de quedar flotando a mitad de tarjeta cuando hay pocas filas). */
-  .tarjeta-resumen-liquidacion-extras{width:300px; flex-shrink:0;}
-  .tarjeta-resumen-liquidacion-extras .tabla-tarjeta-resumen-extras{flex:1 1 auto;}
+  /* La tabla ocupa todo el alto disponible (footer "Subtotal"/"Subtotal
+     Extras" siempre pegado abajo, en vez de quedar flotando a mitad de
+     tarjeta cuando hay pocas filas). */
+  .tarjeta-resumen-liquidacion table{flex:1 1 auto;}
   .tarjeta-resumen-header{
     display:flex; justify-content:space-between; align-items:center; font-weight:800;
     padding:7px 9px; border-bottom:1px solid var(--borde); background:#f8f7f2;
