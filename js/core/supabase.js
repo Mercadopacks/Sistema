@@ -18,28 +18,28 @@ export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ap5oFuGA3ByxzbewtCVjmA_a
 // loguearse de nuevo en cada pestaña nueva.
 //
 // Fix real 2026-11-25 (2da vuelta): cambiar el storage NO alcanzaba — el
-// bug reportado era que, al cerrar sesión en una pestaña y refrescar,
-// aparecía la cuenta de la OTRA pestaña. Causa real: supabase-js abre un
-// `BroadcastChannel` nombrado igual al `storageKey` para sincronizar el
-// estado de auth entre pestañas (ver gotrue-js, `this.broadcastChannel =
-// new BroadcastChannel(this.storageKey)`) — esto pasa SIEMPRE, sin
-// importar qué storage se use, porque el nombre del canal depende del
-// storageKey, no del storage. Con el storageKey por default (igual en
-// todas las pestañas), cualquier login/logout en una pestaña se
-// propagaba y pisaba la sesión guardada de las demás. Se le da a cada
-// pestaña un storageKey ÚNICO (generado una vez y guardado en su propio
-// sessionStorage, así se mantiene estable si se refresca esa misma
-// pestaña) para que el BroadcastChannel de cada una quede aislado.
-function obtenerStorageKeyPorPestana(){
-  const CLAVE_ID_PESTANA = "mp-pestana-id";
-  let id = sessionStorage.getItem(CLAVE_ID_PESTANA);
-  if(!id){
-    id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-    sessionStorage.setItem(CLAVE_ID_PESTANA, id);
-  }
-  return `sb-auth-pestana-${id}`;
-}
-
+// bug reportado era que, al cerrar sesión en una pestaña y volver a ella
+// más tarde, aparecía la cuenta de OTRA pestaña (incluso habiendo
+// generado antes un storageKey "único por pestaña" — ver intento previo
+// en el historial de este archivo, seguía fallando con pestañas
+// DUPLICADAS, que heredan ese id al copiarse el sessionStorage). Causa
+// real: supabase-js abre un `BroadcastChannel` nombrado igual al
+// `storageKey` para sincronizar el estado de auth entre pestañas (ver
+// gotrue-js: `if(... && this.storageKey) this.broadcastChannel = new
+// BroadcastChannel(this.storageKey)`) — pasa SIEMPRE que `storageKey`
+// tenga un valor, sin importar qué storage se use. Dos pestañas con el
+// mismo storageKey (el caso por default, y también 2 pestañas que alguna
+// vez compartieron un id vía "duplicar pestaña") escuchan el MISMO canal:
+// cualquier login/logout/refresh de token en una se propaga y termina
+// pisando la sesión guardada en la otra.
+// Fix definitivo: `storageKey: ""` — con ese valor "falsy", gotrue-js NO
+// crea ningún BroadcastChannel para NINGUNA pestaña (ver el `&&
+// this.storageKey` del guard de arriba), así que no hay canal que pueda
+// cruzarse, ni siquiera entre pestañas duplicadas. No hace falta un id
+// único por pestaña para el aislamiento del storage en sí: el
+// sessionStorage del navegador YA aísla pestañas por su cuenta (cada
+// pestaña tiene su propio compartimento, aunque usen el mismo nombre de
+// clave) — lo único que cruzaba pestañas era el BroadcastChannel.
 export const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: { storage: window.sessionStorage, storageKey: obtenerStorageKeyPorPestana() },
+  auth: { storage: window.sessionStorage, storageKey: "" },
 });
