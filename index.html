@@ -270,57 +270,115 @@
      tabular para todo importe/cantidad (formato monetario argentino ya lo
      da formatearMoneda(), acá solo la alineación numérica). */
   .col-num{font-variant-numeric:tabular-nums;}
-  .liquidacion-header-unificado{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px;}
+
+  /* 2da vuelta (QA, mismo pedido): seguía sin entrar en una línea y el
+     encabezado se veía deslavado comparado con una referencia visual que
+     pasó el usuario — se achica tipografía/padding de las tarjetas (de
+     ~280px a ~205px mínimo, texto 11px en vez de 12.5px) para que las 5
+     entren sin scroll en anchos de escritorio habituales, y el "resumen
+     total" pasa a un único bloque oscuro con acento dorado a la
+     izquierda (antes 2 bloques sueltos) — reinterpretado con los tokens
+     de ESTE proyecto (--negro/--dorado/Nunito), no con los de
+     Tailwind/Inter de la referencia que pasó (ese es de otro stack, acá
+     no se usa). */
+  .liquidacion-header-unificado{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px;}
   .liquidacion-header-datos{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;}
-  .liquidacion-header-resumen{display:flex; align-items:center; gap:18px; flex-wrap:wrap;}
-  .liquidacion-header-resumen-dato{display:flex; flex-direction:column; align-items:flex-end; line-height:1.3;}
-  .liquidacion-header-resumen-label{font-size:11px; color:#777; text-transform:uppercase; letter-spacing:.03em;}
-  .liquidacion-header-resumen-valor{font-size:16px; font-weight:700; font-variant-numeric:tabular-nums;}
-  .liquidacion-header-resumen-destacado .liquidacion-header-resumen-valor{
-    font-size:22px; font-weight:800; color:var(--negro); background:var(--dorado);
-    padding:2px 12px; border-radius:6px;
+  .liquidacion-header-resumen{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .liquidacion-header-resumen-total{
+    position:relative; display:flex; align-items:center; overflow:hidden;
+    background:var(--negro); border-radius:10px; padding:9px 18px 9px 14px;
   }
+  .liquidacion-header-resumen-total::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--dorado);
+  }
+  .liquidacion-header-resumen-dato{display:flex; flex-direction:column; line-height:1.3; padding:0 14px;}
+  .liquidacion-header-resumen-dato + .liquidacion-header-resumen-dato{border-left:1px solid rgba(255,255,255,.15);}
+  .liquidacion-header-resumen-label{font-size:10px; color:#aaa; text-transform:uppercase; letter-spacing:.04em; font-weight:700;}
+  .liquidacion-header-resumen-valor{font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; color:#fff;}
+  .liquidacion-header-resumen-destacado .liquidacion-header-resumen-valor{font-size:19px; color:var(--dorado);}
+
   /* Bug real 2026-11-25 (QA post-release): los montos envolvían en 2
      líneas dentro de columnas angostas ("$" en una línea, "3.770,00" en
      la siguiente) — se veía todo encimado/ilegible. `white-space:nowrap`
-     en toda celda de estas tarjetas lo evita; a cambio, las tarjetas
-     necesitan más ancho mínimo para no forzar un scroll horizontal
-     excesivo. El corte seco de la última tarjeta visible (se notaba
-     "partida" a la mitad) se resuelve con scroll-snap (nunca para a
-     mitad de tarjeta) + un degradé en el borde derecho que avisa que hay
-     más contenido para scrollear — el contenedor en sí SÍ puede
-     scrollear horizontal (pedido explícito del diseño), lo que no puede
-     pasar es que se vea roto en el reposo inicial. */
+     en toda celda de estas tarjetas lo evita. El corte seco de la
+     última tarjeta visible (se notaba "partida" a la mitad) se resuelve
+     con scroll-snap (nunca para a mitad de tarjeta) + un degradé en el
+     borde derecho que avisa que hay más contenido para scrollear — el
+     contenedor en sí SÍ puede scrollear horizontal (pedido explícito del
+     diseño) en anchos angostos, lo que no puede pasar es que se vea roto
+     en el reposo inicial. */
   .tarjetas-resumen-liquidacion-wrap{position:relative; margin-bottom:16px;}
   .tarjetas-resumen-liquidacion-fila{
-    display:flex; gap:14px; overflow-x:auto; padding-bottom:6px;
+    display:flex; gap:8px; overflow-x:auto; padding-bottom:6px;
     scroll-snap-type:x proximity; scroll-padding-left:2px;
   }
-  .tarjetas-resumen-liquidacion-wrap::after{
+  /* El degradé SOLO se muestra si de verdad hay overflow (clase
+     "hay-overflow", la pone cargarFilasDetalle()/renderResumenLiquidacion()
+     comparando scrollWidth vs clientWidth después de pintar) — bug real:
+     antes se mostraba siempre, tapando la última columna de la tarjeta
+     Extras aunque las 5 tarjetas entraran justas sin necesitar scroll. */
+  .tarjetas-resumen-liquidacion-wrap.hay-overflow::after{
     content:""; position:absolute; top:0; right:0; bottom:6px; width:28px;
     background:linear-gradient(to right, transparent, #fff);
     pointer-events:none;
   }
+  /* Ancho mínimo real 2026-11-25 (3ra vuelta): con las 4 columnas de
+     moneda (Tamaño/Cant./Precio/Total) un ancho de ~190px NO alcanza
+     para montos reales de 6-7 cifras ("$ 150.800,00") — la tabla se
+     desbordaba y la tarjeta SIGUIENTE (fondo blanco opaco) tapaba
+     visualmente el sobrante, pareciendo "cortado a la mitad". 240px es
+     el mínimo real para que entren sin recortarse; `overflow:hidden` en
+     la tarjeta es una red de seguridad (si algún monto excepcional
+     todavía no entrara, se recorta DENTRO de su propia tarjeta — nunca
+     sangra sobre la vecina). A este ancho entran 4 en la mayoría de los
+     anchos de escritorio y la 5ta pide un scroll corto (scroll-snap +
+     degradé ya cubren ese caso, es el comportamiento que el propio
+     diseño pide como aceptable). */
   .tarjeta-resumen-liquidacion{
     background:#fff; border:1px solid var(--borde); border-radius:10px;
     min-width:280px; flex:1 1 280px; display:flex; flex-direction:column;
-    scroll-snap-align:start;
+    scroll-snap-align:start; overflow:hidden;
   }
   .tarjeta-resumen-header{
     display:flex; justify-content:space-between; align-items:center; font-weight:800;
-    padding:10px 12px; border-bottom:1px solid var(--borde); background:#f8f7f2;
-    border-radius:10px 10px 0 0; white-space:nowrap; gap:10px;
+    padding:7px 9px; border-bottom:1px solid var(--borde); background:#f8f7f2;
+    border-radius:10px 10px 0 0; white-space:nowrap; gap:6px; font-size:12.5px;
   }
-  .tarjeta-resumen-total-chico{font-size:12px; color:#777; font-weight:600;}
+  .tarjeta-resumen-total-chico{
+    font-size:10.5px; color:#777; font-weight:700; background:var(--fondo);
+    padding:2px 7px; border-radius:20px; white-space:nowrap;
+  }
   .tabla-tarjeta-resumen{width:100%; border-collapse:collapse;}
-  .tabla-tarjeta-resumen th, .tabla-tarjeta-resumen td{padding:5px 10px; font-size:12.5px; white-space:nowrap;}
-  .tabla-tarjeta-resumen th{color:#777; font-weight:700; text-align:left;}
+  /* table-layout:fixed + anchos explícitos por columna (en vez de que el
+     navegador reparta el espacio por contenido) — necesario para que
+     Precio/Total (las columnas con los números más largos) se lleven más
+     ancho que Tamaño/Cant., consistente en las 4 tarjetas de zona. */
+  .tabla-tarjeta-resumen{table-layout:fixed;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(1),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(1){width:26%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(2),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(2){width:16%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(3),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(3){width:29%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(4),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(4){width:29%;}
+  .tabla-tarjeta-resumen-extras th:nth-child(1), .tabla-tarjeta-resumen-extras td:nth-child(1){width:46%;}
+  .tabla-tarjeta-resumen-extras th:nth-child(2), .tabla-tarjeta-resumen-extras td:nth-child(2){width:18%;}
+  .tabla-tarjeta-resumen-extras th:nth-child(3), .tabla-tarjeta-resumen-extras td:nth-child(3){width:36%;}
+  .tabla-tarjeta-resumen th, .tabla-tarjeta-resumen td{
+    padding:3px 6px; font-size:10.5px; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+  .tabla-tarjeta-resumen th{
+    color:#999; font-weight:700; text-align:left; font-size:9.5px;
+    text-transform:uppercase; letter-spacing:.02em; border-bottom:1px solid var(--borde);
+  }
   .tabla-tarjeta-resumen th.col-num, .tabla-tarjeta-resumen td.col-num{text-align:right;}
-  .tabla-tarjeta-resumen tr.fila-sin-movimiento{opacity:.45;}
+  .tabla-tarjeta-resumen tr.fila-sin-movimiento{color:#bbb;}
   .tarjeta-resumen-pie{
-    display:flex; justify-content:space-between; align-items:center; gap:10px;
-    padding:9px 12px; font-weight:800; border-top:1px solid var(--borde);
-    font-size:13px; white-space:nowrap;
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:8px 10px; font-weight:800; border-top:1px solid var(--borde);
+    font-size:11.5px; white-space:nowrap; background:var(--fondo); border-radius:0 0 10px 10px;
   }
   /* Reserva el mismo alto siempre (no solo "hasta 460px") para que
      filtrar/buscar y quedarse con pocas filas no encoja la caja — pedido

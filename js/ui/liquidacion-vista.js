@@ -83,7 +83,7 @@ function tarjetaExtras(filas){
   return `
     <div class="tarjeta-resumen-liquidacion">
       <div class="tarjeta-resumen-header"><span>Extras</span></div>
-      <table class="tabla-tarjeta-resumen">
+      <table class="tabla-tarjeta-resumen tabla-tarjeta-resumen-extras">
         <thead><tr><th>Concepto</th><th class="col-num">Cant.</th><th class="col-num">Importe</th></tr></thead>
         <tbody>
           ${filas.map(f => `
@@ -111,6 +111,11 @@ export function renderResumenLiquidacion(prefijo, filasResumen){
   const contTarjetas = document.getElementById(`${prefijo}-tarjetas`);
   if(contTarjetas){
     contTarjetas.innerHTML = grupos.map(g => g.grupo === "Extras" ? tarjetaExtras(g.filas) : tarjetaZona(g.grupo, g.filas)).join("");
+    // Bug real: el degradé de "hay más para scrollear" se mostraba
+    // siempre, aunque las tarjetas entraran justas sin overflow real —
+    // tapaba la última columna de la tarjeta de más a la derecha.
+    const wrap = contTarjetas.closest(".tarjetas-resumen-liquidacion-wrap");
+    if(wrap) wrap.classList.toggle("hay-overflow", contTarjetas.scrollWidth > contTarjetas.clientWidth + 1);
   }
   const tbody = document.getElementById(`${prefijo}-tabla-resumen`);
   if(tbody){
@@ -248,13 +253,15 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
           <span id="${prefijo}-estado"></span>
         </div>
         <div class="liquidacion-header-resumen">
-          <div class="liquidacion-header-resumen-dato">
-            <span class="liquidacion-header-resumen-label">Paquetes</span>
-            <span class="liquidacion-header-resumen-valor" id="${prefijo}-total-paquetes">—</span>
-          </div>
-          <div class="liquidacion-header-resumen-dato liquidacion-header-resumen-destacado">
-            <span class="liquidacion-header-resumen-label">Monto a pagar</span>
-            <span class="liquidacion-header-resumen-valor" id="${prefijo}-monto-a-pagar">—</span>
+          <div class="liquidacion-header-resumen-total">
+            <div class="liquidacion-header-resumen-dato">
+              <span class="liquidacion-header-resumen-label">Paquetes</span>
+              <span class="liquidacion-header-resumen-valor" id="${prefijo}-total-paquetes">—</span>
+            </div>
+            <div class="liquidacion-header-resumen-dato liquidacion-header-resumen-destacado">
+              <span class="liquidacion-header-resumen-label">Monto a pagar</span>
+              <span class="liquidacion-header-resumen-valor" id="${prefijo}-monto-a-pagar">—</span>
+            </div>
           </div>
           <button type="button" class="btn-icono" id="${prefijo}-btn-pdf-vista" data-tip="Vista previa PDF"><i data-lucide="eye"></i></button>
           <button type="button" class="btn-icono" id="${prefijo}-btn-pdf-descargar" data-tip="Descargar PDF"><i data-lucide="download"></i></button>
