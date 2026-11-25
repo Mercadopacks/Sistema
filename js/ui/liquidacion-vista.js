@@ -261,7 +261,9 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
         </div>
       </div>
       <div id="${prefijo}-combos-extra" class="buscar-mas-filtrar" style="margin-bottom:10px;"></div>
-      <div class="tarjetas-resumen-liquidacion-fila" id="${prefijo}-tarjetas"></div>
+      <div class="tarjetas-resumen-liquidacion-wrap">
+        <div class="tarjetas-resumen-liquidacion-fila" id="${prefijo}-tarjetas"></div>
+      </div>
       <p style="font-weight:700; margin:20px 0 8px;">Detalle de envíos</p>
       <div class="buscar-mas-filtrar" style="margin-bottom:10px;">
         <input id="${prefijo}-detalle-buscar" class="buscador" placeholder="Buscar por dirección, localidad o cuenta…" />
@@ -379,13 +381,22 @@ export async function generarPdfLiquidacion({ cliente, servicio, fechaInicio, fe
   doc.setFont(undefined, "normal");
 
   const diario = armarDetalleDiarioPdf(filasDetalle || [], zonas);
-  const headZonas1 = zonas.map(() => "");
-  const headZonas2 = zonas;
+  // Pedido 2026-11-25 (QA post-release): nada de texto repetido para
+  // simular una celda combinada — "Pequeños"/"Grandes"/etc. van con
+  // colSpan/rowSpan reales (igual que el PDF de referencia: "PEQUEÑOS"
+  // ocupa una sola celda ancha arriba de sus 4 zonas, no se repite 4 veces).
   doc.autoTable({
     startY: 30,
     head: [
-      ["Fecha", ...zonas.map(()=>"Pequeños"), ...zonas.map(()=>"Grandes"), "Total Paq.", "Turbo", "Adicional ($)"],
-      ["", ...zonas, ...zonas, "", "", ""],
+      [
+        { content: "Fecha", rowSpan: 2 },
+        { content: "Pequeños", colSpan: zonas.length, styles: { halign: "center" } },
+        { content: "Grandes", colSpan: zonas.length, styles: { halign: "center" } },
+        { content: "Total Paq.", rowSpan: 2 },
+        { content: "Turbo", rowSpan: 2 },
+        { content: "Adicional ($)", rowSpan: 2 },
+      ],
+      [...zonas, ...zonas],
     ],
     body: diario.map(d => [
       formatearFecha(d.fecha),
@@ -395,8 +406,9 @@ export async function generarPdfLiquidacion({ cliente, servicio, fechaInicio, fe
       d.turbo || "",
       d.adicional ? formatearMoneda(d.adicional) : "",
     ]),
-    styles: { fontSize: 7, cellPadding: 1.5 },
-    headStyles: { fillColor: [246, 190, 5], textColor: [17, 17, 17] },
+    styles: { fontSize: 7, cellPadding: 1.5, halign: "center" },
+    columnStyles: { 0: { halign: "left" } },
+    headStyles: { fillColor: [246, 190, 5], textColor: [17, 17, 17], halign: "center" },
     theme: "grid",
   });
 
@@ -406,9 +418,15 @@ export async function generarPdfLiquidacion({ cliente, servicio, fechaInicio, fe
   doc.setFont(undefined, "normal");
   y += 4;
 
+  // "Grupo" combinado con rowSpan real (no texto vacío repetido) — una
+  // sola celda alta por grupo, igual que el PDF de referencia.
   const filasResumenPdf = [];
   agruparFilasResumen(filasResumen || []).forEach(g => {
-    g.filas.forEach((f, i) => filasResumenPdf.push([i === 0 ? g.grupo : "", f.item, f.cantidad == null ? "-" : f.cantidad, f.precio == null ? "-" : formatearMoneda(f.precio), formatearMoneda(f.monto)]));
+    g.filas.forEach((f, i) => {
+      const fila = [f.item, f.cantidad == null ? "-" : f.cantidad, f.precio == null ? "-" : formatearMoneda(f.precio), formatearMoneda(f.monto)];
+      if(i === 0) fila.unshift({ content: g.grupo, rowSpan: g.filas.length, styles: { valign: "middle", fontStyle: "bold" } });
+      filasResumenPdf.push(fila);
+    });
   });
   doc.autoTable({
     startY: y,

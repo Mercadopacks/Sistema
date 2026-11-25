@@ -280,25 +280,47 @@
     font-size:22px; font-weight:800; color:var(--negro); background:var(--dorado);
     padding:2px 12px; border-radius:6px;
   }
-  .tarjetas-resumen-liquidacion-fila{display:flex; gap:14px; overflow-x:auto; padding-bottom:6px; margin-bottom:16px;}
+  /* Bug real 2026-11-25 (QA post-release): los montos envolvían en 2
+     líneas dentro de columnas angostas ("$" en una línea, "3.770,00" en
+     la siguiente) — se veía todo encimado/ilegible. `white-space:nowrap`
+     en toda celda de estas tarjetas lo evita; a cambio, las tarjetas
+     necesitan más ancho mínimo para no forzar un scroll horizontal
+     excesivo. El corte seco de la última tarjeta visible (se notaba
+     "partida" a la mitad) se resuelve con scroll-snap (nunca para a
+     mitad de tarjeta) + un degradé en el borde derecho que avisa que hay
+     más contenido para scrollear — el contenedor en sí SÍ puede
+     scrollear horizontal (pedido explícito del diseño), lo que no puede
+     pasar es que se vea roto en el reposo inicial. */
+  .tarjetas-resumen-liquidacion-wrap{position:relative; margin-bottom:16px;}
+  .tarjetas-resumen-liquidacion-fila{
+    display:flex; gap:14px; overflow-x:auto; padding-bottom:6px;
+    scroll-snap-type:x proximity; scroll-padding-left:2px;
+  }
+  .tarjetas-resumen-liquidacion-wrap::after{
+    content:""; position:absolute; top:0; right:0; bottom:6px; width:28px;
+    background:linear-gradient(to right, transparent, #fff);
+    pointer-events:none;
+  }
   .tarjeta-resumen-liquidacion{
     background:#fff; border:1px solid var(--borde); border-radius:10px;
-    min-width:230px; flex:1 1 230px; display:flex; flex-direction:column;
+    min-width:280px; flex:1 1 280px; display:flex; flex-direction:column;
+    scroll-snap-align:start;
   }
   .tarjeta-resumen-header{
     display:flex; justify-content:space-between; align-items:center; font-weight:800;
     padding:10px 12px; border-bottom:1px solid var(--borde); background:#f8f7f2;
-    border-radius:10px 10px 0 0;
+    border-radius:10px 10px 0 0; white-space:nowrap; gap:10px;
   }
   .tarjeta-resumen-total-chico{font-size:12px; color:#777; font-weight:600;}
   .tabla-tarjeta-resumen{width:100%; border-collapse:collapse;}
-  .tabla-tarjeta-resumen th, .tabla-tarjeta-resumen td{padding:5px 10px; font-size:12.5px;}
+  .tabla-tarjeta-resumen th, .tabla-tarjeta-resumen td{padding:5px 10px; font-size:12.5px; white-space:nowrap;}
   .tabla-tarjeta-resumen th{color:#777; font-weight:700; text-align:left;}
   .tabla-tarjeta-resumen th.col-num, .tabla-tarjeta-resumen td.col-num{text-align:right;}
   .tabla-tarjeta-resumen tr.fila-sin-movimiento{opacity:.45;}
   .tarjeta-resumen-pie{
-    display:flex; justify-content:space-between; padding:9px 12px; font-weight:800;
-    border-top:1px solid var(--borde); font-size:13px;
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:9px 12px; font-weight:800; border-top:1px solid var(--borde);
+    font-size:13px; white-space:nowrap;
   }
   /* Reserva el mismo alto siempre (no solo "hasta 460px") para que
      filtrar/buscar y quedarse con pocas filas no encoja la caja — pedido
