@@ -26,3 +26,10 @@
     const ms = new Date(fechaISO).getTime() - 3 * 60 * 60 * 1000;
     return new Date(ms).toISOString().slice(0, 10);
   }
+
+  export function lunesDeSemana(fechaStr){
+    const d = new Date(fechaStr + "T00:00:00Z");
+    const diff = d.getUTCDay() === 0 ? 6 : d.getUTCDay() - 1;
+    d.setUTCDate(d.getUTCDate() - diff);
+    return d.toISOString().slice(0, 10);
+  }
