@@ -327,7 +327,7 @@ function renderResumenHeader(comparativa){
   const p = comparativa.principal;
   if(p.estado !== "generada"){
     cont.innerHTML = `
-      <div class="tarjeta-resumen-aviso" style="margin-top:14px;">
+      <div class="tarjeta-resumen-aviso">
         <i data-lucide="alert-triangle"></i><span class="tarjeta-resumen-aviso-texto">Falta generar la liquidación individual de la cuenta principal para este período — el monto final no se puede calcular todavía.</span>
       </div>
     `;
@@ -335,7 +335,7 @@ function renderResumenHeader(comparativa){
     return;
   }
   cont.innerHTML = `
-    <div class="liquidacion-header-resumen-total" style="margin-top:14px;">
+    <div class="liquidacion-header-resumen-total">
       <div class="liquidacion-header-resumen-dato">
         <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="receipt"></i></span>
         <span class="liquidacion-header-resumen-dato-texto">
