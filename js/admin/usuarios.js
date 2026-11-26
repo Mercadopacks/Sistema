@@ -101,7 +101,12 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
     adminUsuariosData = data || [];
     sectoresDisponibles = sectores || [];
     catalogos.clientes = clientes || [];
-    await cargarConfigVistas();
+    // Bug real 2026-11-26: forzar refresco siempre — si se edita
+    // Configuración → Vistas y se vuelve a Usuarios SIN recargar la
+    // página, el caché de configVistas quedaba con los valores de antes
+    // de ese cambio (el guard `if(configVistas.size) return` solo lo
+    // cargaba la primera vez).
+    await cargarConfigVistas(true);
     renderAdminUsuarios();
   }
 
