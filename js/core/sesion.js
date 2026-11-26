@@ -45,7 +45,14 @@
     { clave: "repa-vivo", label: "Operación en vivo" },
     { clave: "liquidacion-clientes", label: "Liquidación Clientes", soloAdmin: true },
     { clave: "liquidacion-repartidores", label: "Liquidación Repartidores", soloAdmin: true },
-    { clave: "liquidacion-consolidada", label: "Liquidación Consolidada", soloAdmin: true },
+    // Pedido 2026-11-26: a diferencia de Liquidación Clientes/
+    // Repartidores (que sí son soloAdmin), Liquidación Consolidada
+    // también la tiene que poder ver la propia cuenta principal
+    // (tipo_usuario="cliente") — es la razón de ser del módulo (ver
+    // docs/liquidacion_consolidada.md). Bug real: al estar marcada
+    // soloAdmin, vistasValidasPara() se la sacaba sola apenas se
+    // guardaba el usuario cliente, aunque el admin la hubiera tildado.
+    { clave: "liquidacion-consolidada", label: "Liquidación Consolidada" },
     // Pedido 2026-11-23: 2 vistas separadas a propósito (no una con
     // selector adentro) — son 2 sectores distintos los que cargan extras
     // de clientes vs. de repartidores y no pueden entrar al mismo panel;
