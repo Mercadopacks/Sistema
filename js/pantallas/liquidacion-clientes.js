@@ -10,6 +10,38 @@ import { navegarA } from "../core/navegacion.js";
 import { abmCordones } from "../admin/abm-simple.js";
 import { montarVistaLiquidacion, renderResumenLiquidacion, cargarFilasDetalle, generarPdfLiquidacion } from "../ui/liquidacion-vista.js";
 
+// Bug real 2026-11-26 (seguimiento): "Monto total a pagar" y las
+// tarjetas de resumen salían de 2 consultas SQL independientes
+// (calcular_totales_liquidacion_cliente() y resumen_matriz_liquidacion_
+// cliente()) que podían divergir en silencio — ej. un envío sin precio
+// configurado para su tamaño/cordón: cuenta para una pero la otra no le
+// genera ninguna fila de zona al no tener con qué cruzar. Consolidado en
+// UNA sola fuente: esta función deriva TODO (lo que se ve en pantalla Y
+// lo que se guarda al confirmar) de las mismas filas de resumen_matriz_
+// liquidacion_cliente() — calcular_totales_liquidacion_cliente() ya NO
+// se usa en esta pantalla. Colectas se suman dentro de "Adicionales" al
+// persistir (liquidaciones_clientes no tiene una columna aparte para
+// colectas — las tarjetas sí la muestran separada, es solo una
+// distinción visual, no de almacenamiento).
+function totalesDesdeMatriz(matrizFilas){
+  const porItem = (nombre) => (matrizFilas || []).find(f => f.grupo === "Extras" && f.item === nombre) || { cantidad: 0, monto: 0 };
+  const turbos = porItem("Turbos");
+  const colectas = porItem("Colectas");
+  const adicionales = porItem("Adicionales");
+  const descuentos = porItem("Descuentos");
+  const filasEnvios = (matrizFilas || []).filter(f => f.grupo !== "Extras");
+  return {
+    total_envios: filasEnvios.reduce((acc, f) => acc + (Number(f.monto) || 0), 0),
+    cantidad_envios: filasEnvios.reduce((acc, f) => acc + (Number(f.cantidad) || 0), 0),
+    total_turbo: Number(turbos.monto) || 0,
+    cantidad_turbo: Number(turbos.cantidad) || 0,
+    total_adicional: (Number(adicionales.monto) || 0) + (Number(colectas.monto) || 0),
+    cantidad_adicional: (Number(adicionales.cantidad) || 0) + (Number(colectas.cantidad) || 0),
+    total_descuento: -(Number(descuentos.monto) || 0),
+    cantidad_descuento: Number(descuentos.cantidad) || 0,
+  };
+}
+
 // ===================== Liquidación Clientes =====================
 // Pedido 2026-11-23 (3ra vuelta): primero se elige el Servicio (filtra
 // qué clientes aplican, según precios_cliente.tipo_servicio), después
@@ -262,17 +294,19 @@ document.getElementById("tabla-liquidacion-clientes").addEventListener("click", 
     }
     if(!(await mostrarConfirmacion("¿Confirmar esta liquidación? No se puede deshacer."))) return;
     const pallets = periodo.tipo_servicio === "fulfillment" ? fila.registro.cantidad_pallets : null;
-    const { data, error } = await sb.rpc("calcular_totales_liquidacion_cliente", {
-      p_did_cliente: did, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin, p_cantidad_pallets: pallets,
-    });
-    if(error){ console.error("Error calculando totales de liquidación:", error); await mostrarAviso("No se pudo calcular la liquidación."); return; }
+    const [{ data: matrizFilas, error: errMatriz }, { data: precios, error: errPrecios }] = await Promise.all([
+      sb.rpc("resumen_matriz_liquidacion_cliente", { p_did_cliente: did, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin }),
+      sb.from("precios_cliente").select("precio_despacho_envio,precio_deposito_pallet").eq("did_cliente", did).eq("activo", true).maybeSingle(),
+    ]);
+    if(errMatriz || errPrecios){ console.error("Error calculando totales de liquidación:", errMatriz || errPrecios); await mostrarAviso("No se pudo calcular la liquidación."); return; }
+    const t = totalesDesdeMatriz(matrizFilas);
     periodo.pallets = pallets || 0;
-    periodo.precioDespacho = (fila.registro && fila.registro.precio_despacho_periodo != null) ? fila.registro.precio_despacho_periodo : (data.precio_despacho_configurado || 0);
-    periodo.precioDeposito = (fila.registro && fila.registro.precio_deposito_periodo != null) ? fila.registro.precio_deposito_periodo : (data.precio_deposito_configurado || 0);
-    const montoDespachoOverride = ((data.cantidad_envios || 0) + (data.cantidad_turbo || 0)) * periodo.precioDespacho;
+    periodo.precioDespacho = (fila.registro && fila.registro.precio_despacho_periodo != null) ? fila.registro.precio_despacho_periodo : (precios?.precio_despacho_envio || 0);
+    periodo.precioDeposito = (fila.registro && fila.registro.precio_deposito_periodo != null) ? fila.registro.precio_deposito_periodo : (precios?.precio_deposito_pallet || 0);
+    const montoDespachoOverride = ((t.cantidad_envios || 0) + (t.cantidad_turbo || 0)) * periodo.precioDespacho;
     const montoDepositoOverride = periodo.pallets * periodo.precioDeposito;
-    periodo.montoTotalCalculado = data.total_envios + data.total_turbo + data.total_adicional - data.total_descuento + montoDepositoOverride + montoDespachoOverride;
-    const ok = await guardarTotalesLiquidacionCliente(periodo, data, "generada");
+    periodo.montoTotalCalculado = matrizFilas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0) + montoDepositoOverride + montoDespachoOverride;
+    const ok = await guardarTotalesLiquidacionCliente(periodo, t, "generada");
     if(ok) cargarLiquidacionClientes();
     return;
   }
@@ -349,15 +383,12 @@ async function abrirPantallaLiquidacionCliente(periodo){
   periodo.precioDespacho = reg && reg.precio_despacho_periodo != null ? reg.precio_despacho_periodo : null;
   periodo.precioDeposito = reg && reg.precio_deposito_periodo != null ? reg.precio_deposito_periodo : null;
 
-  // Bug real 2026-11-24: recalcularDetalleLiquidacionCliente() (totales)
-  // y cargarResumenMatrizLiquidacion() (filas) corren en paralelo, y
-  // renderResumenMatrizLiquidacion() necesita AMBOS — si el RPC de
-  // totales tardaba más, el de la matriz ya había intentado renderizar
-  // y se cortaba en seco (`if(!periodo.totalesCalculados) return`) sin
-  // que nada lo volviera a llamar: quedaba la tabla vacía para siempre.
-  // Un render final (después de que las 2 terminaron) lo garantiza sin
-  // importar el orden en que resuelvan.
-  await Promise.all([recalcularDetalleLiquidacionCliente(), cargarResumenMatrizLiquidacion(), cargarDetalleItemizadoLiquidacion()]);
+  // Bug real 2026-11-24: cargarConfigPreciosLiquidacion() (precios de
+  // Fulfillment) y cargarResumenMatrizLiquidacion() (filas) corren en
+  // paralelo — un render final (después de que las 2 terminaron) evita
+  // que uno pinte antes de que el otro esté listo, sin importar el orden
+  // en que resuelvan.
+  await Promise.all([cargarConfigPreciosLiquidacion(), cargarResumenMatrizLiquidacion(), cargarDetalleItemizadoLiquidacion()]);
   renderResumenMatrizLiquidacion();
 }
 
@@ -391,8 +422,11 @@ async function cargarResumenMatrizLiquidacion(){
 // y vive siempre, tenga o no cordones configurados).
 function renderResumenMatrizLiquidacion(){
   const periodo = liquidacionClienteAbriendo;
-  if(!periodo || !periodo.matrizFilas || !periodo.totalesCalculados) return;
-  const t = periodo.totalesCalculados;
+  if(!periodo || !periodo.matrizFilas) return;
+  // `t` se deriva SIEMPRE de las mismas filas que ya se ven en las
+  // tarjetas (totalesDesdeMatriz) — nunca de una consulta aparte, para
+  // que no puedan divergir (ver nota arriba de totalesDesdeMatriz()).
+  const t = totalesDesdeMatriz(periodo.matrizFilas);
   const esFulfillment = periodo.tipo_servicio === "fulfillment";
   const soloLectura = !!periodo.soloLectura;
   const cantidadPaquetesEnvios = periodo.matrizFilas
@@ -400,8 +434,8 @@ function renderResumenMatrizLiquidacion(){
     .reduce((acc, f) => acc + (Number(f.cantidad) || 0), 0)
     + (periodo.matrizFilas.find(f => f.item === "Turbos")?.cantidad || 0);
 
-  if(periodo.precioDespacho == null) periodo.precioDespacho = t.precio_despacho_configurado || 0;
-  if(periodo.precioDeposito == null) periodo.precioDeposito = t.precio_deposito_configurado || 0;
+  if(periodo.precioDespacho == null) periodo.precioDespacho = periodo.precioDespachoConfigurado || 0;
+  if(periodo.precioDeposito == null) periodo.precioDeposito = periodo.precioDepositoConfigurado || 0;
   const cantidadDespacho = (t.cantidad_envios || 0) + (t.cantidad_turbo || 0);
   const montoDespacho = cantidadDespacho * periodo.precioDespacho;
   const montoDeposito = periodo.pallets * periodo.precioDeposito;
@@ -441,8 +475,20 @@ function renderResumenMatrizLiquidacion(){
   // el monto SUMANDO directamente las mismas filas que ya se ven en las
   // tarjetas — así el header NUNCA puede mostrar un número distinto al
   // que da sumar lo que está en pantalla, por construcción.
-  const montoDesdeResumen = periodo.matrizFilas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
-  const montoTotal = montoDesdeResumen + montoDeposito + montoDespacho;
+  //
+  // Excepción: una liquidación YA GENERADA (soloLectura) muestra el monto
+  // CONGELADO que se guardó al confirmarla (liquidaciones_clientes.
+  // monto_a_pagar), no uno recalculado contra el estado actual de los
+  // envíos — que pudo cambiar desde que se generó (ej. un envío
+  // reclasificado después). Pendiente conocido: las TARJETAS de abajo sí
+  // siguen mostrando datos en vivo incluso para una ya generada (resumen_
+  // matriz_liquidacion_cliente() no tiene un snapshot congelado como las
+  // tablas de Liquidación Consolidada) — si cambió algo después de
+  // generar, el header (correcto, histórico) puede no coincidir con las
+  // tarjetas (en vivo) hasta que se le arme un snapshot propio.
+  const montoTotal = (soloLectura && periodo.registroExistente)
+    ? (periodo.registroExistente.monto_a_pagar || 0)
+    : periodo.matrizFilas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0) + montoDeposito + montoDespacho;
   document.getElementById("liq-cliente-total-paquetes").textContent = cantidadPaquetesEnvios;
   document.getElementById("liq-cliente-monto-a-pagar").textContent = formatearMoneda(montoTotal);
   periodo.montoTotalCalculado = montoTotal;
@@ -463,21 +509,19 @@ function renderResumenMatrizLiquidacion(){
   }
 }
 
-async function recalcularDetalleLiquidacionCliente(){
+// Ya NO trae totales (eso sale de totalesDesdeMatriz(), ver arriba) —
+// solo la config de precios de Fulfillment (despacho/depósito), que no
+// está en resumen_matriz_liquidacion_cliente() porque no es un total,
+// es un valor de catálogo para prellenar los inputs editables.
+async function cargarConfigPreciosLiquidacion(){
   const periodo = liquidacionClienteAbriendo;
-  if(!periodo) return;
-  // Solo lectura (ya generada): muestra los totales guardados en su
-  // momento, no recalcula contra el estado actual de envíos/extras
-  // (que pudo haber cambiado desde que se generó).
-  if(periodo.soloLectura && periodo.registroExistente){
-    periodo.totalesCalculados = periodo.registroExistente;
-    return;
-  }
-  const { data, error } = await sb.rpc("calcular_totales_liquidacion_cliente", {
-    p_did_cliente: periodo.did_cliente, p_fecha_inicio: periodo.fecha_inicio, p_fecha_fin: periodo.fecha_fin, p_cantidad_pallets: periodo.pallets,
-  });
-  if(error){ console.error("Error calculando totales de liquidación:", error); return; }
-  periodo.totalesCalculados = data;
+  if(!periodo || periodo.tipo_servicio !== "fulfillment") return;
+  const { data, error } = await sb.from("precios_cliente")
+    .select("precio_despacho_envio,precio_deposito_pallet")
+    .eq("did_cliente", periodo.did_cliente).eq("activo", true).maybeSingle();
+  if(error){ console.error("Error cargando precios de Fulfillment:", error); return; }
+  periodo.precioDespachoConfigurado = data?.precio_despacho_envio || 0;
+  periodo.precioDepositoConfigurado = data?.precio_deposito_pallet || 0;
 }
 
 async function guardarTotalesLiquidacionCliente(periodo, t, estado){
@@ -505,8 +549,8 @@ async function guardarTotalesLiquidacionCliente(periodo, t, estado){
 
 async function guardarLiquidacionCliente(estado){
   const periodo = liquidacionClienteAbriendo;
-  if(!periodo || !periodo.totalesCalculados) return false;
-  return guardarTotalesLiquidacionCliente(periodo, periodo.totalesCalculados, estado);
+  if(!periodo || !periodo.matrizFilas) return false;
+  return guardarTotalesLiquidacionCliente(periodo, totalesDesdeMatriz(periodo.matrizFilas), estado);
 }
 
 
