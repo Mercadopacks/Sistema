@@ -1091,6 +1091,14 @@
         <div class="card">
           <div class="buscar-mas-filtrar">
             <input id="buscar-envios-listado" class="buscador" placeholder="Buscar por tracking, cliente o localidad…" />
+            <!-- Pedido 2026-11-26: el filtro de Cliente sale del panel
+                 "Filtrar" y queda siempre visible acá afuera (mismo
+                 patrón que el selector de cliente de Mis Liquidaciones) —
+                 se arma 100% por JS (ver repoblarComboClienteEnviosListado
+                 en envios-listado.js), queda vacío para un usuario
+                 tipo_usuario="cliente" con un solo cliente vinculado (no
+                 hay nada para elegir, ya queda fijo a ese cliente). -->
+            <div id="combo-cliente-envios-listado-wrap"></div>
             <span class="rango-fechas-envios-listado">
               <input type="date" id="envios-listado-desde" />
               <span style="color:#777;">a</span>
@@ -1150,23 +1158,15 @@
                     </ul>
                   </div>
                 </div>
-                <!-- Cliente/Localidad/Zona/Repartidor (pedido 2026-11-20:
-                     "filtrar por todos los datos que contenga la tabla") —
-                     se arrancan con un solo <li> "Todos", el resto de
+                <!-- Localidad/Zona/Repartidor (pedido 2026-11-20: "filtrar
+                     por todos los datos que contenga la tabla") — se
+                     arrancan con un solo <li> "Todos", el resto de
                      opciones se agrega por JS al entrar a la pantalla por
                      primera vez (son listas largas que vienen de la base,
                      no se pueden hardcodear en el HTML) — ver
                      inicializarFiltrosEnviosListado(). El buscador adentro
                      del combo aparece solo (UMBRAL_BUSCADOR_COMBO) apenas
                      hay más de 8 opciones. -->
-                <div class="panel-filtros-ruta-campo">Cliente
-                  <div class="combo-filtro" id="combo-cliente-envios-listado">
-                    <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
-                    <ul class="combo-filtro-lista" role="listbox" hidden>
-                      <li data-valor="" aria-selected="true">Todos</li>
-                    </ul>
-                  </div>
-                </div>
                 <div class="panel-filtros-ruta-campo">Localidad
                   <div class="combo-filtro" id="combo-localidad-envios-listado">
                     <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todas</button>
@@ -2431,7 +2431,7 @@ import { cargarAdminFallidosMapeo, cargarAdminFallidosAlertas } from "./js/admin
 // Etapa 4b: catálogo compartido de clientes (antes un `let` del IIFE reasignado por 3 pantallas) + labelCliente/nombreCliente en js/.
 import { catalogos, labelCliente, nombreCliente } from "./js/core/catalogos.js";
 // Etapa 4c: Envíos (listado) en js/.
-import { cargarEnviosListado, inicializarFiltrosEnviosListado } from "./js/pantallas/envios-listado.js";
+import { cargarEnviosListado, inicializarFiltrosEnviosListado, reiniciarFiltrosEnviosListado } from "./js/pantallas/envios-listado.js";
 // Etapa 5a: Configuración > Clientes (detalle, colectas y precios) en js/.
 import { cargarAdminClientes } from "./js/admin/clientes.js";
 // Etapa 5b: sesión y permisos por vista (constantes/estado que Usuarios comparte con el login) en js/.
@@ -2644,7 +2644,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
     lucide.createIcons();
     if(v === "mis-liquidaciones") cargarMisLiquidaciones();
     if(v === "envios") cargarResumenEnvios();
-    if(v === "envios-listado") inicializarFiltrosEnviosListado().then(()=> cargarEnviosListado(true));
+    if(v === "envios-listado") inicializarFiltrosEnviosListado().then(()=> reiniciarFiltrosEnviosListado()).then(()=> cargarEnviosListado(true));
     if(v === "fallidos") cargarFallidos();
     if(v === "picking-tamanos"){
       // Pedido 2026-11-23: siempre debe estar posicionado en "hoy" al

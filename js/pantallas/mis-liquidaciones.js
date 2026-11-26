@@ -83,7 +83,17 @@ async function abrirOGenerarPdf(accion){
   await generarPdfLiquidacion({ ...ultimoPeriodoCargado, accion });
 }
 
+// Pedido 2026-11-26: un usuario administrativo (tipo_usuario !==
+// "cliente") entra a "Mis Liquidaciones" con acceso a TODOS los clientes
+// (igual que en Liquidación Clientes) — la restricción a clientes_
+// lightdata_ids solo aplica a un usuario tipo_usuario="cliente".
 async function resolverClientesPropios(){
+  const esAdmin = !stateSesion.perfil || stateSesion.perfil.tipo_usuario !== "cliente";
+  if(esAdmin){
+    const { data, error } = await sb.from("lightdata_clientes").select("did,nombre_fantasia").order("nombre_fantasia");
+    if(error){ console.error("Error cargando clientes:", error); return []; }
+    return data || [];
+  }
   const ids = (stateSesion.perfil && stateSesion.perfil.clientes_lightdata_ids) || [];
   if(!ids.length) return [];
   const { data, error } = await sb.from("lightdata_clientes").select("did,nombre_fantasia").in("did", ids);

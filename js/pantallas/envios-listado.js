@@ -237,6 +237,99 @@ import { stateSesion } from "../core/sesion.js";
   // Estado/Origen — se arman una sola vez, la primera vez que se entra a
   // la pantalla (los <li> tienen que existir ANTES de crearComboGenerico,
   // que solo engancha los eventos de los que ve en ese momento).
+  // Pedido 2026-11-26: el filtro de Cliente sale del panel "Filtrar" y
+  // queda siempre visible afuera (mismo patrón que el selector de
+  // cliente de Mis Liquidaciones, ver mis-liquidaciones.js). Para un
+  // usuario tipo_usuario="cliente" se acota a sus propios clientes
+  // vinculados (clientes_lightdata_ids) — antes se le ofrecía el catálogo
+  // COMPLETO de clientes en el mismo combo que usa un administrativo, y
+  // el filtro arrancaba vacío ("Todos"), por lo que la grilla mostraba
+  // los envíos de TODOS los clientes (la RLS restringe cuáles puede leer,
+  // pero nada lo dejaba pre-filtrado a los suyos en la pantalla).
+  let clientesFiltroEnviosCache = null;
+  async function resolverClientesFiltroEnvios(){
+    if(clientesFiltroEnviosCache) return clientesFiltroEnviosCache;
+    if(esUsuarioCliente()){
+      const ids = (stateSesion.perfil && stateSesion.perfil.clientes_lightdata_ids) || [];
+      if(!ids.length){ clientesFiltroEnviosCache = []; return clientesFiltroEnviosCache; }
+      const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").in("did", ids);
+      if(error) console.error("Error cargando clientes propios para filtro de Envíos:", error);
+      clientesFiltroEnviosCache = data || [];
+      return clientesFiltroEnviosCache;
+    }
+    if(!catalogos.clientes.length){
+      const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia");
+      if(error) console.error("Error cargando lightdata_clientes para el filtro:", error);
+      else catalogos.clientes = data || [];
+    }
+    clientesFiltroEnviosCache = catalogos.clientes;
+    return clientesFiltroEnviosCache;
+  }
+
+  function repoblarComboClienteEnviosListado(clientes){
+    const wrap = document.getElementById("combo-cliente-envios-listado-wrap");
+    if(esUsuarioCliente()){
+      // Un cliente no elige nada acá: queda fijo a su propio did (o, si
+      // tiene más de una cuenta vinculada, a un combo acotado solo a
+      // esas) — nunca al catálogo completo.
+      stateEnviosListado.cliente = clientes.length ? String(clientes[0].did) : "";
+      if(clientes.length <= 1){ wrap.innerHTML = ""; return; }
+    } else {
+      stateEnviosListado.cliente = "";
+    }
+    const actual = stateEnviosListado.cliente;
+    const actualTexto = actual ? nombreCliente(clientes.find(c => String(c.did) === String(actual)) || {}) : "Todos";
+    wrap.innerHTML = `
+      <div class="combo-filtro" id="combo-cliente-envios-listado">
+        <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">${tituloTexto(actualTexto)}</button>
+        <ul class="combo-filtro-lista" role="listbox" hidden>
+          ${esUsuarioCliente() ? "" : `<li data-valor="" ${actual ? "" : 'aria-selected="true"'}>Todos</li>`}
+          ${clientes.map(c => `<li data-valor="${c.did}" ${String(c.did) === String(actual) ? 'aria-selected="true"' : ""}>${tituloTexto(nombreCliente(c))}</li>`).join("")}
+        </ul>
+      </div>
+    `;
+    crearComboGenerico("combo-cliente-envios-listado", (valor)=>{ stateEnviosListado.cliente = valor; cargarEnviosListado(true); });
+  }
+
+  // Resetea a su default el combo cuyo <li> por defecto es siempre el
+  // PRIMERO del <ul> (todos los de este listado se arman así) — sin
+  // pasar por el registro de crearComboGenerico, para no disparar una
+  // recarga por cada combo reseteado (ver reiniciarFiltrosEnviosListado).
+  function resetearComboDom(id){
+    const cont = document.getElementById(id);
+    if(!cont) return;
+    const btn = cont.querySelector(".combo-filtro-btn");
+    const lista = cont.querySelector(".combo-filtro-lista");
+    const primero = lista.querySelector("li");
+    if(!primero) return;
+    [...lista.querySelectorAll("li")].forEach(li => li.setAttribute("aria-selected", String(li === primero)));
+    btn.textContent = primero.textContent;
+  }
+
+  // Pedido 2026-11-26: cada vez que se ENTRA a la pantalla (no solo la
+  // primera vez, a diferencia de inicializarFiltrosEnviosListado) los
+  // filtros vuelven a su estado inicial — antes quedaban pegados de la
+  // visita anterior ("filtro, me voy a otra sección, vuelvo, y sigue
+  // filtrado"). Reset directo del DOM (no vía el registro de combos) para
+  // no disparar 7 recargas encadenadas — una sola al final.
+  export async function reiniciarFiltrosEnviosListado(){
+    stateEnviosListado.busqueda = ""; stateEnviosListado.estado = ""; stateEnviosListado.origen = "";
+    stateEnviosListado.tamano = ""; stateEnviosListado.localidad = ""; stateEnviosListado.cordon = "";
+    stateEnviosListado.repartidor = "";
+    stateEnviosListado.desde = fechaART(-6); stateEnviosListado.hasta = fechaART(0);
+    stateEnviosListado.paginaActual = 0; stateEnviosListado.tamanoPagina = 10;
+    const buscador = document.getElementById("buscar-envios-listado");
+    if(buscador) buscador.value = "";
+    document.getElementById("envios-listado-desde").value = stateEnviosListado.desde;
+    document.getElementById("envios-listado-hasta").value = stateEnviosListado.hasta;
+    [
+      "combo-estado-envios-listado", "combo-origen-envios-listado", "combo-tamano-filtro-envios-listado",
+      "combo-localidad-envios-listado", "combo-zona-envios-listado", "combo-repartidor-envios-listado",
+      "combo-tamano-envios-listado",
+    ].forEach(resetearComboDom);
+    repoblarComboClienteEnviosListado(await resolverClientesFiltroEnvios());
+  }
+
   let filtrosEnviosListadoListos = false;
   export async function inicializarFiltrosEnviosListado(){
     if(filtrosEnviosListadoListos) return;
@@ -263,13 +356,7 @@ import { stateSesion } from "../core/sesion.js";
       crearComboGenerico("combo-tamano-filtro-envios-listado", (valor)=>{ stateEnviosListado.tamano = valor; cargarEnviosListado(true); });
     }
 
-    if(!catalogos.clientes.length){
-      const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia");
-      if(error) console.error("Error cargando lightdata_clientes para el filtro:", error);
-      else catalogos.clientes = data || [];
-    }
-    agregarOpcionesCombo("combo-cliente-envios-listado", catalogos.clientes.map(c => ({ valor: c.did, texto: nombreCliente(c) })));
-    crearComboGenerico("combo-cliente-envios-listado", (valor)=>{ stateEnviosListado.cliente = valor; cargarEnviosListado(true); });
+    repoblarComboClienteEnviosListado(await resolverClientesFiltroEnvios());
 
     agregarOpcionesCombo("combo-localidad-envios-listado", abmLocalidades.obtenerActivos().map(n => ({ valor: n, texto: tituloTexto(n) })));
     crearComboGenerico("combo-localidad-envios-listado", (valor)=>{ stateEnviosListado.localidad = valor; cargarEnviosListado(true); });

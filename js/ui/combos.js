@@ -199,6 +199,16 @@ export function crearComboGenerico(contenedorId, onSelect){
   });
 }
 
+// Pedido 2026-11-26: resetear a su default un combo puntual por id (sin
+// pasar por el botón "Limpiar filtros" de un popover) — lo usa cada
+// pantalla con filtros para volver a su estado inicial cada vez que se
+// entra a la sección, en vez de arrastrar el filtro de la visita
+// anterior (bug real: "entro, filtro, me voy y vuelvo, y sigue filtrado").
+export function resetearCombo(id){
+  const combo = registroCombos.get(id);
+  if(combo && !combo.estaEnDefault()) combo.resetear();
+}
+
 // Popover genérico (botón "Filtrar" / "Columnas" + panel con controles
 // adentro, p.ej. #popover-filtros-ruta, #popover-filtros-asistencia,
 // #popover-columnas-asistencia) — mismo singleton que crearComboGenerico.
