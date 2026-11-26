@@ -49,26 +49,32 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
   // administrativo (ej. "Liquidación Clientes" completa, con edición)
   // para un usuario tipo "Cliente". Se filtra acá al guardar, no en el
   // multiselect.
-  // Pedido 2026-11-26: qué vistas son asignables a un cliente YA NO es un
-  // flag hardcodeado en el código (se equivocó 2 veces) — sale de
-  // parametros_vistas, editable desde Configuración → Vistas. Para un
-  // usuario administrativo no se filtra nada (la restricción solo mira
-  // hacia el lado cliente, igual que siempre).
-  let configVistas = new Map(); // clave -> visible_para_clientes
+  // Pedido 2026-11-26: qué vistas son asignables a cada rol (Cliente,
+  // Administrativo, Repartidor) YA NO es un flag hardcodeado en el
+  // código (se equivocó 2 veces) — sale de parametros_vistas, editable
+  // desde Configuración → Vistas. "Administrador" (es_admin=true) sigue
+  // sin filtro, nunca se restringe — es el 4to rol que pidió el usuario,
+  // pero vive en el flag `es_admin` existente, no en tipo_usuario.
+  let configVistas = new Map(); // clave -> { clientes, administrativos, repartidores }
   async function cargarConfigVistas(forzar){
     if(configVistas.size && !forzar) return;
-    const { data, error } = await sb.from("parametros_vistas").select("clave,visible_para_clientes");
+    const { data, error } = await sb.from("parametros_vistas").select("clave,visible_para_clientes,visible_para_administrativos,visible_para_repartidores");
     if(error){ console.error("Error cargando parametros_vistas:", error); return; }
-    configVistas = new Map((data || []).map(v => [v.clave, v.visible_para_clientes]));
+    configVistas = new Map((data || []).map(v => [v.clave, {
+      clientes: v.visible_para_clientes, administrativos: v.visible_para_administrativos, repartidores: v.visible_para_repartidores,
+    }]));
   }
-  function vistasValidasPara(esCliente, claves){
+  function vistasValidasPara(tipoUsuario, esAdmin, claves){
     return (claves || []).filter(c => {
       const v = VISTAS_DISPONIBLES.find(x => x.clave === c);
       if(!v) return false;
-      // Fail-open si parametros_vistas todavía no tiene esa clave
-      // (vista nueva recién agregada al código, sin fila sembrada
-      // todavía) — mismo criterio del resto del sistema de permisos.
-      return esCliente ? (configVistas.get(c) ?? true) : true;
+      if(esAdmin) return true; // Administrador: nunca se filtra
+      const campo = tipoUsuario === "cliente" ? "clientes" : tipoUsuario === "repartidor" ? "repartidores" : "administrativos";
+      const fila = configVistas.get(c);
+      // Fail-open si parametros_vistas todavía no tiene esa clave (vista
+      // nueva recién agregada al código, sin fila sembrada todavía) —
+      // mismo criterio del resto del sistema de permisos.
+      return fila ? !!fila[campo] : true;
     });
   }
 
@@ -96,6 +102,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
       const nombres = didsClienteALabel(u.clientes_lightdata_ids);
       return nombres.length ? `Cliente: ${nombres.join(", ")}` : "Cliente (sin asociar)";
     }
+    if(u.tipo_usuario === "repartidor") return "Repartidor";
     const sector = sectoresDisponibles.find(s => s.id === u.sector_id);
     return sector ? `Administrativo: ${sector.nombre}` : "Administrativo";
   }
@@ -145,12 +152,15 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
     if(!u) return;
     document.getElementById("modal-detalle-usuario-titulo").textContent = `Detalle — ${u.nombre} ${u.apellido}`;
     const esCliente = u.tipo_usuario === "cliente";
+    const labelTipo = (TIPOS_USUARIO_OPCIONES.find(t => t.valor === u.tipo_usuario) || {}).texto || u.tipo_usuario;
     const campos = [
       { icono: "mail", label: "Email", valor: u.email },
-      { icono: "user-cog", label: "Tipo de usuario", valor: esCliente ? "Cliente" : "Administrativo" },
+      { icono: "user-cog", label: "Tipo de usuario", valor: labelTipo },
       esCliente
         ? { icono: "building-2", label: "Clientes asociados", valor: didsClienteALabel(u.clientes_lightdata_ids).join(", ") || "—", span: true }
-        : { icono: "briefcase", label: "Sector", valor: (sectoresDisponibles.find(s => s.id === u.sector_id) || {}).nombre || "—" },
+        : u.tipo_usuario === "administrativo"
+          ? { icono: "briefcase", label: "Sector", valor: (sectoresDisponibles.find(s => s.id === u.sector_id) || {}).nombre || "—" }
+          : { icono: "truck", label: "Rol", valor: labelTipo },
       { icono: "shield-check", label: "Admin", valor: u.es_admin ? "Sí" : "No" },
       { icono: "check-circle-2", label: "Activo", valor: u.activo ? "Sí" : "No" },
       { icono: "eye", label: "Vistas permitidas", valor: u.es_admin ? "Todas (admin)" : (clavesAVistasLabel(u.vistas_permitidas).join(", ") || "—"), span: true },
@@ -196,7 +206,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
       {
         clave: "sector_id", label: "Sector", tipo: "select",
         opciones: sectoresDisponibles.map(s => ({ valor: s.id, texto: s.nombre })),
-        mostrarSi: v => v.tipo_usuario !== "cliente",
+        mostrarSi: v => v.tipo_usuario === "administrativo",
       },
       {
         clave: "clientes", label: "Clientes asociados", tipo: "multiselect", span: true,
@@ -218,6 +228,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
         await mostrarAviso("Un usuario tipo Cliente necesita al menos un cliente asociado.");
         return false;
       }
+      await cargarConfigVistas();
       const emailNuevo = (vals.email || "").trim();
       const passwordNueva = vals.password || "";
       if(passwordNueva && passwordNueva.length < 6){
@@ -246,11 +257,11 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
       }
       const payload = {
         nombre: vals.nombre, apellido: vals.apellido,
-        tipo_usuario: esCliente ? "cliente" : "administrativo",
-        sector_id: esCliente ? null : (vals.sector_id || null),
+        tipo_usuario: vals.tipo_usuario,
+        sector_id: vals.tipo_usuario === "administrativo" ? (vals.sector_id || null) : null,
         clientes_lightdata_ids: esCliente ? clientesIds : null,
         es_admin: !!vals.es_admin, activo: !!vals.activo,
-        vistas_permitidas: vistasValidasPara(esCliente, labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean))),
+        vistas_permitidas: vistasValidasPara(vals.tipo_usuario, !!vals.es_admin, labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean))),
       };
       const { error } = await sb.from("perfiles_usuario").update(payload).eq("id", usuario.id);
       if(error){ console.error(error); await mostrarAviso("No se pudo guardar — ¿tu usuario tiene permiso de administrador?"); return false; }
@@ -274,7 +285,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
       {
         clave: "sector_id", label: "Sector", tipo: "select",
         opciones: sectoresDisponibles.map(s => ({ valor: s.id, texto: s.nombre })),
-        mostrarSi: v => v.tipo_usuario !== "cliente",
+        mostrarSi: v => v.tipo_usuario === "administrativo",
       },
       {
         clave: "clientes", label: "Clientes asociados", tipo: "multiselect", span: true,
@@ -293,6 +304,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
         await mostrarAviso("Un usuario tipo Cliente necesita al menos un cliente asociado.");
         return false;
       }
+      await cargarConfigVistas();
       const { data: sesionActual } = await sb.auth.getSession();
       const token = sesionActual && sesionActual.session ? sesionActual.session.access_token : null;
       if(!token){ await mostrarAviso("Tu sesión expiró — volvé a iniciar sesión."); return false; }
@@ -306,10 +318,10 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
         },
         body: JSON.stringify({
           nombre: vals.nombre, apellido: vals.apellido, email: vals.email, password: vals.password,
-          tipo_usuario: esCliente ? "cliente" : "administrativo",
-          sector_id: esCliente ? null : (vals.sector_id || null),
+          tipo_usuario: vals.tipo_usuario,
+          sector_id: vals.tipo_usuario === "administrativo" ? (vals.sector_id || null) : null,
           clientes_lightdata_ids: esCliente ? clientesIds : null,
-          vistas_permitidas: vistasValidasPara(esCliente, labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean))),
+          vistas_permitidas: vistasValidasPara(vals.tipo_usuario, false, labelsAVistasClave(String(vals.vistas || "").split(",").map(s => s.trim()).filter(Boolean))),
         }),
       });
       const resultado = await resp.json().catch(() => ({}));

@@ -15,9 +15,16 @@
   // clientes_lightdata_ids, ver migración 2026-11-20_tipo_usuario_y_acceso_por_cliente.sql),
   // "administrativo" es personal de la empresa y usa un sector de la
   // lista cerrada parametros_sectores en vez de texto libre.
+  // "repartidor" (pedido 2026-11-26): 4to rol — igual que administrativo/
+  // cliente, su acceso a cada vista se configura en parametros_vistas
+  // (Configuración → Vistas). "Administrador" NO es un valor de
+  // tipo_usuario — sigue siendo el flag `es_admin` (perfiles_usuario),
+  // que bypasea cualquier restricción de vistas sin importar el
+  // tipo_usuario — ver vistasValidasPara() en js/admin/usuarios.js.
   export const TIPOS_USUARIO_OPCIONES = [
     { valor: "administrativo", texto: "Administrativo" },
     { valor: "cliente", texto: "Cliente" },
+    { valor: "repartidor", texto: "Repartidor" },
   ];
 
   // Pedido 2026-11-26: qué vistas son asignables a un usuario tipo

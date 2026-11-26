@@ -72,8 +72,12 @@ Deno.serve(async (req) => {
     // tipo_usuario (2026-11-20, reemplaza el "sector" de texto libre):
     // "cliente" necesita al menos un cliente asociado, "administrativo"
     // usa sector_id (lista cerrada, parametros_sectores) — ver migración
-    // 2026-11-20_tipo_usuario_y_acceso_por_cliente.sql.
-    const tipoUsuarioFinal = tipo_usuario === "cliente" ? "cliente" : "administrativo";
+    // 2026-11-20_tipo_usuario_y_acceso_por_cliente.sql. "repartidor"
+    // agregado 2026-11-26 (4to rol) — bug real: esta función colapsaba
+    // cualquier valor que no fuera "cliente" a "administrativo", así que
+    // un alta como "repartidor" quedaba guardada como "administrativo"
+    // sin que nada lo avisara.
+    const tipoUsuarioFinal = ["cliente", "repartidor"].includes(tipo_usuario) ? tipo_usuario : "administrativo";
     if (tipoUsuarioFinal === "cliente" && (!Array.isArray(clientes_lightdata_ids) || clientes_lightdata_ids.length === 0)) {
       return json({ error: "Un usuario tipo Cliente necesita al menos un cliente asociado." }, 400);
     }
