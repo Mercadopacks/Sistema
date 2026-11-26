@@ -16,7 +16,7 @@
 // Clientes (encabezado unificado, tarjetas de zona dinámicas + Extras,
 // detalle paginado, PDF) — ver js/ui/liquidacion-vista.js — montado SIN
 // `conAcciones` (ninguna escritura).
-import { sb } from "../core/supabase.js";
+import { sb, rpcTodasLasFilas } from "../core/supabase.js";
 import { formatearFecha, formatearMoneda, tituloTexto } from "../core/formato.js";
 import { crearComboGenerico } from "../ui/combos.js";
 import { fechaART, lunesDeSemana } from "../core/fechas.js";
@@ -169,7 +169,7 @@ async function cargarPeriodoActual(){
   const [{ data: liquidacion }, { data: resumen, error: errResumen }, { data: detalle, error: errDetalle }, { data: totales, error: errTotales }] = await Promise.all([
     sb.from("liquidaciones_clientes").select("*").eq("did_cliente", did).eq("fecha_inicio", p.inicio).eq("fecha_fin", p.fin).maybeSingle(),
     sb.rpc("resumen_matriz_liquidacion_cliente", { p_did_cliente: did, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin }),
-    sb.rpc("detalle_liquidacion_cliente", { p_did_cliente: did, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin }),
+    rpcTodasLasFilas("detalle_liquidacion_cliente", { p_did_cliente: did, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin }),
     sb.rpc("calcular_totales_liquidacion_cliente", { p_did_cliente: did, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin, p_cantidad_pallets: null }),
   ]);
   if(errResumen) console.error("Error cargando resumen de Mis Liquidaciones:", errResumen);

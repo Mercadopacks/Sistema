@@ -43,3 +43,25 @@ export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ap5oFuGA3ByxzbewtCVjmA_a
 export const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: { storage: window.sessionStorage, storageKey: "" },
 });
+
+// Bug real 2026-11-26: PostgREST corta cualquier respuesta (tabla o RPC
+// que devuelve tabla) a un máximo de 1000 filas salvo que se pida
+// explícitamente otro rango — `detalle_liquidacion_cliente()` lo pedía
+// con un solo `sb.rpc(...)` sin `.range()`, así que un cliente con más de
+// 1000 envíos en el período (ej. Mix Store, +3000) quedaba truncado en
+// pantalla SIN ningún aviso, y "Subtotal filtrado" sumaba de menos. Este
+// helper repite la consulta en páginas de 1000 hasta agotar los
+// resultados y las concatena — para usar en cualquier RPC que devuelva
+// una tabla potencialmente larga, no solo liquidaciones.
+export async function rpcTodasLasFilas(nombreFn, args, tamPagina = 1000){
+  let todas = [];
+  let desde = 0;
+  for(;;){
+    const { data, error } = await sb.rpc(nombreFn, args).range(desde, desde + tamPagina - 1);
+    if(error) return { data: todas.length ? todas : null, error };
+    todas = todas.concat(data || []);
+    if(!data || data.length < tamPagina) break;
+    desde += tamPagina;
+  }
+  return { data: todas, error: null };
+}

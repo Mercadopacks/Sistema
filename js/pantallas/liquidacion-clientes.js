@@ -1,7 +1,7 @@
 // Liquidación Clientes (períodos, resumen matriz, detalle itemizado,
 // guardar/confirmar/anular) — sacado de index.html en la Etapa 7b de
 // migración a ES Modules (2026-11-25).
-import { sb } from "../core/supabase.js";
+import { sb, rpcTodasLasFilas } from "../core/supabase.js";
 import { formatearFecha, formatearMoneda, parsearMoneda, tituloTexto } from "../core/formato.js";
 import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { crearComboGenerico, crearPopoverGenerico } from "../ui/combos.js";
@@ -200,7 +200,7 @@ function renderLiquidacionClientes(){
         <td>${tituloTexto(f.cliente)}</td>
         <td>${f.cantidadEnvios}</td>
         <td>${formatearMoneda(f.monto)}</td>
-        <td><span class="estado-icono-fila chico ${estado.clase}" title="${estado.texto}"></span> ${estado.texto}</td>
+        <td><span class="badge-zona-detalle ${estado.clase}">${estado.texto}</span></td>
         <td class="col-opciones"><span class="opciones-fila">${acciones}</span></td>
       </tr>
     `;
@@ -363,7 +363,7 @@ async function abrirPantallaLiquidacionCliente(periodo){
 
 async function cargarDetalleItemizadoLiquidacion(){
   const periodo = liquidacionClienteAbriendo;
-  const { data, error } = await sb.rpc("detalle_liquidacion_cliente", {
+  const { data, error } = await rpcTodasLasFilas("detalle_liquidacion_cliente", {
     p_did_cliente: periodo.did_cliente, p_fecha_inicio: periodo.fecha_inicio, p_fecha_fin: periodo.fecha_fin,
   });
   if(error){ console.error("Error cargando detalle de liquidación:", error); periodo.detalleFilas = []; }

@@ -332,15 +332,16 @@
   .tarjetas-resumen-liquidacion-fila{
     display:flex; align-items:stretch; gap:10px; overflow-x:auto; padding-bottom:2px;
   }
-  /* min-width calculado para que con el sidebar COLAPSADO (68px, más
-     ancho disponible) las 5 tarjetas entren sin scroll y legibles, y con
-     el sidebar EXPANDIDO (264px, menos ancho) recién ahí dispare el
-     scroll horizontal en vez de achicarse hasta truncar texto — nunca un
-     punto intermedio donde se vean a medias. */
+  /* Bug real 2026-11-26: con 225px de mínimo, un monto grande (6-7 cifras,
+     ej. "$ 1.274.740,00") se cortaba con ellipsis en la columna Total —
+     se sube a 260px. Ya no alcanza para que las 5 tarjetas entren siempre
+     sin scroll, pero eso es preferible a un monto ilegible: el scroll
+     horizontal del contenedor (overflow-x:auto más abajo) cubre ese
+     caso. */
   .tarjeta-resumen-liquidacion{
     background:#fff; border:1px solid var(--borde); border-radius:10px;
     display:flex; flex-direction:column; overflow:hidden;
-    flex:1 1 0; min-width:225px;
+    flex:1 1 0; min-width:260px;
   }
   /* La tabla ocupa todo el alto disponible (footer "Subtotal"/"Subtotal
      Extras" siempre pegado abajo, en vez de quedar flotando a mitad de
@@ -415,6 +416,7 @@
   .badge-zona-detalle.gris{background:var(--fondo); color:#555; border:1px solid var(--borde);}
   .badge-zona-detalle.azul{background:#dbeafe; color:#1e40af;}
   .badge-zona-detalle.verde{background:#dcfce7; color:#166534;}
+  .badge-zona-detalle.amarillo{background:#fef9c3; color:#854d0e;}
   /* Reserva el mismo alto siempre (no solo "hasta 460px") para que
      filtrar/buscar y quedarse con pocas filas no encoja la caja — pedido
      2026-11-15: a medida que se escribía en el buscador de "Choferes en
