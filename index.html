@@ -1319,48 +1319,42 @@
         </div>
       </div>
 
-      <!-- Pedido 2026-11-26: "Liquidación Consolidada" — una cuenta
-           principal consolida las liquidaciones de sus subcuentas
-           vinculadas (clientes_relaciones), cobrando/descontando la
-           diferencia entre la tarifa propia de cada subcuenta y una
-           tarifa de referencia pactada. 1ra vuelta, vista admin — ver
+      <!-- Pedido 2026-11-26 (2da vuelta): "Liquidación Consolidada" —
+           una cuenta principal consolida las liquidaciones de sus
+           subcuentas vinculadas (clientes_relaciones), cobrando/
+           descontando la diferencia entre la tarifa propia de cada
+           subcuenta y la tarifa propia de la principal. Cabecera única
+           (cuenta principal + semana + generar, sin una card aparte para
+           "generar") y el detalle de las cuentas asociadas siempre
+           visible debajo, antes y después de generar — ver
            js/pantallas/liquidacion-consolidada.js. -->
       <div id="vista-liquidacion-consolidada" hidden>
         <div class="card">
           <div class="buscar-mas-filtrar" style="margin-bottom:0;">
             <div id="combo-consolidada-principal-wrap"></div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="liq-resumen-section-header">
-            <span class="liq-resumen-section-titulo">Generar liquidación consolidada</span>
-          </div>
-          <div class="buscar-mas-filtrar" style="margin-top:10px;">
-            <span class="rango-fechas-envios-listado">
-              <input type="date" id="consolidada-desde" />
-              <span style="color:#777;">a</span>
-              <input type="date" id="consolidada-hasta" />
-            </span>
-            <button type="button" class="btn-filtrar" id="btn-consolidada-verificar"><i data-lucide="search-check"></i>Verificar subcuentas</button>
+            <div id="combo-consolidada-periodo-wrap"></div>
             <button type="button" class="btn-primario" id="btn-consolidada-generar" disabled>Generar consolidada</button>
           </div>
-          <div id="consolidada-verificacion"></div>
+          <div id="consolidada-resumen-header"></div>
         </div>
 
         <div class="card">
           <div class="liq-resumen-section-header">
-            <span class="liq-resumen-section-titulo">Historial</span>
+            <span class="liq-resumen-section-titulo">Detalle de liquidaciones</span>
           </div>
           <div class="tabla-scroll" style="margin-top:10px;">
-            <table>
-              <thead><tr><th>Período</th><th class="col-num">Monto neto</th><th>Estado</th><th class="col-opciones">Opciones</th></tr></thead>
-              <tbody id="tabla-consolidada-historial"></tbody>
+            <table class="tabla-detalle-liquidacion">
+              <thead>
+                <tr>
+                  <th>Cliente</th><th>Tipo</th><th>Estado</th><th class="col-num">Paquetes</th>
+                  <th class="col-num">Tarifa propia</th><th class="col-num">Tarifa de referencia</th>
+                  <th class="col-num">Importe bruto</th><th class="col-num">Diferencia</th><th class="col-num">Saldo consolidado</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-consolidada-detalle"></tbody>
             </table>
           </div>
         </div>
-
-        <div id="consolidada-detalle-wrap"></div>
       </div>
 
       <!-- Pantalla completa (NO modal, pedido 2026-11-24) con el detalle
@@ -2152,7 +2146,7 @@
           <div class="card">
             <div class="liq-resumen-section-header">
               <span class="liq-resumen-section-titulo">Liquidaciones vinculadas</span>
-              <button type="button" class="btn-primario" id="btn-vincular-liquidaciones"><i data-lucide="link"></i>Vincular liquidaciones</button>
+              <button type="button" class="btn-filtrar" id="btn-vincular-liquidaciones"><i data-lucide="link"></i>Vincular liquidaciones</button>
             </div>
             <div class="buscar-mas-filtrar" style="margin-top:10px; margin-bottom:0;">
               <div id="combo-relaciones-principal-wrap"></div>
