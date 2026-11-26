@@ -341,7 +341,7 @@
   .tarjeta-resumen-liquidacion{
     background:#fff; border:1px solid var(--borde); border-radius:10px;
     display:flex; flex-direction:column; overflow:hidden;
-    flex:1 1 0; min-width:260px;
+    flex:1 1 0; min-width:280px;
   }
   /* La tabla ocupa todo el alto disponible (footer "Subtotal"/"Subtotal
      Extras" siempre pegado abajo, en vez de quedar flotando a mitad de
@@ -366,20 +366,30 @@
      ancho que Tamaño/Cant., consistente en las 4 tarjetas de zona. */
   .tabla-tarjeta-resumen{table-layout:fixed;}
   .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(1),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(1){width:26%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(1){width:20%;}
   .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(2),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(2){width:16%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(2){width:13%;}
   .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(3),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(3){width:29%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(3){width:33%;}
   .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(4),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(4){width:29%;}
-  .tabla-tarjeta-resumen-extras th:nth-child(1), .tabla-tarjeta-resumen-extras td:nth-child(1){width:46%;}
-  .tabla-tarjeta-resumen-extras th:nth-child(2), .tabla-tarjeta-resumen-extras td:nth-child(2){width:18%;}
-  .tabla-tarjeta-resumen-extras th:nth-child(3), .tabla-tarjeta-resumen-extras td:nth-child(3){width:36%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(4){width:34%;}
+  .tabla-tarjeta-resumen-extras th:nth-child(1), .tabla-tarjeta-resumen-extras td:nth-child(1){width:40%;}
+  .tabla-tarjeta-resumen-extras th:nth-child(2), .tabla-tarjeta-resumen-extras td:nth-child(2){width:16%;}
+  .tabla-tarjeta-resumen-extras th:nth-child(3), .tabla-tarjeta-resumen-extras td:nth-child(3){width:44%;}
   .tabla-tarjeta-resumen th, .tabla-tarjeta-resumen td{
-    padding:3px 6px; font-size:10.5px; white-space:nowrap;
-    overflow:hidden; text-overflow:ellipsis;
+    padding:3px 6px; font-size:10.5px;
   }
+  /* Bug real 2026-11-26: con `text-overflow:ellipsis` un monto grande
+     ("$ 1.882.400,00") se cortaba a "$ 1.882.40…" — recortar un número de
+     plata es engañoso, nunca aceptable, a diferencia de recortar texto
+     (nombre de tamaño/concepto, donde un "…" no cambia el significado).
+     Las columnas de moneda (Precio/Total/Importe/Cant.) pueden envolver a
+     una 2da línea en vez de perder dígitos; solo la 1ra columna (texto)
+     sigue con nowrap+ellipsis. */
+  .tabla-tarjeta-resumen td:not(.col-num), .tabla-tarjeta-resumen th:not(.col-num){
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .tabla-tarjeta-resumen td.col-num{white-space:normal; word-break:break-word; line-height:1.25;}
   .tabla-tarjeta-resumen th{
     color:#999; font-weight:700; text-align:left; font-size:9.5px;
     text-transform:uppercase; letter-spacing:.02em; border-bottom:1px solid var(--borde);
@@ -1844,7 +1854,7 @@
             <button class="config-nav-item" data-modo-admin-link="fallidos"><i data-lucide="rotate-ccw"></i><span>Fallidos y Cambios</span></button>
             <button class="config-nav-item" data-modo-admin-link="sectores"><i data-lucide="briefcase"></i><span>Sectores</span></button>
             <button class="config-nav-item" data-modo-admin-link="clientes"><i data-lucide="building-2"></i><span>Clientes</span></button>
-            <button class="config-nav-item" data-modo-admin-link="relaciones-clientes"><i data-lucide="link"></i><span>Cuentas Vinculadas</span></button>
+            <button class="config-nav-item" data-modo-admin-link="relaciones-clientes"><i data-lucide="link"></i><span>Liquidaciones Vinculadas</span></button>
             <button class="config-nav-item" data-modo-admin-link="usuarios"><i data-lucide="user-cog"></i><span>Usuarios</span></button>
           </aside>
           <div class="config-contenido">
@@ -2140,14 +2150,12 @@
              vínculos) — ver js/pantallas/liquidacion-consolidada.js. -->
         <div id="admin-relaciones-clientes" hidden>
           <div class="card">
-            <div class="buscar-mas-filtrar" style="margin-bottom:0;">
-              <div id="combo-relaciones-principal-wrap"></div>
-            </div>
-          </div>
-          <div class="card">
             <div class="liq-resumen-section-header">
-              <span class="liq-resumen-section-titulo">Subcuentas vinculadas</span>
-              <button type="button" class="btn-filtrar" id="btn-consolidada-vincular-subcuenta"><i data-lucide="link"></i>Vincular subcuenta</button>
+              <span class="liq-resumen-section-titulo">Liquidaciones vinculadas</span>
+              <button type="button" class="btn-primario" id="btn-vincular-liquidaciones"><i data-lucide="link"></i>Vincular liquidaciones</button>
+            </div>
+            <div class="buscar-mas-filtrar" style="margin-top:10px; margin-bottom:0;">
+              <div id="combo-relaciones-principal-wrap"></div>
             </div>
             <div class="tabla-scroll" style="margin-top:10px;">
               <table>
@@ -2196,6 +2204,32 @@
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
       <button type="button" class="btn-secundario-modal" id="modal-abm-cerrar">Cerrar</button>
       <button type="button" class="btn-primario" id="modal-abm-guardar">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pedido 2026-11-26 (2da vuelta): un solo flujo — elegís la cuenta
+     principal, tildás todas las subcuentas que corresponden, Guardar
+     aplica todo junto (altas y bajas) de una — reemplaza el alta de a
+     una por vez. Ver js/pantallas/liquidacion-consolidada.js. -->
+<div class="modal-overlay" id="modal-vincular-liquidaciones" hidden>
+  <div class="modal-card" style="max-width:520px;">
+    <h3 style="margin-top:0;">Vincular liquidaciones</h3>
+    <label class="modal-abm-label">Cuenta principal
+      <div class="combo-filtro" id="combo-vincular-principal">
+        <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Elegir…</button>
+        <ul class="combo-filtro-lista" role="listbox" hidden></ul>
+      </div>
+    </label>
+    <div class="modal-abm-label" style="margin-top:14px; display:block;">Subcuentas (clientes)
+      <input type="text" id="buscar-vincular-subcuentas" class="buscador" placeholder="Buscar cliente…" style="margin:8px 0; width:100%; box-sizing:border-box;" />
+      <div id="lista-vincular-subcuentas" class="lista-multiselect" style="max-height:260px; overflow-y:auto; border:1px solid var(--borde); border-radius:8px; padding:8px;">
+        <span class="sin-datos">Elegí primero una cuenta principal.</span>
+      </div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+      <button type="button" class="btn-secundario-modal" id="modal-vincular-cerrar">Cancelar</button>
+      <button type="button" class="btn-primario" id="modal-vincular-guardar">Guardar</button>
     </div>
   </div>
 </div>

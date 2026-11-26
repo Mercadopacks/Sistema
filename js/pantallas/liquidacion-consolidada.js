@@ -29,7 +29,6 @@
 import { sb } from "../core/supabase.js";
 import { tituloTexto, formatearMoneda, formatearFecha } from "../core/formato.js";
 import { crearComboGenerico } from "../ui/combos.js";
-import { abrirModalAbm } from "../ui/modal-abm.js";
 import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { catalogos, nombreCliente } from "../core/catalogos.js";
 import { fechaART } from "../core/fechas.js";
@@ -104,7 +103,6 @@ function renderRelaciones(){
       <td>${tituloTexto(r.nombre_fantasia)}${r.activo ? "" : '<span class="badge-inactivo">Inactivo</span>'}</td>
       <td class="col-opciones">
         <span class="opciones-fila">
-          <button type="button" class="btn-icono-chico editar" data-id="${r.id}" title="Editar"><i data-lucide="pencil"></i></button>
           <button type="button" class="btn-icono-chico borrar" data-id="${r.id}" title="Quitar vínculo"><i data-lucide="trash-2"></i></button>
         </span>
       </td>
@@ -113,47 +111,13 @@ function renderRelaciones(){
   lucide.createIcons();
 }
 
-function abrirModalRelacion(relacionExistente){
-  if(!stateRelaciones.didPrincipal){ mostrarAviso("Elegí primero una cuenta principal."); return; }
-  const yaVinculadas = new Set(stateRelaciones.relaciones.filter(r => r.activo && (!relacionExistente || r.id !== relacionExistente.id)).map(r => r.did_subcuenta));
-  const opcionesSubcuenta = catalogos.clientes
-    .filter(c => c.did !== stateRelaciones.didPrincipal && !yaVinculadas.has(c.did))
-    .map(c => ({ valor: c.did, texto: tituloTexto(nombreCliente(c)) }));
-  abrirModalAbm(relacionExistente ? "Editar subcuenta vinculada" : "Vincular subcuenta", [
-    { clave: "did_subcuenta", label: "Subcuenta", tipo: "select", opciones: opcionesSubcuenta },
-    { clave: "activo", label: "Activo", tipo: "checkbox" },
-  ], relacionExistente || { activo: true }, async (vals)=>{
-    const payload = {
-      did_principal: stateRelaciones.didPrincipal,
-      did_subcuenta: Number(vals.did_subcuenta),
-      activo: !!vals.activo,
-    };
-    const { error } = relacionExistente
-      ? await sb.from("clientes_relaciones").update(payload).eq("id", relacionExistente.id)
-      : await sb.from("clientes_relaciones").insert(payload);
-    if(error){
-      console.error("Error guardando relación:", error);
-      await mostrarAviso(error.code === "23505"
-        ? "Esa subcuenta ya está vinculada a otra cuenta principal activa, o ya existe este vínculo."
-        : "No se pudo guardar. Revisá los datos.");
-      return false;
-    }
-    await cargarRelaciones();
-  });
-}
-
 export async function cargarAdminRelacionesClientes(){
   await repoblarComboPrincipalRelaciones();
   if(stateRelaciones.didPrincipal) await cargarRelaciones();
 }
 
 document.getElementById("tabla-consolidada-relaciones").addEventListener("click", (e)=>{
-  const btnEditar = e.target.closest(".btn-icono-chico.editar");
   const btnBorrar = e.target.closest(".btn-icono-chico.borrar");
-  if(btnEditar){
-    const r = stateRelaciones.relaciones.find(x => x.id === Number(btnEditar.dataset.id));
-    if(r) abrirModalRelacion(r);
-  }
   if(btnBorrar){
     const id = Number(btnBorrar.dataset.id);
     mostrarConfirmacion("¿Quitar este vínculo? No borra ninguna liquidación ya generada, solo la relación.").then(async (ok)=>{
@@ -164,7 +128,101 @@ document.getElementById("tabla-consolidada-relaciones").addEventListener("click"
     });
   }
 });
-document.getElementById("btn-consolidada-vincular-subcuenta").addEventListener("click", ()=> abrirModalRelacion(null));
+
+// ===================== Modal "Vincular liquidaciones" (batch) =====================
+// Pedido 2026-11-26 (2da vuelta): un solo flujo — elegís la cuenta
+// principal, tildás TODAS las subcuentas que corresponden (ya vinculadas
+// o nuevas) y Guardar aplica todo junto: activa las tildadas, desactiva
+// las que estaban activas y se destildaron. Reemplaza el alta de a una.
+let didPrincipalModal = null;
+let activasAlAbrirModal = new Set(); // did_subcuenta ya activos para este principal, snapshot al abrir/cambiar principal
+
+async function renderListaSubcuentasModal(){
+  const cont = document.getElementById("lista-vincular-subcuentas");
+  if(!didPrincipalModal){
+    cont.innerHTML = `<span class="sin-datos">Elegí primero una cuenta principal.</span>`;
+    return;
+  }
+  cont.innerHTML = `<span class="sin-datos">Cargando…</span>`;
+  const { data, error } = await sb.from("clientes_relaciones")
+    .select("did_subcuenta,activo")
+    .eq("did_principal", didPrincipalModal);
+  if(error){ console.error("Error cargando vínculos existentes:", error); cont.innerHTML = `<span class="sin-datos">Error al cargar.</span>`; return; }
+  activasAlAbrirModal = new Set((data || []).filter(r => r.activo).map(r => r.did_subcuenta));
+  const opciones = catalogos.clientes.filter(c => c.did !== didPrincipalModal);
+  if(!opciones.length){ cont.innerHTML = `<span class="sin-datos">No hay otros clientes para vincular.</span>`; return; }
+  cont.innerHTML = opciones.map(c => `
+    <label class="check-columna" data-texto="${tituloTexto(nombreCliente(c)).toLowerCase()}">
+      <input type="checkbox" value="${c.did}" ${activasAlAbrirModal.has(c.did) ? "checked" : ""} /> ${tituloTexto(nombreCliente(c))}
+    </label>
+  `).join("");
+}
+
+function abrirModalVincularLiquidaciones(){
+  didPrincipalModal = stateRelaciones.didPrincipal || null;
+  document.getElementById("buscar-vincular-subcuentas").value = "";
+  const wrap = document.getElementById("combo-vincular-principal").parentElement;
+  wrap.querySelector("#combo-vincular-principal").outerHTML = `
+    <div class="combo-filtro" id="combo-vincular-principal">
+      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">${didPrincipalModal ? tituloTexto(nombreCliente(catalogos.clientes.find(c => c.did === didPrincipalModal) || {})) : "Elegir…"}</button>
+      <ul class="combo-filtro-lista" role="listbox" hidden>
+        ${catalogos.clientes.map(c => `<li data-valor="${c.did}" ${c.did === didPrincipalModal ? 'aria-selected="true"' : ""}>${tituloTexto(nombreCliente(c))}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+  crearComboGenerico("combo-vincular-principal", async (valor)=>{
+    didPrincipalModal = Number(valor);
+    await renderListaSubcuentasModal();
+  });
+  renderListaSubcuentasModal();
+  document.getElementById("modal-vincular-liquidaciones").hidden = false;
+}
+
+document.getElementById("btn-vincular-liquidaciones").addEventListener("click", abrirModalVincularLiquidaciones);
+document.getElementById("modal-vincular-cerrar").addEventListener("click", ()=>{
+  document.getElementById("modal-vincular-liquidaciones").hidden = true;
+});
+document.getElementById("buscar-vincular-subcuentas").addEventListener("input", (e)=>{
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll("#lista-vincular-subcuentas .check-columna").forEach(lbl=>{
+    lbl.hidden = q !== "" && !(lbl.dataset.texto || "").includes(q);
+  });
+});
+
+document.getElementById("modal-vincular-guardar").addEventListener("click", async ()=>{
+  if(!didPrincipalModal){ await mostrarAviso("Elegí una cuenta principal."); return; }
+  const btn = document.getElementById("modal-vincular-guardar");
+  btn.disabled = true;
+  btn.textContent = "Guardando…";
+  const checks = [...document.querySelectorAll("#lista-vincular-subcuentas input[type=checkbox]")];
+  const tildadas = new Set(checks.filter(c => c.checked).map(c => Number(c.value)));
+  // Activar las tildadas (altas nuevas + reactivaciones) y desactivar las
+  // que estaban activas y se destildaron — fila por fila, para que un
+  // error puntual (ej. una subcuenta ya vinculada a OTRA principal
+  // activa) no tire abajo el resto del guardado.
+  const aGuardar = [
+    ...[...tildadas].map(did => ({ did_subcuenta: did, activo: true })),
+    ...[...activasAlAbrirModal].filter(did => !tildadas.has(did)).map(did => ({ did_subcuenta: did, activo: false })),
+  ];
+  const fallidas = [];
+  for(const item of aGuardar){
+    const { error } = await sb.from("clientes_relaciones")
+      .upsert({ did_principal: didPrincipalModal, did_subcuenta: item.did_subcuenta, activo: item.activo }, { onConflict: "did_principal,did_subcuenta" });
+    if(error){
+      console.error("Error vinculando subcuenta:", item.did_subcuenta, error);
+      const nombre = tituloTexto(nombreCliente(catalogos.clientes.find(c => c.did === item.did_subcuenta) || {}));
+      fallidas.push(nombre);
+    }
+  }
+  btn.disabled = false;
+  btn.textContent = "Guardar";
+  if(fallidas.length){
+    await mostrarAviso(`No se pudieron vincular: ${fallidas.join(", ")} — probablemente ya están vinculadas a otra cuenta principal activa.`);
+  } else {
+    document.getElementById("modal-vincular-liquidaciones").hidden = true;
+  }
+  if(stateRelaciones.didPrincipal === didPrincipalModal) await cargarRelaciones();
+});
 
 // ===================== Pantalla "Liquidación Consolidada" (generar/consultar) =====================
 

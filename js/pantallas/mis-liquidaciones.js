@@ -166,24 +166,30 @@ async function cargarPeriodoActual(){
   document.getElementById("mis-liq-fecha-inicio").textContent = formatearFecha(p.inicio);
   document.getElementById("mis-liq-fecha-fin").textContent = formatearFecha(p.fin);
 
-  const [{ data: liquidacion }, { data: resumen, error: errResumen }, { data: detalle, error: errDetalle }, { data: totales, error: errTotales }] = await Promise.all([
+  const [{ data: liquidacion }, { data: resumen, error: errResumen }, { data: detalle, error: errDetalle }] = await Promise.all([
     sb.from("liquidaciones_clientes").select("*").eq("did_cliente", did).eq("fecha_inicio", p.inicio).eq("fecha_fin", p.fin).maybeSingle(),
     sb.rpc("resumen_matriz_liquidacion_cliente", { p_did_cliente: did, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin }),
     rpcTodasLasFilas("detalle_liquidacion_cliente", { p_did_cliente: did, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin }),
-    sb.rpc("calcular_totales_liquidacion_cliente", { p_did_cliente: did, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin, p_cantidad_pallets: null }),
   ]);
   if(errResumen) console.error("Error cargando resumen de Mis Liquidaciones:", errResumen);
   if(errDetalle) console.error("Error cargando detalle de Mis Liquidaciones:", errDetalle);
-  if(errTotales) console.error("Error cargando totales de Mis Liquidaciones:", errTotales);
 
   const estado = liquidacion ? liquidacion.estado : "pendiente";
   const estadoCfg = labelEstadoLiquidacion(estado);
   document.getElementById("mis-liq-estado").innerHTML = `<span class="estado-icono-fila chico ${estadoCfg.clase}"></span> ${estadoCfg.texto}`;
 
-  const montoAPagar = (estado === "generada" && liquidacion) ? liquidacion.monto_a_pagar : (totales ? totales.monto_a_pagar : 0);
-  document.getElementById("mis-liq-monto-a-pagar").textContent = formatearMoneda(montoAPagar || 0);
-
   const filasResumen = resumen || [];
+  // Bug real 2026-11-26: el monto salía de calcular_totales_liquidacion_
+  // cliente(), una consulta aparte de la que arma las tarjetas — podía
+  // divergir en silencio. Si ya está generada, se usa el monto guardado
+  // en ese momento (liquidaciones_clientes.monto_a_pagar, histórico, no
+  // se recalcula); si todavía está en curso, se suma directo de las
+  // mismas filas que se ven en las tarjetas, igual que en Liquidación
+  // Clientes (admin).
+  const montoAPagar = (estado === "generada" && liquidacion)
+    ? liquidacion.monto_a_pagar
+    : filasResumen.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
+  document.getElementById("mis-liq-monto-a-pagar").textContent = formatearMoneda(montoAPagar || 0);
   const cantidadPaquetes = agruparFilasResumen(filasResumen)
     .filter(g => g.grupo !== "Extras")
     .reduce((acc, g) => acc + g.filas.reduce((a, f) => a + (Number(f.cantidad) || 0), 0), 0)

@@ -432,7 +432,17 @@ function renderResumenMatrizLiquidacion(){
     </div>
   `;
 
-  const montoTotal = t.total_envios + t.total_turbo + t.total_adicional - t.total_descuento + montoDeposito + montoDespacho;
+  // Bug real 2026-11-26: "Monto total a pagar" salía de calcular_totales_
+  // liquidacion_cliente() — una consulta SQL independiente de la que arma
+  // las tarjetas (resumen_matriz_liquidacion_cliente), que puede divergir
+  // en silencio (ej. un envío sin precio configurado para su tamaño/
+  // cordón: cuenta para calcular_totales pero resumen_matriz no genera
+  // ninguna fila de zona para él, al no tener con qué cruzar). Se calcula
+  // el monto SUMANDO directamente las mismas filas que ya se ven en las
+  // tarjetas — así el header NUNCA puede mostrar un número distinto al
+  // que da sumar lo que está en pantalla, por construcción.
+  const montoDesdeResumen = periodo.matrizFilas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0);
+  const montoTotal = montoDesdeResumen + montoDeposito + montoDespacho;
   document.getElementById("liq-cliente-total-paquetes").textContent = cantidadPaquetesEnvios;
   document.getElementById("liq-cliente-monto-a-pagar").textContent = formatearMoneda(montoTotal);
   periodo.montoTotalCalculado = montoTotal;
