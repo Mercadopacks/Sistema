@@ -47,19 +47,28 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
   // modal (el componente de ABM no soporta opciones dinámicas según otro
   // campo) — antes nada impedía guardar una vista de personal
   // administrativo (ej. "Liquidación Clientes" completa, con edición)
-  // para un usuario tipo "Cliente", o "Mis Liquidaciones" para uno
-  // administrativo. Se filtra acá al guardar, no en el multiselect.
-  // 2da vuelta (mismo día): la primera versión bloqueaba TODO lo que no
-  // fuera `paraCliente` para un cliente — tapaba también vistas
-  // inofensivas como Envíos (bug real reportado: tildar "Mis
-  // Liquidaciones" + "Envíos" guardaba solo la primera). Ahora a un
-  // cliente solo se le sacan las `soloAdmin` (Configuración, Liquidación
-  // Clientes/Repartidores y sus Adicionales); el resto queda libre.
+  // para un usuario tipo "Cliente". Se filtra acá al guardar, no en el
+  // multiselect.
+  // Pedido 2026-11-26: qué vistas son asignables a un cliente YA NO es un
+  // flag hardcodeado en el código (se equivocó 2 veces) — sale de
+  // parametros_vistas, editable desde Configuración → Vistas. Para un
+  // usuario administrativo no se filtra nada (la restricción solo mira
+  // hacia el lado cliente, igual que siempre).
+  let configVistas = new Map(); // clave -> visible_para_clientes
+  async function cargarConfigVistas(forzar){
+    if(configVistas.size && !forzar) return;
+    const { data, error } = await sb.from("parametros_vistas").select("clave,visible_para_clientes");
+    if(error){ console.error("Error cargando parametros_vistas:", error); return; }
+    configVistas = new Map((data || []).map(v => [v.clave, v.visible_para_clientes]));
+  }
   function vistasValidasPara(esCliente, claves){
     return (claves || []).filter(c => {
       const v = VISTAS_DISPONIBLES.find(x => x.clave === c);
       if(!v) return false;
-      return esCliente ? !v.soloAdmin : !v.paraCliente;
+      // Fail-open si parametros_vistas todavía no tiene esa clave
+      // (vista nueva recién agregada al código, sin fila sembrada
+      // todavía) — mismo criterio del resto del sistema de permisos.
+      return esCliente ? (configVistas.get(c) ?? true) : true;
     });
   }
 
@@ -75,6 +84,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
     adminUsuariosData = data || [];
     sectoresDisponibles = sectores || [];
     catalogos.clientes = clientes || [];
+    await cargarConfigVistas();
     renderAdminUsuarios();
   }
 

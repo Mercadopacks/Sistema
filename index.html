@@ -1849,6 +1849,7 @@
             <button class="config-nav-item" data-modo-admin-link="sectores"><i data-lucide="briefcase"></i><span>Sectores</span></button>
             <button class="config-nav-item" data-modo-admin-link="clientes"><i data-lucide="building-2"></i><span>Clientes</span></button>
             <button class="config-nav-item" data-modo-admin-link="relaciones-clientes"><i data-lucide="link"></i><span>Liquidaciones Vinculadas</span></button>
+            <button class="config-nav-item" data-modo-admin-link="vistas"><i data-lucide="eye"></i><span>Vistas</span></button>
             <button class="config-nav-item" data-modo-admin-link="usuarios"><i data-lucide="user-cog"></i><span>Usuarios</span></button>
           </aside>
           <div class="config-contenido">
@@ -2152,6 +2153,21 @@
               <table>
                 <thead><tr><th>Cuenta principal</th><th class="col-num">Subcuentas vinculadas</th><th class="col-opciones">Opciones</th></tr></thead>
                 <tbody id="tabla-consolidada-relaciones"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pedido 2026-11-26: qué vistas puede ver un usuario tipo
+             cliente, editable acá en vez de hardcodeado en el código
+             (ver js/admin/parametros-vistas.js y js/admin/usuarios.js). -->
+        <div id="admin-vistas" hidden>
+          <div class="card">
+            <p class="texto-muted" style="margin-top:0;">Qué vistas puede tener asignadas un usuario tipo "Cliente" en "Vistas permitidas" — un usuario Administrativo siempre puede tener cualquiera.</p>
+            <div class="tabla-scroll">
+              <table>
+                <thead><tr><th>Vista</th><th class="col-opciones">Acceso</th></tr></thead>
+                <tbody id="tabla-admin-vistas"></tbody>
               </table>
             </div>
           </div>
@@ -2552,6 +2568,7 @@ import { cargarAdminUsuarios } from "./js/admin/usuarios.js";
 // Etapa 7b: Liquidación Clientes en js/.
 import { cargarLiquidacionClientes } from "./js/pantallas/liquidacion-clientes.js";
 import { cargarLiquidacionConsolidada, cargarAdminRelacionesClientes } from "./js/pantallas/liquidacion-consolidada.js";
+import { cargarAdminParametrosVistas } from "./js/admin/parametros-vistas.js";
 // Pedido 2026-11-25: Mis Liquidaciones (solo lectura, acotada al propio cliente) en js/.
 import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
 (function(){
@@ -2702,7 +2719,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
   // DENTRO de la pantalla (.config-sidebar) el que decide esto, no el
   // sidebar principal — ver seleccionarModoAdmin().
   let modoAdminActual = "bienvenida";
-  const MODOS_ADMIN = ["bienvenida","choferes","vehiculos","zonas","turnos","localidades","tamanos-paquete","cordones","tipos-extra","alertas","fallidos","sectores","clientes","relaciones-clientes","usuarios"];
+  const MODOS_ADMIN = ["bienvenida","choferes","vehiculos","zonas","turnos","localidades","tamanos-paquete","cordones","tipos-extra","alertas","fallidos","sectores","clientes","relaciones-clientes","vistas","usuarios"];
 
   function seleccionarModoAdmin(modo){
     modoAdminActual = modo;
@@ -2723,6 +2740,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
     if(modo === "sectores") abmSectores.cargar();
     if(modo === "clientes") cargarAdminClientes();
     if(modo === "relaciones-clientes") cargarAdminRelacionesClientes();
+    if(modo === "vistas") cargarAdminParametrosVistas();
     if(modo === "usuarios") cargarAdminUsuarios();
   }
 

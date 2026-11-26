@@ -20,22 +20,19 @@
     { valor: "cliente", texto: "Cliente" },
   ];
 
-  // `paraCliente: true` marca la(s) vista(s) pensadas para tipo_usuario=
-  // "cliente" (hoy solo Mis Liquidaciones) — no tiene sentido ofrecérsela
-  // a un usuario administrativo. `soloAdmin: true` marca las vistas que
-  // manejan datos de MÁS DE UN cliente/repartidor o permiten escritura
-  // administrativa (Configuración completa, Liquidación Clientes/
-  // Repartidores con edición, sus Adicionales) — nunca se le deben poder
-  // asignar a un usuario tipo "cliente", sin importar qué tilde un admin
-  // por error en "Vistas permitidas" de Usuarios. El resto de las vistas
-  // (Envíos, Fallidos, Picking, Seguimiento de Repartidores) quedan
-  // libres para cualquier tipo de usuario — ya están acotadas por RLS a
-  // nivel de fila (ver puede_ver_envio_de_cliente()), así que no hace
-  // falta bloquearlas acá también (pedido 2026-11-25, 2da vuelta: la
-  // primera versión de este filtro bloqueaba TODO lo que no fuera
-  // paraCliente, lo cual también tapaba vistas inofensivas como Envíos).
+  // Pedido 2026-11-26: qué vistas son asignables a un usuario tipo
+  // "cliente" YA NO vive hardcodeado acá (los flags `soloAdmin`/
+  // `paraCliente` de antes) — se equivocó 2 veces (Liquidación
+  // Consolidada quedó marcada soloAdmin por copiar sin pensar el patrón
+  // de Liquidación Clientes, pisando el acceso que el propio módulo
+  // necesita). Esa decisión pasó a la tabla `parametros_vistas`
+  // (editable desde Configuración → Vistas, ver js/admin/parametros-
+  // vistas.js) para que el usuario la pueda cambiar él mismo sin
+  // depender de que el código lo recuerde bien. Este array acá solo
+  // declara QUÉ vistas existen (clave + label) — ya no decide quién
+  // puede verlas.
   export const VISTAS_DISPONIBLES = [
-    { clave: "mis-liquidaciones", label: "Mis Liquidaciones", paraCliente: true },
+    { clave: "mis-liquidaciones", label: "Mis Liquidaciones" },
     { clave: "envios", label: "Dashboard de Envíos" },
     { clave: "envios-listado", label: "Envíos" },
     { clave: "fallidos", label: "Fallidos y Cambios" },
@@ -43,24 +40,17 @@
     { clave: "repa-ruta", label: "Seguimiento en Ruta" },
     { clave: "repa-asistencia", label: "Asistencia de Repartidores" },
     { clave: "repa-vivo", label: "Operación en vivo" },
-    { clave: "liquidacion-clientes", label: "Liquidación Clientes", soloAdmin: true },
-    { clave: "liquidacion-repartidores", label: "Liquidación Repartidores", soloAdmin: true },
-    // Pedido 2026-11-26: a diferencia de Liquidación Clientes/
-    // Repartidores (que sí son soloAdmin), Liquidación Consolidada
-    // también la tiene que poder ver la propia cuenta principal
-    // (tipo_usuario="cliente") — es la razón de ser del módulo (ver
-    // docs/liquidacion_consolidada.md). Bug real: al estar marcada
-    // soloAdmin, vistasValidasPara() se la sacaba sola apenas se
-    // guardaba el usuario cliente, aunque el admin la hubiera tildado.
+    { clave: "liquidacion-clientes", label: "Liquidación Clientes" },
+    { clave: "liquidacion-repartidores", label: "Liquidación Repartidores" },
     { clave: "liquidacion-consolidada", label: "Liquidación Consolidada" },
     // Pedido 2026-11-23: 2 vistas separadas a propósito (no una con
     // selector adentro) — son 2 sectores distintos los que cargan extras
     // de clientes vs. de repartidores y no pueden entrar al mismo panel;
     // separarlas como vistas permite que "Vistas permitidas" (Usuarios)
     // le dé acceso a una sin la otra.
-    { clave: "extras-liquidacion-clientes", label: "Adicionales (Clientes)", soloAdmin: true },
-    { clave: "extras-liquidacion-repartidores", label: "Adicionales (Repartidores)", soloAdmin: true },
-    { clave: "admin", label: "Administración", soloAdmin: true },
+    { clave: "extras-liquidacion-clientes", label: "Adicionales (Clientes)" },
+    { clave: "extras-liquidacion-repartidores", label: "Adicionales (Repartidores)" },
+    { clave: "admin", label: "Administración" },
   ];
 
   export const stateSesion = { perfil: null, bloqueado: false };
