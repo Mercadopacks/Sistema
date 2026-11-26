@@ -41,6 +41,36 @@ import { crearComboGenerico, crearMultiSelectGenerico } from "./combos.js";
     // condición se cumpla (ej. "Precio a descontar" solo si el Estatus
     // elegido es "Descontar al chofer") — se reevalúa en cada cambio, ver
     // actualizarVisibilidadCampos() más abajo.
+    // Pedido 2026-11-26: un multiselect con `opcionesSegun(valoresActuales)`
+    // (ej. "Vistas permitidas" según el "Tipo de usuario" elegido en el
+    // mismo modal) recalcula su LISTA DE OPCIONES en vivo, no solo su
+    // visibilidad — antes mostraba siempre el catálogo completo sin
+    // importar el campo relacionado, y la vista inválida recién
+    // desaparecía en silencio al guardar (bug real reportado: "si el
+    // usuario es tipo cliente las vistas permitidas me muestra todo el
+    // listado"). Se reconstruye el panel entero (mismo patrón que
+    // repoblarComboPeriodo en Liquidación Clientes) porque los listeners
+    // de cada checkbox se enganchan una sola vez al crearse.
+    function actualizarOpcionesMultiselect(actuales){
+      campos.filter(c => c.tipo === "multiselect" && c.opcionesSegun).forEach(c=>{
+        const nuevasOpciones = c.opcionesSegun(actuales) || [];
+        const contId = `modal-campo-${c.clave}`;
+        const cont2 = document.getElementById(contId);
+        if(!cont2) return;
+        const hash = nuevasOpciones.join("|");
+        if(cont2.dataset.opcionesHash === hash) return; // sin cambios, no tocar (perdería el foco/scroll del panel si está abierto)
+        cont2.dataset.opcionesHash = hash;
+        const seleccionadosPrevios = new Set((cont2.dataset.valorActual || "").split(",").map(s => s.trim()).filter(Boolean));
+        const lista = cont2.querySelector(".lista-multiselect");
+        lista.innerHTML = nuevasOpciones.map(o => `
+          <label class="check-columna" data-texto="${o.toLowerCase().replace(/"/g, "&quot;")}"><input type="checkbox" value="${o}" ${seleccionadosPrevios.has(o) ? "checked" : ""}/> ${o}</label>
+        `).join("") || '<span class="sin-datos">Sin opciones disponibles.</span>';
+        crearMultiSelectGenerico(contId);
+        const marcados = nuevasOpciones.filter(o => seleccionadosPrevios.has(o));
+        cont2.dataset.valorActual = marcados.join(", ");
+        cont2.querySelector(".combo-filtro-btn").textContent = marcados.length ? marcados.join(", ") : "Elegir…";
+      });
+    }
     function actualizarVisibilidadCampos(){
       const actuales = leerValoresModalAbm();
       campos.forEach(c=>{
@@ -48,6 +78,7 @@ import { crearComboGenerico, crearMultiSelectGenerico } from "./combos.js";
         const wrap = cont.querySelector(`[data-campo-wrap="${c.clave}"]`);
         if(wrap) wrap.hidden = !c.mostrarSi(actuales);
       });
+      actualizarOpcionesMultiselect(actuales);
     }
 
     const labelConIcono = c => c.icono ? `<span class="label-con-icono"><i data-lucide="${c.icono}"></i>${c.label}</span>` : c.label;
@@ -78,12 +109,19 @@ import { crearComboGenerico, crearMultiSelectGenerico } from "./combos.js";
       }
       if(c.tipo === "multiselect"){
         const seleccionados = new Set(String(val || "").split(",").map(s => s.trim()).filter(Boolean));
-        const opciones = (c.opciones || []).map(o => `
+        const opcionesIniciales = c.opcionesSegun ? (c.opcionesSegun(valores || {}) || []) : (c.opciones || []);
+        // Las ya tildadas que no entran en las opciones iniciales (ej. al
+        // editar un usuario Cliente que tenía tildada una vista que ya no
+        // es válida para ese rol) se muestran igual, para no "perder"
+        // en silencio algo que la fila ya tenía guardado — se van a sacar
+        // solas la próxima vez que actualizarOpcionesMultiselect() corra
+        // con un tipo_usuario distinto, o quedan si no cambia nada.
+        const opciones = [...new Set([...opcionesIniciales, ...seleccionados])].map(o => `
           <label class="check-columna" data-texto="${o.toLowerCase().replace(/"/g, "&quot;")}"><input type="checkbox" value="${o}" ${seleccionados.has(o) ? "checked" : ""}/> ${o}</label>
         `).join("");
         const textoActual = seleccionados.size ? [...seleccionados].join(", ") : "Elegir…";
         return `<div ${claseWrap(c)}><div class="modal-abm-label">${labelConIcono(c)}
-          <div class="combo-filtro" id="modal-campo-${c.clave}" data-valor-actual="${[...seleccionados].join(", ")}">
+          <div class="combo-filtro" id="modal-campo-${c.clave}" data-valor-actual="${[...seleccionados].join(", ")}" data-opciones-hash="${opcionesIniciales.join("|")}">
             <button type="button" class="combo-filtro-btn" aria-haspopup="true" aria-expanded="false">${textoActual}</button>
             <div class="panel-filtros-ruta panel-multiselect" hidden>
               <input type="text" class="buscador-multiselect" placeholder="Buscar…" />

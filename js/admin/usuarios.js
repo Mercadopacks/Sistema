@@ -64,18 +64,29 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
       clientes: v.visible_para_clientes, administrativos: v.visible_para_administrativos, repartidores: v.visible_para_repartidores,
     }]));
   }
+  function vistaValidaParaRol(tipoUsuario, clave){
+    const campo = tipoUsuario === "cliente" ? "clientes" : tipoUsuario === "repartidor" ? "repartidores" : "administrativos";
+    const fila = configVistas.get(clave);
+    // Fail-open si parametros_vistas todavía no tiene esa clave (vista
+    // nueva recién agregada al código, sin fila sembrada todavía) —
+    // mismo criterio del resto del sistema de permisos.
+    return fila ? !!fila[campo] : true;
+  }
   function vistasValidasPara(tipoUsuario, esAdmin, claves){
     return (claves || []).filter(c => {
-      const v = VISTAS_DISPONIBLES.find(x => x.clave === c);
-      if(!v) return false;
+      if(!VISTAS_DISPONIBLES.some(x => x.clave === c)) return false;
       if(esAdmin) return true; // Administrador: nunca se filtra
-      const campo = tipoUsuario === "cliente" ? "clientes" : tipoUsuario === "repartidor" ? "repartidores" : "administrativos";
-      const fila = configVistas.get(c);
-      // Fail-open si parametros_vistas todavía no tiene esa clave (vista
-      // nueva recién agregada al código, sin fila sembrada todavía) —
-      // mismo criterio del resto del sistema de permisos.
-      return fila ? !!fila[campo] : true;
+      return vistaValidaParaRol(tipoUsuario, c);
     });
+  }
+  // Pedido 2026-11-26: el multiselect de "Vistas permitidas" pasa a
+  // mostrar SOLO las vistas válidas para el "Tipo de usuario" elegido en
+  // el mismo modal (bug real reportado: con un Cliente seleccionado,
+  // mostraba el catálogo completo igual que para un Administrativo, y el
+  // filtro recién se notaba al guardar).
+  function opcionesVistasSegunTipo(valoresActuales){
+    const tipo = (valoresActuales && valoresActuales.tipo_usuario) || "administrativo";
+    return VISTAS_DISPONIBLES.filter(v => vistaValidaParaRol(tipo, v.clave)).map(v => v.label);
   }
 
   export async function cargarAdminUsuarios(){
@@ -215,7 +226,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
       },
       { clave: "es_admin", label: "Administrador (ve todas las vistas)", tipo: "checkbox" },
       { clave: "activo", label: "Activo (desmarcar bloquea su acceso)", tipo: "checkbox" },
-      { clave: "vistas", label: "Vistas permitidas (si no es admin)", tipo: "multiselect", opciones: VISTAS_DISPONIBLES.map(v => v.label) },
+      { clave: "vistas", label: "Vistas permitidas (si no es admin)", tipo: "multiselect", opciones: VISTAS_DISPONIBLES.map(v => v.label), opcionesSegun: opcionesVistasSegunTipo },
     ], {
       ...usuario,
       tipo_usuario: usuario.tipo_usuario || "administrativo",
@@ -292,7 +303,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
         opciones: catalogos.clientes.map(labelCliente),
         mostrarSi: v => v.tipo_usuario === "cliente",
       },
-      { clave: "vistas", label: "Vistas permitidas", tipo: "multiselect", opciones: VISTAS_DISPONIBLES.map(v => v.label) },
+      { clave: "vistas", label: "Vistas permitidas", tipo: "multiselect", opciones: VISTAS_DISPONIBLES.map(v => v.label), opcionesSegun: opcionesVistasSegunTipo },
     ], { tipo_usuario: "administrativo" }, async (vals)=>{
       if(!vals.nombre || !vals.apellido || !vals.email || !vals.password){
         await mostrarAviso("Nombre, Apellido, Email y Contraseña son obligatorios.");
