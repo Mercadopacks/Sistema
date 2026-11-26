@@ -88,57 +88,46 @@ async function asegurarCatalogoClientes(){
 // referencia siempre es la tarifa propia de la principal, y la
 // diferencia siempre resta — nada de eso se configura por relación.
 
-const stateRelaciones = { didPrincipal: null, relaciones: [] };
+// Pedido 2026-11-26 (3ra vuelta): se saca el selector "Elegir cuenta
+// principal" de esta pantalla (no aportaba nada — había que elegirlo acá
+// Y DE NUEVO adentro del modal, y si no coincidían el guardado no
+// refrescaba la tabla, visto como bug real). La tabla ahora es un
+// registro de CUENTAS PRINCIPALES (una fila por cada una que tiene al
+// menos una subcuenta activa), con la cantidad de subcuentas vinculadas
+// y una acción "Editar vínculos" que abre el mismo modal ya con esa
+// cuenta y sus subcuentas tildadas.
+let principalesConVinculos = [];
 
-async function repoblarComboPrincipalRelaciones(){
+export async function cargarAdminRelacionesClientes(){
   await asegurarCatalogoClientes();
-  const wrap = document.getElementById("combo-relaciones-principal-wrap");
-  if(!wrap) return;
-  const actual = stateRelaciones.didPrincipal;
-  const actualTexto = actual ? tituloTexto(nombreCliente(catalogos.clientes.find(c => c.did === actual) || {})) : "Elegir cuenta principal…";
-  wrap.innerHTML = `
-    <div class="combo-filtro" id="combo-relaciones-principal">
-      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">${actualTexto}</button>
-      <ul class="combo-filtro-lista" role="listbox" hidden>
-        ${catalogos.clientes.map(c => `<li data-valor="${c.did}" ${c.did === actual ? 'aria-selected="true"' : ""}>${tituloTexto(nombreCliente(c))}</li>`).join("")}
-      </ul>
-    </div>
-  `;
-  crearComboGenerico("combo-relaciones-principal", async (valor)=>{
-    stateRelaciones.didPrincipal = Number(valor);
-    await cargarRelaciones();
+  const tbody = document.getElementById("tabla-consolidada-relaciones");
+  tbody.innerHTML = `<tr><td colspan="3" class="sin-datos">Cargando…</td></tr>`;
+  const { data, error } = await sb.from("clientes_relaciones").select("did_principal,activo");
+  if(error){ console.error("Error cargando relaciones:", error); tbody.innerHTML = `<tr><td colspan="3" class="sin-datos">Error cargando: ${error.message || "revisá la consola"}.</td></tr>`; return; }
+  const cantidadPorPrincipal = new Map();
+  (data || []).forEach(r => {
+    if(!r.activo) return;
+    cantidadPorPrincipal.set(r.did_principal, (cantidadPorPrincipal.get(r.did_principal) || 0) + 1);
   });
+  principalesConVinculos = [...cantidadPorPrincipal.entries()].map(([did, cantidad]) => ({
+    did, cantidad, nombre_fantasia: nombreCliente(catalogos.clientes.find(c => c.did === did) || {}),
+  })).sort((a, b) => a.nombre_fantasia.localeCompare(b.nombre_fantasia));
+  renderPrincipalesConVinculos();
 }
 
-async function cargarRelaciones(){
+function renderPrincipalesConVinculos(){
   const tbody = document.getElementById("tabla-consolidada-relaciones");
-  if(!tbody) return;
-  if(!stateRelaciones.didPrincipal){ tbody.innerHTML = ""; return; }
-  tbody.innerHTML = `<tr><td colspan="2" class="sin-datos">Cargando…</td></tr>`;
-  const { data, error } = await sb.from("clientes_relaciones")
-    .select("id,did_subcuenta,activo,lightdata_clientes(nombre_fantasia)")
-    .eq("did_principal", stateRelaciones.didPrincipal)
-    .order("id");
-  if(error){ console.error("Error cargando relaciones:", error); tbody.innerHTML = `<tr><td colspan="2" class="sin-datos">Error cargando subcuentas vinculadas.</td></tr>`; return; }
-  stateRelaciones.relaciones = (data || []).map(r => ({
-    ...r,
-    nombre_fantasia: Array.isArray(r.lightdata_clientes) ? r.lightdata_clientes[0]?.nombre_fantasia : r.lightdata_clientes?.nombre_fantasia,
-  }));
-  renderRelaciones();
-}
-
-function renderRelaciones(){
-  const tbody = document.getElementById("tabla-consolidada-relaciones");
-  if(!stateRelaciones.relaciones.length){
-    tbody.innerHTML = `<tr><td colspan="2" class="sin-datos">Sin subcuentas vinculadas a esta cuenta principal.</td></tr>`;
+  if(!principalesConVinculos.length){
+    tbody.innerHTML = `<tr><td colspan="3" class="sin-datos">Sin cuentas principales vinculadas todavía — usá "Vincular liquidaciones" para crear la primera.</td></tr>`;
     return;
   }
-  tbody.innerHTML = stateRelaciones.relaciones.map(r => `
-    <tr class="${r.activo ? "" : "fila-inactiva"}">
-      <td>${tituloTexto(r.nombre_fantasia)}${r.activo ? "" : '<span class="badge-inactivo">Inactivo</span>'}</td>
+  tbody.innerHTML = principalesConVinculos.map(p => `
+    <tr>
+      <td>${tituloTexto(p.nombre_fantasia)}</td>
+      <td class="col-num">${p.cantidad}</td>
       <td class="col-opciones">
         <span class="opciones-fila">
-          <button type="button" class="btn-icono-chico borrar" data-id="${r.id}" title="Quitar vínculo"><i data-lucide="trash-2"></i></button>
+          <button type="button" class="btn-icono-chico editar" data-did="${p.did}" title="Editar vínculos"><i data-lucide="pencil"></i></button>
         </span>
       </td>
     </tr>
@@ -146,22 +135,9 @@ function renderRelaciones(){
   lucide.createIcons();
 }
 
-export async function cargarAdminRelacionesClientes(){
-  await repoblarComboPrincipalRelaciones();
-  if(stateRelaciones.didPrincipal) await cargarRelaciones();
-}
-
 document.getElementById("tabla-consolidada-relaciones").addEventListener("click", (e)=>{
-  const btnBorrar = e.target.closest(".btn-icono-chico.borrar");
-  if(btnBorrar){
-    const id = Number(btnBorrar.dataset.id);
-    mostrarConfirmacion("¿Quitar este vínculo? No borra ninguna liquidación ya generada, solo la relación.").then(async (ok)=>{
-      if(!ok) return;
-      const { error } = await sb.from("clientes_relaciones").delete().eq("id", id);
-      if(error){ console.error("Error borrando relación:", error); await mostrarAviso("No se pudo quitar el vínculo."); return; }
-      await cargarRelaciones();
-    });
-  }
+  const btnEditar = e.target.closest(".btn-icono-chico.editar");
+  if(btnEditar) abrirModalVincularLiquidaciones(Number(btnEditar.dataset.did));
 });
 
 // ===================== Modal "Vincular liquidaciones" (batch) =====================
@@ -193,8 +169,8 @@ async function renderListaSubcuentasModal(){
   `).join("");
 }
 
-function abrirModalVincularLiquidaciones(){
-  didPrincipalModal = stateRelaciones.didPrincipal || null;
+function abrirModalVincularLiquidaciones(didPreset){
+  didPrincipalModal = didPreset || null;
   document.getElementById("buscar-vincular-subcuentas").value = "";
   const wrap = document.getElementById("combo-vincular-principal").parentElement;
   wrap.querySelector("#combo-vincular-principal").outerHTML = `
@@ -213,7 +189,7 @@ function abrirModalVincularLiquidaciones(){
   document.getElementById("modal-vincular-liquidaciones").hidden = false;
 }
 
-document.getElementById("btn-vincular-liquidaciones").addEventListener("click", abrirModalVincularLiquidaciones);
+document.getElementById("btn-vincular-liquidaciones").addEventListener("click", ()=> abrirModalVincularLiquidaciones(null));
 document.getElementById("modal-vincular-cerrar").addEventListener("click", ()=>{
   document.getElementById("modal-vincular-liquidaciones").hidden = true;
 });
@@ -256,7 +232,7 @@ document.getElementById("modal-vincular-guardar").addEventListener("click", asyn
   } else {
     document.getElementById("modal-vincular-liquidaciones").hidden = true;
   }
-  if(stateRelaciones.didPrincipal === didPrincipalModal) await cargarRelaciones();
+  await cargarAdminRelacionesClientes();
 });
 
 // ===================== Pantalla "Liquidación Consolidada" (cabecera única + detalle siempre visible) =====================
