@@ -408,6 +408,11 @@
   .tabla-tarjeta-resumen th.col-num, .tabla-tarjeta-resumen td.col-num{text-align:right;}
   .tabla-tarjeta-resumen tr.fila-sin-movimiento{color:#bbb;}
   .tabla-tarjeta-resumen td.monto-negativo{color:#b42318;}
+  /* Liquidación Consolidada (pedido 2026-11-26, 5ta vuelta): celdas que
+     "no corresponden" (ej. precio/diferencia de referencia en la fila de
+     la propia cuenta principal) muestran un guión apagado — nunca $0,00
+     ni vacío, pedido explícito ("no se vea mal"). */
+  .tabla-detalle-liquidacion td.celda-na{color:#bbb;}
   .tarjeta-resumen-pie{
     display:flex; justify-content:space-between; align-items:center; gap:8px;
     padding:8px 10px; font-weight:800; border-top:1px solid var(--borde);
@@ -1348,7 +1353,59 @@
           <div id="consolidada-resumen-header"></div>
         </div>
 
-        <div id="consolidada-cuentas-wrap"></div>
+        <!-- Pedido 2026-11-26 (5ta vuelta): grilla plana con buscador/
+             filtros, como el resto de los listados del sistema (ver
+             Envíos), en vez de una tarjeta por cuenta. -->
+        <div class="card">
+          <div id="consolidada-pendientes" hidden></div>
+          <div class="buscar-mas-filtrar">
+            <input id="buscar-consolidada-detalle" class="buscador" placeholder="Buscar por cliente o zona…" />
+            <div class="combo-filtro" id="combo-consolidada-cliente">
+              <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Cliente: Todos</button>
+              <ul class="combo-filtro-lista" role="listbox" hidden><li data-valor="" aria-selected="true">Todos</li></ul>
+            </div>
+            <div class="combo-filtro" id="combo-consolidada-zona">
+              <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Zona: Todas</button>
+              <ul class="combo-filtro-lista" role="listbox" hidden><li data-valor="" aria-selected="true">Todas</li></ul>
+            </div>
+            <div class="combo-filtro" id="combo-consolidada-tamano">
+              <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Tamaño: Todos</button>
+              <ul class="combo-filtro-lista" role="listbox" hidden>
+                <li data-valor="" aria-selected="true">Todos</li>
+                <li data-valor="Pequeños">Pequeños</li>
+                <li data-valor="Grandes">Grandes</li>
+              </ul>
+            </div>
+          </div>
+          <div class="tabla-scroll">
+            <table class="tabla-detalle-liquidacion">
+              <thead>
+                <tr>
+                  <th>Cliente</th><th>Tipo</th><th>Zona</th><th>Tamaño</th><th class="col-num">Cantidad</th>
+                  <th class="col-num">Precio propio</th><th class="col-num">Total propio</th>
+                  <th class="col-num">Precio referencia</th><th class="col-num">Total a ref.</th>
+                  <th class="col-num">Diferencia</th><th class="col-num">Total diferencia</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-consolidada-detalle"></tbody>
+            </table>
+          </div>
+          <div class="paginacion-envios-listado">
+            <span id="consolidada-detalle-resumen" class="texto-muted"></span>
+            <div class="paginacion-controles">
+              <div class="combo-filtro" id="combo-consolidada-pagina">
+                <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">25 / pág.</button>
+                <ul class="combo-filtro-lista" role="listbox" hidden>
+                  <li data-valor="25" aria-selected="true">25 / pág.</li>
+                  <li data-valor="50">50 / pág.</li>
+                  <li data-valor="100">100 / pág.</li>
+                </ul>
+              </div>
+              <button type="button" class="btn-icono" id="btn-consolidada-detalle-anterior"><i data-lucide="chevron-left"></i></button>
+              <button type="button" class="btn-icono" id="btn-consolidada-detalle-siguiente"><i data-lucide="chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Pantalla completa (NO modal, pedido 2026-11-24) con el detalle

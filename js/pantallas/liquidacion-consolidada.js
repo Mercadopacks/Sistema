@@ -24,7 +24,7 @@
 // de vínculos, un usuario tipo cliente (cuenta principal) también la usa.
 import { sb } from "../core/supabase.js";
 import { tituloTexto, formatearMoneda, formatearFecha } from "../core/formato.js";
-import { crearComboGenerico } from "../ui/combos.js";
+import { crearComboGenerico, resetearCombo } from "../ui/combos.js";
 import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { catalogos, nombreCliente } from "../core/catalogos.js";
 import { fechaART, lunesDeSemana } from "../core/fechas.js";
@@ -234,20 +234,27 @@ document.getElementById("modal-vincular-guardar").addEventListener("click", asyn
 });
 
 
-// ===================== Pantalla "Liquidación Consolidada" (vista de comparación en vivo) =====================
-// Pedido 2026-11-26 (4ta vuelta): sin botones de generar/anular/marcar
-// pagada — la cabecera solo tiene cuenta principal + período, y un
-// ítem destacado con el monto final a pagar. El "detalle" es, para cada
-// cuenta (principal primero, después cada subcuenta), su propia grilla
-// de zona×tamaño (mismo formato que Liquidación Clientes/Mis
-// Liquidaciones) — a las subcuentas se les agrega una columna
-// "Diferencia" contra la celda equivalente de la principal.
+
+// ===================== Pantalla "Liquidación Consolidada" (grilla plana en vivo) =====================
+// Pedido 2026-11-26 (5ta vuelta): en vez de una tarjeta por cuenta, una
+// grilla plana con buscador/filtros/paginación — mismo patrón que
+// Envíos y el resto de los listados del sistema. Una fila por (cliente,
+// zona, tamaño); para la cuenta PRINCIPAL, "Precio referencia"/"Total a
+// ref."/"Diferencia"/"Total diferencia" quedan en "-" (no aplica
+// compararla contra sí misma) — nunca $0,00 ni vacío, pedido explícito.
+const GUION = "—";
+function montoOGuion(v){ return v == null ? GUION : formatearMoneda(v); }
 
 const stateConsolidada = {
   didPrincipal: null,
   servicio: "ultima_milla",
   fechaReferencia: null,
   clientes: [], // clientes disponibles para el selector de cuenta principal (admin: todos; cliente: los suyos)
+};
+
+const stateDetalleConsolidada = {
+  filas: [], filtradas: [], pagina: 0, tamanoPagina: 25,
+  busqueda: "", cliente: "", zona: "", tamano: "",
 };
 
 // Admin ve todas las cuentas en el selector; un usuario tipo_usuario=
@@ -332,14 +339,21 @@ function renderResumenHeader(comparativa){
       <div class="liquidacion-header-resumen-dato">
         <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="receipt"></i></span>
         <span class="liquidacion-header-resumen-dato-texto">
-          <span class="liquidacion-header-resumen-label">Monto propio de la principal</span>
+          <span class="liquidacion-header-resumen-label">Total a abonar (propio)</span>
           <span class="liquidacion-header-resumen-valor">${formatearMoneda(p.monto_a_pagar)}</span>
+        </span>
+      </div>
+      <div class="liquidacion-header-resumen-dato">
+        <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="scale"></i></span>
+        <span class="liquidacion-header-resumen-dato-texto">
+          <span class="liquidacion-header-resumen-label">Total diferencias</span>
+          <span class="liquidacion-header-resumen-valor">${formatearMoneda(comparativa.total_diferencias)}</span>
         </span>
       </div>
       <div class="liquidacion-header-resumen-dato liquidacion-header-resumen-destacado">
         <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="circle-dollar-sign"></i></span>
         <span class="liquidacion-header-resumen-dato-texto">
-          <span class="liquidacion-header-resumen-label">Monto total a pagar</span>
+          <span class="liquidacion-header-resumen-label">Total consolidado</span>
           <span class="liquidacion-header-resumen-valor">${formatearMoneda(comparativa.monto_final_principal)}</span>
         </span>
       </div>
@@ -348,107 +362,171 @@ function renderResumenHeader(comparativa){
   lucide.createIcons();
 }
 
-// Una tarjeta por zona (igual formato que Liquidación Clientes/Mis
-// Liquidaciones) — a las subcuentas se les agrega la columna
-// "Diferencia" (celda a celda contra la principal).
-function tarjetaZonaComparativa(zona, filas, esSubcuenta){
-  const total = filas.reduce((acc, f) => acc + (Number(f.cantidad) || 0), 0);
-  const subtotal = filas.reduce((acc, f) => acc + (Number(f.total) || 0), 0);
-  const diferenciaZona = filas.reduce((acc, f) => acc + (Number(f.diferencia) || 0), 0);
-  return `
-    <article class="tarjeta-resumen-liquidacion">
-      <div class="tarjeta-resumen-header">
-        <span class="tarjeta-resumen-titulo"><span class="tarjeta-resumen-bullet"></span>${zona}</span>
-        <span class="tarjeta-resumen-total-chico">${total} paq.</span>
-      </div>
-      <table class="tabla-tarjeta-resumen${esSubcuenta ? " tabla-tarjeta-resumen-dif" : ""}">
-        <thead><tr><th>Tamaño</th><th class="col-num">Cant.</th><th class="col-num">Precio</th><th class="col-num">Total</th>${esSubcuenta ? '<th class="col-num">Diferencia</th>' : ""}</tr></thead>
-        <tbody>
-          ${filas.map(f => `
-            <tr>
-              <td>${f.tamano}</td>
-              <td class="col-num">${f.cantidad}</td>
-              <td class="col-num">${f.precio == null ? "—" : formatearMoneda(f.precio)}</td>
-              <td class="col-num">${formatearMoneda(f.total)}</td>
-              ${esSubcuenta ? `<td class="col-num${(Number(f.diferencia) || 0) < 0 ? " monto-negativo" : ""}">${f.diferencia == null ? "—" : formatearMoneda(f.diferencia)}</td>` : ""}
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-      <div class="tarjeta-resumen-pie">
-        <span class="tarjeta-resumen-pie-izq">Subtotal <span class="tarjeta-resumen-pie-chip">${total}</span></span>
-        <span>${formatearMoneda(subtotal)}${esSubcuenta ? ` <span class="texto-muted" style="font-weight:600;">(dif. ${formatearMoneda(diferenciaZona)})</span>` : ""}</span>
-      </div>
-    </article>
-  `;
-}
-
-function tarjetaCuenta(cuenta, esPrincipal){
-  const estado = labelEstadoCuenta(cuenta.estado);
-  if(cuenta.estado !== "generada"){
-    return `
-      <div class="card">
-        <div class="liq-resumen-section-header">
-          <span class="liq-resumen-section-titulo">${tituloTexto(cuenta.nombre_fantasia)}${esPrincipal ? " (Principal)" : ""}</span>
-          <span class="badge-zona-detalle ${estado.clase}">${estado.texto}</span>
-        </div>
-        <p class="sin-datos">Todavía no se generó la liquidación individual de esta cuenta para el período elegido.</p>
-      </div>
-    `;
-  }
-  // Agrupa las filas (ya vienen ordenadas por zona desde la RPC) — mismo
-  // criterio que agruparFilasResumen() de liquidacion-vista.js, pero
-  // local acá porque el shape de columnas es distinto (zona/tamano en
-  // vez de grupo/item).
-  const porZona = [];
-  (cuenta.filas || []).forEach(f => {
-    const ultimo = porZona[porZona.length - 1];
-    if(ultimo && ultimo.zona === f.zona) ultimo.filas.push(f);
-    else porZona.push({ zona: f.zona, filas: [f] });
-  });
-  return `
-    <div class="card">
-      <div class="liq-resumen-section-header">
-        <span class="liq-resumen-section-titulo">${tituloTexto(cuenta.nombre_fantasia)}${esPrincipal ? " (Principal)" : ""}</span>
-        <div style="display:flex; align-items:center; gap:10px;">
-          ${!esPrincipal ? `<span class="texto-muted">Diferencia total: <strong class="${(Number(cuenta.diferencia_total) || 0) < 0 ? "monto-negativo" : ""}">${formatearMoneda(cuenta.diferencia_total)}</strong></span>` : ""}
-          <span class="badge-zona-detalle ${estado.clase}">${estado.texto}</span>
-        </div>
-      </div>
-      <div class="tarjetas-resumen-liquidacion-wrap">
-        <div class="tarjetas-resumen-liquidacion-fila">
-          ${porZona.map(g => tarjetaZonaComparativa(g.zona, g.filas, !esPrincipal)).join("")}
-        </div>
-      </div>
+function renderPendientes(comparativa){
+  const cont = document.getElementById("consolidada-pendientes");
+  const pendientes = [];
+  if(comparativa.principal.estado !== "generada") pendientes.push(tituloTexto(nombreCliente(stateConsolidada.clientes.find(c => c.did === stateConsolidada.didPrincipal) || {})) + " (Principal)");
+  (comparativa.subcuentas || []).forEach(s => { if(s.estado !== "generada") pendientes.push(tituloTexto(s.nombre_fantasia)); });
+  if(!pendientes.length){ cont.hidden = true; cont.innerHTML = ""; return; }
+  cont.hidden = false;
+  cont.innerHTML = `
+    <div class="tarjeta-resumen-aviso" style="margin-bottom:14px;">
+      <i data-lucide="alert-triangle"></i><span class="tarjeta-resumen-aviso-texto">Falta generar la liquidación individual de: ${pendientes.join(", ")} — no aparecen en el detalle de abajo.</span>
     </div>
   `;
+  lucide.createIcons();
+}
+
+// Aplana principal + subcuentas en filas (cliente, zona, tamaño) para la
+// grilla — las cuentas "pendiente" ya se avisan aparte (renderPendientes).
+function construirFilasDetalle(comparativa){
+  const filas = [];
+  const nombrePrincipal = tituloTexto(nombreCliente(stateConsolidada.clientes.find(c => c.did === stateConsolidada.didPrincipal) || {}));
+  if(comparativa.principal.estado === "generada"){
+    (comparativa.principal.filas || []).forEach(f => filas.push({
+      cliente: nombrePrincipal, tipo: "principal", zona: f.zona, tamano: f.tamano, cantidad: f.cantidad,
+      precio: f.precio, total: f.total, precio_referencia: null, total_referencia: null, diferencia: null, diferencia_total: null,
+    }));
+  }
+  (comparativa.subcuentas || []).forEach(s => {
+    if(s.estado !== "generada") return;
+    (s.filas || []).forEach(f => filas.push({
+      cliente: tituloTexto(s.nombre_fantasia), tipo: "subcuenta", zona: f.zona, tamano: f.tamano, cantidad: f.cantidad,
+      precio: f.precio, total: f.total,
+      precio_referencia: f.precio_referencia,
+      total_referencia: f.precio_referencia != null ? f.precio_referencia * (Number(f.cantidad) || 0) : null,
+      diferencia: f.precio_referencia != null ? (Number(f.precio) || 0) - f.precio_referencia : null,
+      diferencia_total: f.diferencia,
+    }));
+  });
+  return filas;
+}
+
+function aplicarFiltrosConsolidada(){
+  const b = (stateDetalleConsolidada.busqueda || "").toLowerCase();
+  stateDetalleConsolidada.filtradas = stateDetalleConsolidada.filas.filter(f => {
+    if(b && !`${f.cliente} ${f.zona}`.toLowerCase().includes(b)) return false;
+    if(stateDetalleConsolidada.cliente && f.cliente !== stateDetalleConsolidada.cliente) return false;
+    if(stateDetalleConsolidada.zona && f.zona !== stateDetalleConsolidada.zona) return false;
+    if(stateDetalleConsolidada.tamano && f.tamano !== stateDetalleConsolidada.tamano) return false;
+    return true;
+  });
+  stateDetalleConsolidada.pagina = 0;
+}
+
+function renderGrillaConsolidada(){
+  const tbody = document.getElementById("tabla-consolidada-detalle");
+  const total = stateDetalleConsolidada.filtradas.length;
+  const tam = stateDetalleConsolidada.tamanoPagina;
+  const totalPaginas = Math.max(1, Math.ceil(total / tam));
+  stateDetalleConsolidada.pagina = Math.min(stateDetalleConsolidada.pagina, totalPaginas - 1);
+  const desde = stateDetalleConsolidada.pagina * tam;
+  const pagina = stateDetalleConsolidada.filtradas.slice(desde, desde + tam);
+  tbody.innerHTML = !pagina.length
+    ? `<tr><td colspan="11" class="sin-datos">${total ? "Sin resultados para el filtro." : "Elegí una cuenta principal con liquidaciones generadas para este período."}</td></tr>`
+    : pagina.map(f => `
+        <tr>
+          <td>${f.cliente}</td>
+          <td><span class="badge-zona-detalle ${f.tipo === "principal" ? "dorado" : "gris"}">${f.tipo === "principal" ? "Principal" : "Subcuenta"}</span></td>
+          <td>${f.zona}</td>
+          <td>${f.tamano}</td>
+          <td class="col-num">${f.cantidad}</td>
+          <td class="col-num">${montoOGuion(f.precio)}</td>
+          <td class="col-num">${montoOGuion(f.total)}</td>
+          <td class="col-num${f.precio_referencia == null ? " celda-na" : ""}">${montoOGuion(f.precio_referencia)}</td>
+          <td class="col-num${f.total_referencia == null ? " celda-na" : ""}">${montoOGuion(f.total_referencia)}</td>
+          <td class="col-num${f.diferencia == null ? " celda-na" : (f.diferencia < 0 ? " monto-negativo" : "")}">${montoOGuion(f.diferencia)}</td>
+          <td class="col-num${f.diferencia_total == null ? " celda-na" : (f.diferencia_total < 0 ? " monto-negativo" : "")}"><strong>${montoOGuion(f.diferencia_total)}</strong></td>
+        </tr>
+      `).join("");
+  const desdeFila = total ? desde + 1 : 0;
+  const hastaFila = Math.min(total, desde + tam);
+  document.getElementById("consolidada-detalle-resumen").textContent =
+    total ? `Mostrando ${desdeFila}–${hastaFila} de ${total} registros` : "Sin registros para este filtro.";
+  document.getElementById("btn-consolidada-detalle-anterior").disabled = stateDetalleConsolidada.pagina <= 0;
+  document.getElementById("btn-consolidada-detalle-siguiente").disabled = stateDetalleConsolidada.pagina >= totalPaginas - 1;
+}
+
+function repoblarFiltrosConsolidada(){
+  const clientesUnicos = [...new Set(stateDetalleConsolidada.filas.map(f => f.cliente))];
+  const zonasUnicas = [...new Set(stateDetalleConsolidada.filas.map(f => f.zona).filter(Boolean))];
+  document.getElementById("combo-consolidada-cliente").outerHTML = `
+    <div class="combo-filtro" id="combo-consolidada-cliente">
+      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Cliente: Todos</button>
+      <ul class="combo-filtro-lista" role="listbox" hidden>
+        <li data-valor="" aria-selected="true">Todos</li>
+        ${clientesUnicos.map(c => `<li data-valor="${c}">${c}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+  crearComboGenerico("combo-consolidada-cliente", (valor)=>{ stateDetalleConsolidada.cliente = valor; aplicarFiltrosConsolidada(); renderGrillaConsolidada(); });
+  document.getElementById("combo-consolidada-zona").outerHTML = `
+    <div class="combo-filtro" id="combo-consolidada-zona">
+      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Zona: Todas</button>
+      <ul class="combo-filtro-lista" role="listbox" hidden>
+        <li data-valor="" aria-selected="true">Todas</li>
+        ${zonasUnicas.map(z => `<li data-valor="${z}">${z}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+  crearComboGenerico("combo-consolidada-zona", (valor)=>{ stateDetalleConsolidada.zona = valor; aplicarFiltrosConsolidada(); renderGrillaConsolidada(); });
+}
+
+let filtrosConsolidadaListos = false;
+function asegurarFiltrosConsolidadaListos(){
+  if(filtrosConsolidadaListos) return;
+  filtrosConsolidadaListos = true;
+  document.getElementById("buscar-consolidada-detalle").addEventListener("input", (e)=>{
+    stateDetalleConsolidada.busqueda = e.target.value.trim();
+    aplicarFiltrosConsolidada();
+    renderGrillaConsolidada();
+  });
+  crearComboGenerico("combo-consolidada-tamano", (valor)=>{ stateDetalleConsolidada.tamano = valor; aplicarFiltrosConsolidada(); renderGrillaConsolidada(); });
+  crearComboGenerico("combo-consolidada-pagina", (valor)=>{ stateDetalleConsolidada.tamanoPagina = Number(valor) || 25; stateDetalleConsolidada.pagina = 0; renderGrillaConsolidada(); });
+  document.getElementById("btn-consolidada-detalle-anterior").addEventListener("click", ()=>{
+    if(stateDetalleConsolidada.pagina <= 0) return; stateDetalleConsolidada.pagina--; renderGrillaConsolidada();
+  });
+  document.getElementById("btn-consolidada-detalle-siguiente").addEventListener("click", ()=>{
+    const totalPaginas = Math.max(1, Math.ceil(stateDetalleConsolidada.filtradas.length / stateDetalleConsolidada.tamanoPagina));
+    if(stateDetalleConsolidada.pagina >= totalPaginas - 1) return; stateDetalleConsolidada.pagina++; renderGrillaConsolidada();
+  });
 }
 
 async function cargarComparativa(){
-  const cont = document.getElementById("consolidada-cuentas-wrap");
+  asegurarFiltrosConsolidadaListos();
   if(!stateConsolidada.didPrincipal){
-    cont.innerHTML = "";
     renderResumenHeader(null);
+    document.getElementById("consolidada-pendientes").hidden = true;
+    stateDetalleConsolidada.filas = []; stateDetalleConsolidada.filtradas = [];
+    renderGrillaConsolidada();
     return;
   }
-  cont.innerHTML = `<div class="card"><p class="sin-datos">Cargando…</p></div>`;
+  document.getElementById("tabla-consolidada-detalle").innerHTML = `<tr><td colspan="11" class="sin-datos">Cargando…</td></tr>`;
   const p = periodoPara(stateConsolidada.servicio, stateConsolidada.fechaReferencia);
   const { data, error } = await sb.rpc("comparativa_liquidacion_consolidada", {
     p_did_principal: stateConsolidada.didPrincipal, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin,
   });
   if(error){
     console.error("Error cargando comparativa consolidada:", error);
-    cont.innerHTML = `<div class="card"><p class="sin-datos">Error al cargar: ${error.message || "revisá la consola"}.</p></div>`;
+    document.getElementById("tabla-consolidada-detalle").innerHTML = `<tr><td colspan="11" class="sin-datos">Error al cargar: ${error.message || "revisá la consola"}.</td></tr>`;
     renderResumenHeader(null);
     return;
   }
   renderResumenHeader(data);
-  const tarjetas = [
-    tarjetaCuenta({ ...data.principal, nombre_fantasia: nombreCliente(stateConsolidada.clientes.find(c => c.did === stateConsolidada.didPrincipal) || {}) }, true),
-    ...(data.subcuentas || []).map(s => tarjetaCuenta(s, false)),
-  ];
-  cont.innerHTML = tarjetas.join("");
-  lucide.createIcons();
+  renderPendientes(data);
+  stateDetalleConsolidada.busqueda = ""; stateDetalleConsolidada.cliente = ""; stateDetalleConsolidada.zona = ""; stateDetalleConsolidada.tamano = "";
+  stateDetalleConsolidada.pagina = 0; stateDetalleConsolidada.tamanoPagina = 25;
+  document.getElementById("buscar-consolidada-detalle").value = "";
+  // "Tamaño" y "página" son combos estáticos (no se reconstruyen como
+  // Cliente/Zona) — hay que resetear su estado visual a mano, si no
+  // quedaban mostrando el filtro de la cuenta/período anterior aunque el
+  // estado interno ya se había limpiado (mismo bug ya visto en Envíos).
+  resetearCombo("combo-consolidada-tamano");
+  resetearCombo("combo-consolidada-pagina");
+  stateDetalleConsolidada.filas = construirFilasDetalle(data);
+  repoblarFiltrosConsolidada();
+  aplicarFiltrosConsolidada();
+  renderGrillaConsolidada();
 }
 
 export async function cargarLiquidacionConsolidada(){
