@@ -1,0 +1,345 @@
+// Liquidación Consolidada (pedido 2026-11-26, ver docs/liquidacion_
+// consolidada.md) — 1ra vuelta / vista admin. Una cuenta principal puede
+// tener subcuentas vinculadas (clientes_relaciones, con una tarifa de
+// referencia pactada por subcuenta); la consolidada se arma SOBRE las
+// liquidaciones individuales YA generadas de cada una (nunca las
+// recalcula ni las modifica — regla de negocio 7 del documento) y calcula
+// la diferencia entre la tarifa propia "efectiva" de cada subcuenta
+// (derivada de lo que su propia liquidación ya cobró) y esa tarifa de
+// referencia.
+//
+// Simplificación documentada (a validar con el usuario, no asumir que es
+// definitiva): la "tarifa propia efectiva" de una subcuenta sale de
+// dividir monto_a_pagar de su liquidación individual por sus paquetes
+// liquidados (envíos + turbo) — un promedio implícito, no el precio real
+// por tamaño/cordón (que puede variar envío a envío). Para el caso de uso
+// descripto en el documento (tarifa única por paquete) es exacto; si en la
+// práctica hay mezcla de tamaños con precios distintos, esto da un
+// promedio ponderado, no una comparación por tamaño.
+import { sb } from "../core/supabase.js";
+import { tituloTexto, formatearMoneda, formatearFecha } from "../core/formato.js";
+import { crearComboGenerico } from "../ui/combos.js";
+import { abrirModalAbm } from "../ui/modal-abm.js";
+import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
+import { catalogos, nombreCliente } from "../core/catalogos.js";
+import { fechaART } from "../core/fechas.js";
+
+const stateConsolidada = {
+  didPrincipal: null,
+  desde: fechaART(-6),
+  hasta: fechaART(0),
+  relaciones: [],
+  verificacion: null, // resultado de subcuentas_para_consolidar, null = no verificado todavía
+  historial: [],
+  detalleAbierto: null, // resultado de obtener_liquidacion_consolidada
+};
+
+function labelEstadoConsolidada(estado){
+  if(estado === "generada") return { texto: "Generada", clase: "verde" };
+  if(estado === "pagada") return { texto: "Pagada", clase: "dorado" };
+  if(estado === "anulada") return { texto: "Anulada", clase: "gris" };
+  return { texto: estado, clase: "gris" };
+}
+
+// ===================== Selector de cuenta principal =====================
+
+async function repoblarComboPrincipal(){
+  if(!catalogos.clientes.length){
+    const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia");
+    if(error){ console.error("Error cargando clientes:", error); return; }
+    catalogos.clientes = data || [];
+  }
+  const wrap = document.getElementById("combo-consolidada-principal-wrap");
+  const actual = stateConsolidada.didPrincipal;
+  const actualTexto = actual ? tituloTexto(nombreCliente(catalogos.clientes.find(c => c.did === actual) || {})) : "Elegir cuenta principal…";
+  wrap.innerHTML = `
+    <div class="combo-filtro" id="combo-consolidada-principal">
+      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">${actualTexto}</button>
+      <ul class="combo-filtro-lista" role="listbox" hidden>
+        ${catalogos.clientes.map(c => `<li data-valor="${c.did}" ${c.did === actual ? 'aria-selected="true"' : ""}>${tituloTexto(nombreCliente(c))}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+  crearComboGenerico("combo-consolidada-principal", async (valor)=>{
+    stateConsolidada.didPrincipal = Number(valor);
+    stateConsolidada.verificacion = null;
+    stateConsolidada.detalleAbierto = null;
+    document.getElementById("consolidada-detalle-wrap").innerHTML = "";
+    await Promise.all([cargarRelaciones(), cargarHistorial()]);
+  });
+}
+
+// ===================== Relaciones (subcuentas vinculadas) =====================
+
+async function cargarRelaciones(){
+  const tbody = document.getElementById("tabla-consolidada-relaciones");
+  if(!stateConsolidada.didPrincipal){ tbody.innerHTML = ""; return; }
+  tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Cargando…</td></tr>`;
+  const { data, error } = await sb.from("clientes_relaciones")
+    .select("id,did_subcuenta,tarifa_referencia,signo_ajuste,activo,lightdata_clientes(nombre_fantasia)")
+    .eq("did_principal", stateConsolidada.didPrincipal)
+    .order("id");
+  if(error){ console.error("Error cargando relaciones:", error); tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Error cargando subcuentas vinculadas.</td></tr>`; return; }
+  stateConsolidada.relaciones = (data || []).map(r => ({
+    ...r,
+    nombre_fantasia: Array.isArray(r.lightdata_clientes) ? r.lightdata_clientes[0]?.nombre_fantasia : r.lightdata_clientes?.nombre_fantasia,
+  }));
+  renderRelaciones();
+}
+
+function renderRelaciones(){
+  const tbody = document.getElementById("tabla-consolidada-relaciones");
+  if(!stateConsolidada.relaciones.length){
+    tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Sin subcuentas vinculadas a esta cuenta principal.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = stateConsolidada.relaciones.map(r => `
+    <tr class="${r.activo ? "" : "fila-inactiva"}">
+      <td>${tituloTexto(r.nombre_fantasia)}${r.activo ? "" : '<span class="badge-inactivo">Inactivo</span>'}</td>
+      <td class="col-num">${formatearMoneda(r.tarifa_referencia)}</td>
+      <td>${r.signo_ajuste === "suma" ? "Se suma al neto" : "Se resta del neto"}</td>
+      <td class="col-opciones">
+        <span class="opciones-fila">
+          <button type="button" class="btn-icono-chico editar" data-id="${r.id}" title="Editar"><i data-lucide="pencil"></i></button>
+          <button type="button" class="btn-icono-chico borrar" data-id="${r.id}" title="Quitar vínculo"><i data-lucide="trash-2"></i></button>
+        </span>
+      </td>
+    </tr>
+  `).join("");
+  lucide.createIcons();
+}
+
+function abrirModalRelacion(relacionExistente){
+  if(!stateConsolidada.didPrincipal){ mostrarAviso("Elegí primero una cuenta principal."); return; }
+  const yaVinculadas = new Set(stateConsolidada.relaciones.filter(r => r.activo && (!relacionExistente || r.id !== relacionExistente.id)).map(r => r.did_subcuenta));
+  const opcionesSubcuenta = catalogos.clientes
+    .filter(c => c.did !== stateConsolidada.didPrincipal && !yaVinculadas.has(c.did))
+    .map(c => ({ valor: c.did, texto: tituloTexto(nombreCliente(c)) }));
+  abrirModalAbm(relacionExistente ? "Editar subcuenta vinculada" : "Vincular subcuenta", [
+    { clave: "did_subcuenta", label: "Subcuenta", tipo: "select", opciones: opcionesSubcuenta },
+    { clave: "tarifa_referencia", label: "Tarifa de referencia ($/paquete)", tipo: "number" },
+    { clave: "signo_ajuste", label: "La diferencia…", tipo: "select", opciones: [
+      { valor: "resta", texto: "Se resta del neto de la cuenta principal" },
+      { valor: "suma", texto: "Se suma al neto de la cuenta principal" },
+    ] },
+    { clave: "activo", label: "Activo", tipo: "checkbox" },
+  ], relacionExistente || { signo_ajuste: "resta", activo: true }, async (vals)=>{
+    const payload = {
+      did_principal: stateConsolidada.didPrincipal,
+      did_subcuenta: Number(vals.did_subcuenta),
+      tarifa_referencia: Number(vals.tarifa_referencia) || 0,
+      signo_ajuste: vals.signo_ajuste || "resta",
+      activo: !!vals.activo,
+    };
+    const { error } = relacionExistente
+      ? await sb.from("clientes_relaciones").update(payload).eq("id", relacionExistente.id)
+      : await sb.from("clientes_relaciones").insert(payload);
+    if(error){
+      console.error("Error guardando relación:", error);
+      await mostrarAviso(error.message?.includes("unique") || error.code === "23505"
+        ? "Esa subcuenta ya está vinculada a otra cuenta principal activa, o ya existe este vínculo."
+        : "No se pudo guardar. Revisá los datos.");
+      return false;
+    }
+    await cargarRelaciones();
+  });
+}
+
+document.getElementById("tabla-consolidada-relaciones").addEventListener("click", (e)=>{
+  const btnEditar = e.target.closest(".btn-icono-chico.editar");
+  const btnBorrar = e.target.closest(".btn-icono-chico.borrar");
+  if(btnEditar){
+    const r = stateConsolidada.relaciones.find(x => x.id === Number(btnEditar.dataset.id));
+    if(r) abrirModalRelacion(r);
+  }
+  if(btnBorrar){
+    const id = Number(btnBorrar.dataset.id);
+    mostrarConfirmacion("¿Quitar este vínculo? No borra ninguna liquidación ya generada, solo la relación.").then(async (ok)=>{
+      if(!ok) return;
+      const { error } = await sb.from("clientes_relaciones").delete().eq("id", id);
+      if(error){ console.error("Error borrando relación:", error); await mostrarAviso("No se pudo quitar el vínculo."); return; }
+      await cargarRelaciones();
+    });
+  }
+});
+document.getElementById("btn-consolidada-vincular-subcuenta").addEventListener("click", ()=> abrirModalRelacion(null));
+
+// ===================== Verificar + generar =====================
+
+async function verificarSubcuentas(){
+  if(!stateConsolidada.didPrincipal) return;
+  const cont = document.getElementById("consolidada-verificacion");
+  cont.innerHTML = `<p class="sin-datos">Verificando…</p>`;
+  const { data, error } = await sb.rpc("subcuentas_para_consolidar", {
+    p_did_principal: stateConsolidada.didPrincipal, p_fecha_inicio: stateConsolidada.desde, p_fecha_fin: stateConsolidada.hasta,
+  });
+  if(error){ console.error("Error verificando subcuentas:", error); cont.innerHTML = `<p class="sin-datos">Error al verificar.</p>`; return; }
+  stateConsolidada.verificacion = data || [];
+  const { data: liqPrincipal } = await sb.from("liquidaciones_clientes").select("id,estado")
+    .eq("did_cliente", stateConsolidada.didPrincipal).eq("fecha_inicio", stateConsolidada.desde).eq("fecha_fin", stateConsolidada.hasta).maybeSingle();
+  const principalLista = liqPrincipal && liqPrincipal.estado === "generada";
+  const todasListas = principalLista && stateConsolidada.verificacion.every(s => s.liquidacion_estado === "generada");
+  cont.innerHTML = `
+    <ul class="lista-verificacion-consolidada">
+      <li class="${principalLista ? "ok" : "falta"}"><i data-lucide="${principalLista ? "check" : "alert-triangle"}"></i>Cuenta principal: ${principalLista ? "liquidación generada" : "falta generar su liquidación individual"}</li>
+      ${stateConsolidada.verificacion.map(s => `
+        <li class="${s.liquidacion_estado === "generada" ? "ok" : "falta"}">
+          <i data-lucide="${s.liquidacion_estado === "generada" ? "check" : "alert-triangle"}"></i>
+          ${tituloTexto(s.nombre_fantasia)}: ${s.liquidacion_estado === "generada" ? "liquidación generada" : "falta generar su liquidación individual"}
+        </li>
+      `).join("")}
+    </ul>
+  `;
+  lucide.createIcons();
+  document.getElementById("btn-consolidada-generar").disabled = !todasListas || !stateConsolidada.verificacion.length;
+}
+
+async function generarConsolidada(){
+  const btn = document.getElementById("btn-consolidada-generar");
+  btn.disabled = true;
+  const { data: id, error } = await sb.rpc("generar_liquidacion_consolidada", {
+    p_did_principal: stateConsolidada.didPrincipal, p_fecha_inicio: stateConsolidada.desde, p_fecha_fin: stateConsolidada.hasta,
+  });
+  btn.disabled = false;
+  if(error){ console.error("Error generando consolidada:", error); await mostrarAviso(error.message || "No se pudo generar la liquidación consolidada."); return; }
+  await mostrarAviso("Liquidación consolidada generada.");
+  await cargarHistorial();
+  abrirDetalleConsolidada(id);
+}
+
+// ===================== Historial de consolidadas =====================
+
+async function cargarHistorial(){
+  const tbody = document.getElementById("tabla-consolidada-historial");
+  if(!stateConsolidada.didPrincipal){ tbody.innerHTML = ""; return; }
+  tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Cargando…</td></tr>`;
+  const { data, error } = await sb.from("liquidaciones_consolidadas")
+    .select("id,fecha_inicio,fecha_fin,estado,monto_neto")
+    .eq("did_principal", stateConsolidada.didPrincipal)
+    .order("fecha_inicio", { ascending: false });
+  if(error){ console.error("Error cargando historial de consolidadas:", error); tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Error cargando el historial.</td></tr>`; return; }
+  stateConsolidada.historial = data || [];
+  if(!stateConsolidada.historial.length){
+    tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Todavía no se generó ninguna liquidación consolidada para esta cuenta.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = stateConsolidada.historial.map(c => {
+    const estado = labelEstadoConsolidada(c.estado);
+    return `
+      <tr>
+        <td>${formatearFecha(c.fecha_inicio)} a ${formatearFecha(c.fecha_fin)}</td>
+        <td class="col-num">${formatearMoneda(c.monto_neto)}</td>
+        <td><span class="badge-zona-detalle ${estado.clase}">${estado.texto}</span></td>
+        <td class="col-opciones">
+          <span class="opciones-fila">
+            <button type="button" class="btn-icono-chico" data-id="${c.id}" data-accion="ver" title="Ver detalle"><i data-lucide="eye"></i></button>
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join("");
+  lucide.createIcons();
+}
+
+document.getElementById("tabla-consolidada-historial").addEventListener("click", (e)=>{
+  const btn = e.target.closest(".btn-icono-chico[data-accion='ver']");
+  if(btn) abrirDetalleConsolidada(Number(btn.dataset.id));
+});
+
+// ===================== Detalle de una consolidada =====================
+
+async function abrirDetalleConsolidada(id){
+  const wrap = document.getElementById("consolidada-detalle-wrap");
+  wrap.innerHTML = `<div class="card"><p class="sin-datos">Cargando…</p></div>`;
+  const { data, error } = await sb.rpc("obtener_liquidacion_consolidada", { p_id: id });
+  if(error || !data || !data.length){ console.error("Error cargando consolidada:", error); wrap.innerHTML = `<div class="card"><p class="sin-datos">No se pudo cargar.</p></div>`; return; }
+  const c = data[0];
+  stateConsolidada.detalleAbierto = c;
+  const estado = labelEstadoConsolidada(c.estado);
+  const filas = c.detalle || [];
+  wrap.innerHTML = `
+    <div class="card">
+      <div class="liq-detalle-header">
+        <div class="liq-detalle-header-titulo">
+          <span class="liq-detalle-titulo">Detalle consolidado — ${formatearFecha(c.fecha_inicio)} a ${formatearFecha(c.fecha_fin)}</span>
+          <span class="badge-zona-detalle ${estado.clase}">${estado.texto}</span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span class="liquidacion-header-resumen-valor" style="color:var(--dorado); font-size:18px;">${formatearMoneda(c.monto_neto)}</span>
+          ${c.estado === "generada" ? `
+            <button type="button" class="btn-secundario-modal" id="btn-consolidada-anular">Anular</button>
+            <button type="button" class="btn-primario" id="btn-consolidada-pagar">Marcar pagada</button>
+          ` : ""}
+        </div>
+      </div>
+      <div class="tabla-scroll">
+        <table class="tabla-detalle-liquidacion">
+          <thead>
+            <tr>
+              <th>Cliente</th><th>Tipo</th><th class="col-num">Paquetes</th>
+              <th class="col-num">Tarifa propia</th><th class="col-num">Tarifa referencia</th>
+              <th class="col-num">Importe bruto</th><th class="col-num">Diferencia</th><th class="col-num">Saldo consolidado</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filas.map(f => `
+              <tr>
+                <td>${tituloTexto(f.nombre_fantasia)}</td>
+                <td><span class="badge-zona-detalle ${f.tipo === "principal" ? "dorado" : "gris"}">${f.tipo === "principal" ? "Principal" : "Subcuenta"}</span></td>
+                <td class="col-num">${f.cantidad_paquetes ?? "—"}</td>
+                <td class="col-num">${f.tarifa_propia != null ? formatearMoneda(f.tarifa_propia) : "—"}</td>
+                <td class="col-num">${f.tarifa_referencia != null ? formatearMoneda(f.tarifa_referencia) : "—"}</td>
+                <td class="col-num">${formatearMoneda(f.importe_bruto)}</td>
+                <td class="col-num${(Number(f.diferencia) || 0) < 0 ? " monto-negativo" : ""}">${f.tipo === "principal" ? "—" : formatearMoneda(f.diferencia)}</td>
+                <td class="col-num"><strong>${formatearMoneda(f.saldo_consolidado)}</strong></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  lucide.createIcons();
+  if(c.estado === "generada"){
+    document.getElementById("btn-consolidada-anular").addEventListener("click", async ()=>{
+      if(!(await mostrarConfirmacion("¿Anular esta liquidación consolidada?"))) return;
+      const { error: errAnular } = await sb.rpc("anular_liquidacion_consolidada", { p_id: id });
+      if(errAnular){ await mostrarAviso(errAnular.message || "No se pudo anular."); return; }
+      await cargarHistorial();
+      abrirDetalleConsolidada(id);
+    });
+    document.getElementById("btn-consolidada-pagar").addEventListener("click", async ()=>{
+      if(!(await mostrarConfirmacion("¿Marcar esta liquidación consolidada como pagada?"))) return;
+      const { error: errPagar } = await sb.rpc("marcar_pagada_liquidacion_consolidada", { p_id: id });
+      if(errPagar){ await mostrarAviso(errPagar.message || "No se pudo marcar como pagada."); return; }
+      await cargarHistorial();
+      abrirDetalleConsolidada(id);
+    });
+  }
+}
+
+// ===================== Inicialización de la pantalla =====================
+
+document.getElementById("consolidada-desde").addEventListener("change", (e)=>{
+  stateConsolidada.desde = e.target.value || fechaART(-6);
+  stateConsolidada.verificacion = null;
+  document.getElementById("consolidada-verificacion").innerHTML = "";
+  document.getElementById("btn-consolidada-generar").disabled = true;
+});
+document.getElementById("consolidada-hasta").addEventListener("change", (e)=>{
+  stateConsolidada.hasta = e.target.value || fechaART(0);
+  stateConsolidada.verificacion = null;
+  document.getElementById("consolidada-verificacion").innerHTML = "";
+  document.getElementById("btn-consolidada-generar").disabled = true;
+});
+document.getElementById("consolidada-desde").value = stateConsolidada.desde;
+document.getElementById("consolidada-hasta").value = stateConsolidada.hasta;
+document.getElementById("btn-consolidada-verificar").addEventListener("click", verificarSubcuentas);
+document.getElementById("btn-consolidada-generar").addEventListener("click", generarConsolidada);
+
+export async function cargarLiquidacionConsolidada(){
+  await repoblarComboPrincipal();
+  if(stateConsolidada.didPrincipal){
+    await Promise.all([cargarRelaciones(), cargarHistorial()]);
+  }
+}

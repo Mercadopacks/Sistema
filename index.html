@@ -844,6 +844,13 @@
   .btn-icono-chico svg{width:15px; height:15px;}
   .fila-inactiva{color:#999;}
   .badge-inactivo{background:#f0efe9; color:#999; font-size:11px; padding:2px 8px; border-radius:10px; margin-left:6px;}
+
+  /* Liquidación Consolidada (pedido 2026-11-26) */
+  .lista-verificacion-consolidada{list-style:none; padding:0; margin:10px 0 0; display:flex; flex-direction:column; gap:6px;}
+  .lista-verificacion-consolidada li{display:flex; align-items:center; gap:8px; font-size:13px;}
+  .lista-verificacion-consolidada li i{width:16px; height:16px; flex-shrink:0;}
+  .lista-verificacion-consolidada li.ok{color:#166534;}
+  .lista-verificacion-consolidada li.falta{color:#9a3412;}
   .badge-pendiente-cordon{background:#fff4e5; color:#b9700a; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px;}
   .buscar-mas-filtrar{display:flex; align-items:center; gap:10px; margin-bottom:14px;}
   .buscar-mas-filtrar .buscador{flex:1; max-width:280px; min-width:0; margin-bottom:0;}
@@ -979,6 +986,9 @@
         </button>
         <button class="nav-subitem" data-vista="liquidacion-repartidores">
           <i data-lucide="truck"></i><span class="texto">Liquidación Repartidores</span>
+        </button>
+        <button class="nav-subitem" data-vista="liquidacion-consolidada">
+          <i data-lucide="layers"></i><span class="texto">Liquidación Consolidada</span>
         </button>
       </div>
       <!-- Configuración (ex "Administración") — un solo ítem acá; el
@@ -1297,6 +1307,63 @@
             </table>
           </div>
         </div>
+      </div>
+
+      <!-- Pedido 2026-11-26: "Liquidación Consolidada" — una cuenta
+           principal consolida las liquidaciones de sus subcuentas
+           vinculadas (clientes_relaciones), cobrando/descontando la
+           diferencia entre la tarifa propia de cada subcuenta y una
+           tarifa de referencia pactada. 1ra vuelta, vista admin — ver
+           js/pantallas/liquidacion-consolidada.js. -->
+      <div id="vista-liquidacion-consolidada" hidden>
+        <div class="card">
+          <div class="buscar-mas-filtrar" style="margin-bottom:0;">
+            <div id="combo-consolidada-principal-wrap"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="liq-resumen-section-header">
+            <span class="liq-resumen-section-titulo">Subcuentas vinculadas</span>
+            <button type="button" class="btn-filtrar" id="btn-consolidada-vincular-subcuenta"><i data-lucide="link"></i>Vincular subcuenta</button>
+          </div>
+          <div class="tabla-scroll" style="margin-top:10px;">
+            <table>
+              <thead><tr><th>Subcuenta</th><th class="col-num">Tarifa de referencia</th><th>Ajuste</th><th class="col-opciones">Opciones</th></tr></thead>
+              <tbody id="tabla-consolidada-relaciones"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="liq-resumen-section-header">
+            <span class="liq-resumen-section-titulo">Generar liquidación consolidada</span>
+          </div>
+          <div class="buscar-mas-filtrar" style="margin-top:10px;">
+            <span class="rango-fechas-envios-listado">
+              <input type="date" id="consolidada-desde" />
+              <span style="color:#777;">a</span>
+              <input type="date" id="consolidada-hasta" />
+            </span>
+            <button type="button" class="btn-filtrar" id="btn-consolidada-verificar"><i data-lucide="search-check"></i>Verificar subcuentas</button>
+            <button type="button" class="btn-primario" id="btn-consolidada-generar" disabled>Generar consolidada</button>
+          </div>
+          <div id="consolidada-verificacion"></div>
+        </div>
+
+        <div class="card">
+          <div class="liq-resumen-section-header">
+            <span class="liq-resumen-section-titulo">Historial</span>
+          </div>
+          <div class="tabla-scroll" style="margin-top:10px;">
+            <table>
+              <thead><tr><th>Período</th><th class="col-num">Monto neto</th><th>Estado</th><th class="col-opciones">Opciones</th></tr></thead>
+              <tbody id="tabla-consolidada-historial"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="consolidada-detalle-wrap"></div>
       </div>
 
       <!-- Pantalla completa (NO modal, pedido 2026-11-24) con el detalle
@@ -2445,6 +2512,7 @@ import { moduloExtrasClientes, moduloExtrasRepartidores } from "./js/pantallas/e
 import { cargarAdminUsuarios } from "./js/admin/usuarios.js";
 // Etapa 7b: Liquidación Clientes en js/.
 import { cargarLiquidacionClientes } from "./js/pantallas/liquidacion-clientes.js";
+import { cargarLiquidacionConsolidada } from "./js/pantallas/liquidacion-consolidada.js";
 // Pedido 2026-11-25: Mis Liquidaciones (solo lectura, acotada al propio cliente) en js/.
 import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
 (function(){
@@ -2582,6 +2650,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
     "repa-asistencia": { titulo: "Asistencia de Repartidores", icono: "clipboard-check", el: document.getElementById("vista-repa-asistencia") },
     "repa-vivo": { titulo: "Operación en vivo", icono: "radio", el: document.getElementById("vista-repa-vivo") },
     "liquidacion-clientes": { titulo: "Liquidación Clientes", icono: "building-2", el: document.getElementById("vista-liquidacion-clientes") },
+    "liquidacion-consolidada": { titulo: "Liquidación Consolidada", icono: "layers", el: document.getElementById("vista-liquidacion-consolidada") },
     "detalle-liquidacion-cliente": { titulo: "Liquidación Clientes", icono: "building-2", el: document.getElementById("vista-detalle-liquidacion-cliente"), volver: "liquidacion-clientes" },
     "liquidacion-repartidores": { titulo: "Liquidación Repartidores", icono: "truck", el: document.getElementById("vista-liquidacion-repartidores") },
     "extras-liquidacion-clientes": { titulo: "Adicionales (Clientes)", icono: "list-plus", el: document.getElementById("vista-extras-liquidacion-clientes"), volver: "liquidacion-clientes" },
@@ -2620,7 +2689,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
   function seleccionarVista(v){
     document.querySelectorAll(".nav-item, .nav-subitem").forEach(b=>b.classList.toggle("activo", b.dataset.vista === v));
     document.querySelector('.nav-group-label[data-grupo="repartidores"]').classList.toggle("activo", v === "repa-ruta" || v === "repa-asistencia" || v === "repa-vivo");
-    document.querySelector('.nav-group-label[data-grupo="liquidaciones"]').classList.toggle("activo", v === "mis-liquidaciones" || v === "liquidacion-clientes" || v === "detalle-liquidacion-cliente" || v === "liquidacion-repartidores" || v === "extras-liquidacion-clientes" || v === "extras-liquidacion-repartidores");
+    document.querySelector('.nav-group-label[data-grupo="liquidaciones"]').classList.toggle("activo", v === "mis-liquidaciones" || v === "liquidacion-clientes" || v === "detalle-liquidacion-cliente" || v === "liquidacion-repartidores" || v === "liquidacion-consolidada" || v === "extras-liquidacion-clientes" || v === "extras-liquidacion-repartidores");
     document.querySelector('.nav-subitem[data-vista="liquidacion-clientes"]').classList.toggle("activo", v === "liquidacion-clientes" || v === "detalle-liquidacion-cliente");
     Object.entries(vistas).forEach(([key, cfg])=>{ cfg.el.hidden = key !== v; });
     document.getElementById("titulo-vista").textContent = vistas[v].titulo;
@@ -2660,6 +2729,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
     if(v === "repa-asistencia") cargarAsistencia();
     if(v === "repa-vivo") cargarOperacionVivo();
     if(v === "liquidacion-clientes") cargarLiquidacionClientes();
+    if(v === "liquidacion-consolidada") cargarLiquidacionConsolidada();
     if(v === "extras-liquidacion-clientes") moduloExtrasClientes.inicializar().then(()=> moduloExtrasClientes.cargar());
     if(v === "extras-liquidacion-repartidores") moduloExtrasRepartidores.inicializar().then(()=> moduloExtrasRepartidores.cargar());
     if(v === "admin") seleccionarModoAdmin(modoAdminActual);

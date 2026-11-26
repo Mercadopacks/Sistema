@@ -45,6 +45,7 @@
     { clave: "repa-vivo", label: "Operación en vivo" },
     { clave: "liquidacion-clientes", label: "Liquidación Clientes", soloAdmin: true },
     { clave: "liquidacion-repartidores", label: "Liquidación Repartidores", soloAdmin: true },
+    { clave: "liquidacion-consolidada", label: "Liquidación Consolidada", soloAdmin: true },
     // Pedido 2026-11-23: 2 vistas separadas a propósito (no una con
     // selector adentro) — son 2 sectores distintos los que cargan extras
     // de clientes vs. de repartidores y no pueden entrar al mismo panel;
