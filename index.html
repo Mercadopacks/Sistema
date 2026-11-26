@@ -1324,19 +1324,6 @@
 
         <div class="card">
           <div class="liq-resumen-section-header">
-            <span class="liq-resumen-section-titulo">Subcuentas vinculadas</span>
-            <button type="button" class="btn-filtrar" id="btn-consolidada-vincular-subcuenta"><i data-lucide="link"></i>Vincular subcuenta</button>
-          </div>
-          <div class="tabla-scroll" style="margin-top:10px;">
-            <table>
-              <thead><tr><th>Subcuenta</th><th class="col-num">Tarifa de referencia</th><th>Ajuste</th><th class="col-opciones">Opciones</th></tr></thead>
-              <tbody id="tabla-consolidada-relaciones"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="liq-resumen-section-header">
             <span class="liq-resumen-section-titulo">Generar liquidación consolidada</span>
           </div>
           <div class="buscar-mas-filtrar" style="margin-top:10px;">
@@ -1857,6 +1844,7 @@
             <button class="config-nav-item" data-modo-admin-link="fallidos"><i data-lucide="rotate-ccw"></i><span>Fallidos y Cambios</span></button>
             <button class="config-nav-item" data-modo-admin-link="sectores"><i data-lucide="briefcase"></i><span>Sectores</span></button>
             <button class="config-nav-item" data-modo-admin-link="clientes"><i data-lucide="building-2"></i><span>Clientes</span></button>
+            <button class="config-nav-item" data-modo-admin-link="relaciones-clientes"><i data-lucide="link"></i><span>Cuentas Vinculadas</span></button>
             <button class="config-nav-item" data-modo-admin-link="usuarios"><i data-lucide="user-cog"></i><span>Usuarios</span></button>
           </aside>
           <div class="config-contenido">
@@ -2139,6 +2127,32 @@
                   <tr><th>Código</th><th>Cliente</th><th>Razón social</th><th>Habilitado</th><th>Cuentas</th><th>Tipo de Servicio</th><th class="col-opciones">Opciones</th></tr>
                 </thead>
                 <tbody id="tabla-admin-clientes"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pedido 2026-11-26: vinculación cuenta principal <-> subcuenta
+             para Liquidación Consolidada — vive ACÁ (Configuración, admin-
+             only) y no en la pantalla de Liquidación Consolidada en sí,
+             que más adelante también va a poder verla la propia cuenta
+             principal (que no debe poder administrar sus propios
+             vínculos) — ver js/pantallas/liquidacion-consolidada.js. -->
+        <div id="admin-relaciones-clientes" hidden>
+          <div class="card">
+            <div class="buscar-mas-filtrar" style="margin-bottom:0;">
+              <div id="combo-relaciones-principal-wrap"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="liq-resumen-section-header">
+              <span class="liq-resumen-section-titulo">Subcuentas vinculadas</span>
+              <button type="button" class="btn-filtrar" id="btn-consolidada-vincular-subcuenta"><i data-lucide="link"></i>Vincular subcuenta</button>
+            </div>
+            <div class="tabla-scroll" style="margin-top:10px;">
+              <table>
+                <thead><tr><th>Subcuenta</th><th class="col-opciones">Opciones</th></tr></thead>
+                <tbody id="tabla-consolidada-relaciones"></tbody>
               </table>
             </div>
           </div>
@@ -2512,7 +2526,7 @@ import { moduloExtrasClientes, moduloExtrasRepartidores } from "./js/pantallas/e
 import { cargarAdminUsuarios } from "./js/admin/usuarios.js";
 // Etapa 7b: Liquidación Clientes en js/.
 import { cargarLiquidacionClientes } from "./js/pantallas/liquidacion-clientes.js";
-import { cargarLiquidacionConsolidada } from "./js/pantallas/liquidacion-consolidada.js";
+import { cargarLiquidacionConsolidada, cargarAdminRelacionesClientes } from "./js/pantallas/liquidacion-consolidada.js";
 // Pedido 2026-11-25: Mis Liquidaciones (solo lectura, acotada al propio cliente) en js/.
 import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
 (function(){
@@ -2663,7 +2677,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
   // DENTRO de la pantalla (.config-sidebar) el que decide esto, no el
   // sidebar principal — ver seleccionarModoAdmin().
   let modoAdminActual = "bienvenida";
-  const MODOS_ADMIN = ["bienvenida","choferes","vehiculos","zonas","turnos","localidades","tamanos-paquete","cordones","tipos-extra","alertas","fallidos","sectores","clientes","usuarios"];
+  const MODOS_ADMIN = ["bienvenida","choferes","vehiculos","zonas","turnos","localidades","tamanos-paquete","cordones","tipos-extra","alertas","fallidos","sectores","clientes","relaciones-clientes","usuarios"];
 
   function seleccionarModoAdmin(modo){
     modoAdminActual = modo;
@@ -2683,6 +2697,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
     if(modo === "fallidos"){ cargarAdminFallidosMapeo(); cargarAdminFallidosAlertas(); }
     if(modo === "sectores") abmSectores.cargar();
     if(modo === "clientes") cargarAdminClientes();
+    if(modo === "relaciones-clientes") cargarAdminRelacionesClientes();
     if(modo === "usuarios") cargarAdminUsuarios();
   }
 

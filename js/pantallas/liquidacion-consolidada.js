@@ -1,20 +1,30 @@
 // Liquidación Consolidada (pedido 2026-11-26, ver docs/liquidacion_
-// consolidada.md) — 1ra vuelta / vista admin. Una cuenta principal puede
-// tener subcuentas vinculadas (clientes_relaciones, con una tarifa de
-// referencia pactada por subcuenta); la consolidada se arma SOBRE las
-// liquidaciones individuales YA generadas de cada una (nunca las
-// recalcula ni las modifica — regla de negocio 7 del documento) y calcula
-// la diferencia entre la tarifa propia "efectiva" de cada subcuenta
-// (derivada de lo que su propia liquidación ya cobró) y esa tarifa de
-// referencia.
+// consolidada.md) — 2da vuelta. Una cuenta principal puede tener
+// subcuentas vinculadas (clientes_relaciones); la consolidada se arma
+// SOBRE las liquidaciones individuales YA generadas de cada una (nunca
+// las recalcula ni las modifica — regla de negocio 7 del documento) y
+// calcula la diferencia entre la tarifa propia "efectiva" de cada
+// subcuenta y la tarifa propia "efectiva" de la cuenta PRINCIPAL (la
+// referencia SIEMPRE es la tarifa de la principal, pedido 2026-11-26 —
+// ya no se pacta un valor aparte por subcuenta). Esa diferencia SIEMPRE
+// se resta del saldo de la principal, sin condición de signo: el
+// resultado sale solo a favor o en contra según el signo de la propia
+// diferencia.
+//
+// La vinculación cuenta principal <-> subcuenta (ABM de
+// clientes_relaciones) vive en Configuración (cargarAdminRelacionesClientes,
+// exportada acá pero montada desde el sidebar de Configuración en
+// index.html) — esta pantalla (cargarLiquidacionConsolidada) es la que en
+// el futuro también va a poder ver la propia cuenta principal, así que no
+// puede traer acciones de administración de vínculos.
 //
 // Simplificación documentada (a validar con el usuario, no asumir que es
-// definitiva): la "tarifa propia efectiva" de una subcuenta sale de
-// dividir monto_a_pagar de su liquidación individual por sus paquetes
-// liquidados (envíos + turbo) — un promedio implícito, no el precio real
-// por tamaño/cordón (que puede variar envío a envío). Para el caso de uso
-// descripto en el documento (tarifa única por paquete) es exacto; si en la
-// práctica hay mezcla de tamaños con precios distintos, esto da un
+// definitiva): la "tarifa propia efectiva" de una cuenta sale de dividir
+// monto_a_pagar de su liquidación individual por sus paquetes liquidados
+// (envíos + turbo) — un promedio implícito, no el precio real por
+// tamaño/cordón (que puede variar envío a envío). Para el caso de uso
+// descripto en el documento (tarifa única por paquete) es exacto; si en
+// la práctica hay mezcla de tamaños con precios distintos, esto da un
 // promedio ponderado, no una comparación por tamaño.
 import { sb } from "../core/supabase.js";
 import { tituloTexto, formatearMoneda, formatearFecha } from "../core/formato.js";
@@ -24,16 +34,6 @@ import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { catalogos, nombreCliente } from "../core/catalogos.js";
 import { fechaART } from "../core/fechas.js";
 
-const stateConsolidada = {
-  didPrincipal: null,
-  desde: fechaART(-6),
-  hasta: fechaART(0),
-  relaciones: [],
-  verificacion: null, // resultado de subcuentas_para_consolidar, null = no verificado todavía
-  historial: [],
-  detalleAbierto: null, // resultado de obtener_liquidacion_consolidada
-};
-
 function labelEstadoConsolidada(estado){
   if(estado === "generada") return { texto: "Generada", clase: "verde" };
   if(estado === "pagada") return { texto: "Pagada", clase: "dorado" };
@@ -41,46 +41,52 @@ function labelEstadoConsolidada(estado){
   return { texto: estado, clase: "gris" };
 }
 
-// ===================== Selector de cuenta principal =====================
+async function asegurarCatalogoClientes(){
+  if(catalogos.clientes.length) return;
+  const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia");
+  if(error){ console.error("Error cargando clientes:", error); return; }
+  catalogos.clientes = data || [];
+}
 
-async function repoblarComboPrincipal(){
-  if(!catalogos.clientes.length){
-    const { data, error } = await sb.from("lightdata_clientes").select("did,codigo,nombre_fantasia").eq("habilitado", true).order("nombre_fantasia");
-    if(error){ console.error("Error cargando clientes:", error); return; }
-    catalogos.clientes = data || [];
-  }
-  const wrap = document.getElementById("combo-consolidada-principal-wrap");
-  const actual = stateConsolidada.didPrincipal;
+// ===================== Configuración → "Cuentas Vinculadas" (ABM de relaciones) =====================
+// Admin-only: acá se vincula/desvincula una subcuenta y se la da de baja.
+// Sin tarifa de referencia ni signo de ajuste (pedido 2026-11-26): la
+// referencia siempre es la tarifa propia de la principal, y la
+// diferencia siempre resta — nada de eso se configura por relación.
+
+const stateRelaciones = { didPrincipal: null, relaciones: [] };
+
+async function repoblarComboPrincipalRelaciones(){
+  await asegurarCatalogoClientes();
+  const wrap = document.getElementById("combo-relaciones-principal-wrap");
+  if(!wrap) return;
+  const actual = stateRelaciones.didPrincipal;
   const actualTexto = actual ? tituloTexto(nombreCliente(catalogos.clientes.find(c => c.did === actual) || {})) : "Elegir cuenta principal…";
   wrap.innerHTML = `
-    <div class="combo-filtro" id="combo-consolidada-principal">
+    <div class="combo-filtro" id="combo-relaciones-principal">
       <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">${actualTexto}</button>
       <ul class="combo-filtro-lista" role="listbox" hidden>
         ${catalogos.clientes.map(c => `<li data-valor="${c.did}" ${c.did === actual ? 'aria-selected="true"' : ""}>${tituloTexto(nombreCliente(c))}</li>`).join("")}
       </ul>
     </div>
   `;
-  crearComboGenerico("combo-consolidada-principal", async (valor)=>{
-    stateConsolidada.didPrincipal = Number(valor);
-    stateConsolidada.verificacion = null;
-    stateConsolidada.detalleAbierto = null;
-    document.getElementById("consolidada-detalle-wrap").innerHTML = "";
-    await Promise.all([cargarRelaciones(), cargarHistorial()]);
+  crearComboGenerico("combo-relaciones-principal", async (valor)=>{
+    stateRelaciones.didPrincipal = Number(valor);
+    await cargarRelaciones();
   });
 }
 
-// ===================== Relaciones (subcuentas vinculadas) =====================
-
 async function cargarRelaciones(){
   const tbody = document.getElementById("tabla-consolidada-relaciones");
-  if(!stateConsolidada.didPrincipal){ tbody.innerHTML = ""; return; }
-  tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Cargando…</td></tr>`;
+  if(!tbody) return;
+  if(!stateRelaciones.didPrincipal){ tbody.innerHTML = ""; return; }
+  tbody.innerHTML = `<tr><td colspan="2" class="sin-datos">Cargando…</td></tr>`;
   const { data, error } = await sb.from("clientes_relaciones")
-    .select("id,did_subcuenta,tarifa_referencia,signo_ajuste,activo,lightdata_clientes(nombre_fantasia)")
-    .eq("did_principal", stateConsolidada.didPrincipal)
+    .select("id,did_subcuenta,activo,lightdata_clientes(nombre_fantasia)")
+    .eq("did_principal", stateRelaciones.didPrincipal)
     .order("id");
-  if(error){ console.error("Error cargando relaciones:", error); tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Error cargando subcuentas vinculadas.</td></tr>`; return; }
-  stateConsolidada.relaciones = (data || []).map(r => ({
+  if(error){ console.error("Error cargando relaciones:", error); tbody.innerHTML = `<tr><td colspan="2" class="sin-datos">Error cargando subcuentas vinculadas.</td></tr>`; return; }
+  stateRelaciones.relaciones = (data || []).map(r => ({
     ...r,
     nombre_fantasia: Array.isArray(r.lightdata_clientes) ? r.lightdata_clientes[0]?.nombre_fantasia : r.lightdata_clientes?.nombre_fantasia,
   }));
@@ -89,15 +95,13 @@ async function cargarRelaciones(){
 
 function renderRelaciones(){
   const tbody = document.getElementById("tabla-consolidada-relaciones");
-  if(!stateConsolidada.relaciones.length){
-    tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Sin subcuentas vinculadas a esta cuenta principal.</td></tr>`;
+  if(!stateRelaciones.relaciones.length){
+    tbody.innerHTML = `<tr><td colspan="2" class="sin-datos">Sin subcuentas vinculadas a esta cuenta principal.</td></tr>`;
     return;
   }
-  tbody.innerHTML = stateConsolidada.relaciones.map(r => `
+  tbody.innerHTML = stateRelaciones.relaciones.map(r => `
     <tr class="${r.activo ? "" : "fila-inactiva"}">
       <td>${tituloTexto(r.nombre_fantasia)}${r.activo ? "" : '<span class="badge-inactivo">Inactivo</span>'}</td>
-      <td class="col-num">${formatearMoneda(r.tarifa_referencia)}</td>
-      <td>${r.signo_ajuste === "suma" ? "Se suma al neto" : "Se resta del neto"}</td>
       <td class="col-opciones">
         <span class="opciones-fila">
           <button type="button" class="btn-icono-chico editar" data-id="${r.id}" title="Editar"><i data-lucide="pencil"></i></button>
@@ -110,25 +114,18 @@ function renderRelaciones(){
 }
 
 function abrirModalRelacion(relacionExistente){
-  if(!stateConsolidada.didPrincipal){ mostrarAviso("Elegí primero una cuenta principal."); return; }
-  const yaVinculadas = new Set(stateConsolidada.relaciones.filter(r => r.activo && (!relacionExistente || r.id !== relacionExistente.id)).map(r => r.did_subcuenta));
+  if(!stateRelaciones.didPrincipal){ mostrarAviso("Elegí primero una cuenta principal."); return; }
+  const yaVinculadas = new Set(stateRelaciones.relaciones.filter(r => r.activo && (!relacionExistente || r.id !== relacionExistente.id)).map(r => r.did_subcuenta));
   const opcionesSubcuenta = catalogos.clientes
-    .filter(c => c.did !== stateConsolidada.didPrincipal && !yaVinculadas.has(c.did))
+    .filter(c => c.did !== stateRelaciones.didPrincipal && !yaVinculadas.has(c.did))
     .map(c => ({ valor: c.did, texto: tituloTexto(nombreCliente(c)) }));
   abrirModalAbm(relacionExistente ? "Editar subcuenta vinculada" : "Vincular subcuenta", [
     { clave: "did_subcuenta", label: "Subcuenta", tipo: "select", opciones: opcionesSubcuenta },
-    { clave: "tarifa_referencia", label: "Tarifa de referencia ($/paquete)", tipo: "number" },
-    { clave: "signo_ajuste", label: "La diferencia…", tipo: "select", opciones: [
-      { valor: "resta", texto: "Se resta del neto de la cuenta principal" },
-      { valor: "suma", texto: "Se suma al neto de la cuenta principal" },
-    ] },
     { clave: "activo", label: "Activo", tipo: "checkbox" },
-  ], relacionExistente || { signo_ajuste: "resta", activo: true }, async (vals)=>{
+  ], relacionExistente || { activo: true }, async (vals)=>{
     const payload = {
-      did_principal: stateConsolidada.didPrincipal,
+      did_principal: stateRelaciones.didPrincipal,
       did_subcuenta: Number(vals.did_subcuenta),
-      tarifa_referencia: Number(vals.tarifa_referencia) || 0,
-      signo_ajuste: vals.signo_ajuste || "resta",
       activo: !!vals.activo,
     };
     const { error } = relacionExistente
@@ -136,7 +133,7 @@ function abrirModalRelacion(relacionExistente){
       : await sb.from("clientes_relaciones").insert(payload);
     if(error){
       console.error("Error guardando relación:", error);
-      await mostrarAviso(error.message?.includes("unique") || error.code === "23505"
+      await mostrarAviso(error.code === "23505"
         ? "Esa subcuenta ya está vinculada a otra cuenta principal activa, o ya existe este vínculo."
         : "No se pudo guardar. Revisá los datos.");
       return false;
@@ -145,11 +142,16 @@ function abrirModalRelacion(relacionExistente){
   });
 }
 
+export async function cargarAdminRelacionesClientes(){
+  await repoblarComboPrincipalRelaciones();
+  if(stateRelaciones.didPrincipal) await cargarRelaciones();
+}
+
 document.getElementById("tabla-consolidada-relaciones").addEventListener("click", (e)=>{
   const btnEditar = e.target.closest(".btn-icono-chico.editar");
   const btnBorrar = e.target.closest(".btn-icono-chico.borrar");
   if(btnEditar){
-    const r = stateConsolidada.relaciones.find(x => x.id === Number(btnEditar.dataset.id));
+    const r = stateRelaciones.relaciones.find(x => x.id === Number(btnEditar.dataset.id));
     if(r) abrirModalRelacion(r);
   }
   if(btnBorrar){
@@ -164,7 +166,38 @@ document.getElementById("tabla-consolidada-relaciones").addEventListener("click"
 });
 document.getElementById("btn-consolidada-vincular-subcuenta").addEventListener("click", ()=> abrirModalRelacion(null));
 
-// ===================== Verificar + generar =====================
+// ===================== Pantalla "Liquidación Consolidada" (generar/consultar) =====================
+
+const stateConsolidada = {
+  didPrincipal: null,
+  desde: fechaART(-6),
+  hasta: fechaART(0),
+  verificacion: null,
+  historial: [],
+};
+
+async function repoblarComboPrincipal(){
+  await asegurarCatalogoClientes();
+  const wrap = document.getElementById("combo-consolidada-principal-wrap");
+  const actual = stateConsolidada.didPrincipal;
+  const actualTexto = actual ? tituloTexto(nombreCliente(catalogos.clientes.find(c => c.did === actual) || {})) : "Elegir cuenta principal…";
+  wrap.innerHTML = `
+    <div class="combo-filtro" id="combo-consolidada-principal">
+      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">${actualTexto}</button>
+      <ul class="combo-filtro-lista" role="listbox" hidden>
+        ${catalogos.clientes.map(c => `<li data-valor="${c.did}" ${c.did === actual ? 'aria-selected="true"' : ""}>${tituloTexto(nombreCliente(c))}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+  crearComboGenerico("combo-consolidada-principal", async (valor)=>{
+    stateConsolidada.didPrincipal = Number(valor);
+    stateConsolidada.verificacion = null;
+    document.getElementById("consolidada-detalle-wrap").innerHTML = "";
+    document.getElementById("consolidada-verificacion").innerHTML = "";
+    document.getElementById("btn-consolidada-generar").disabled = true;
+    await cargarHistorial();
+  });
+}
 
 async function verificarSubcuentas(){
   if(!stateConsolidada.didPrincipal) return;
@@ -207,20 +240,18 @@ async function generarConsolidada(){
   abrirDetalleConsolidada(id);
 }
 
-// ===================== Historial de consolidadas =====================
-
 async function cargarHistorial(){
   const tbody = document.getElementById("tabla-consolidada-historial");
   if(!stateConsolidada.didPrincipal){ tbody.innerHTML = ""; return; }
-  tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Cargando…</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="4" class="sin-datos">Cargando…</td></tr>`;
   const { data, error } = await sb.from("liquidaciones_consolidadas")
     .select("id,fecha_inicio,fecha_fin,estado,monto_neto")
     .eq("did_principal", stateConsolidada.didPrincipal)
     .order("fecha_inicio", { ascending: false });
-  if(error){ console.error("Error cargando historial de consolidadas:", error); tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Error cargando el historial.</td></tr>`; return; }
+  if(error){ console.error("Error cargando historial de consolidadas:", error); tbody.innerHTML = `<tr><td colspan="4" class="sin-datos">Error cargando el historial.</td></tr>`; return; }
   stateConsolidada.historial = data || [];
   if(!stateConsolidada.historial.length){
-    tbody.innerHTML = `<tr><td colspan="5" class="sin-datos">Todavía no se generó ninguna liquidación consolidada para esta cuenta.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="sin-datos">Todavía no se generó ninguna liquidación consolidada para esta cuenta.</td></tr>`;
     return;
   }
   tbody.innerHTML = stateConsolidada.historial.map(c => {
@@ -246,15 +277,12 @@ document.getElementById("tabla-consolidada-historial").addEventListener("click",
   if(btn) abrirDetalleConsolidada(Number(btn.dataset.id));
 });
 
-// ===================== Detalle de una consolidada =====================
-
 async function abrirDetalleConsolidada(id){
   const wrap = document.getElementById("consolidada-detalle-wrap");
   wrap.innerHTML = `<div class="card"><p class="sin-datos">Cargando…</p></div>`;
   const { data, error } = await sb.rpc("obtener_liquidacion_consolidada", { p_id: id });
   if(error || !data || !data.length){ console.error("Error cargando consolidada:", error); wrap.innerHTML = `<div class="card"><p class="sin-datos">No se pudo cargar.</p></div>`; return; }
   const c = data[0];
-  stateConsolidada.detalleAbierto = c;
   const estado = labelEstadoConsolidada(c.estado);
   const filas = c.detalle || [];
   wrap.innerHTML = `
@@ -277,7 +305,7 @@ async function abrirDetalleConsolidada(id){
           <thead>
             <tr>
               <th>Cliente</th><th>Tipo</th><th class="col-num">Paquetes</th>
-              <th class="col-num">Tarifa propia</th><th class="col-num">Tarifa referencia</th>
+              <th class="col-num">Tarifa propia</th><th class="col-num">Tarifa de referencia</th>
               <th class="col-num">Importe bruto</th><th class="col-num">Diferencia</th><th class="col-num">Saldo consolidado</th>
             </tr>
           </thead>
@@ -318,8 +346,6 @@ async function abrirDetalleConsolidada(id){
   }
 }
 
-// ===================== Inicialización de la pantalla =====================
-
 document.getElementById("consolidada-desde").addEventListener("change", (e)=>{
   stateConsolidada.desde = e.target.value || fechaART(-6);
   stateConsolidada.verificacion = null;
@@ -339,7 +365,5 @@ document.getElementById("btn-consolidada-generar").addEventListener("click", gen
 
 export async function cargarLiquidacionConsolidada(){
   await repoblarComboPrincipal();
-  if(stateConsolidada.didPrincipal){
-    await Promise.all([cargarRelaciones(), cargarHistorial()]);
-  }
+  if(stateConsolidada.didPrincipal) await cargarHistorial();
 }
