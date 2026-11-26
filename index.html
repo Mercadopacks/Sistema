@@ -376,6 +376,17 @@
   .tabla-tarjeta-resumen-extras th:nth-child(1), .tabla-tarjeta-resumen-extras td:nth-child(1){width:40%;}
   .tabla-tarjeta-resumen-extras th:nth-child(2), .tabla-tarjeta-resumen-extras td:nth-child(2){width:16%;}
   .tabla-tarjeta-resumen-extras th:nth-child(3), .tabla-tarjeta-resumen-extras td:nth-child(3){width:44%;}
+  /* Liquidación Consolidada (pedido 2026-11-26, 4ta vuelta): las tarjetas
+     de una SUBCUENTA agregan una 5ta columna "Diferencia" — con
+     table-layout:fixed, 5 columnas sin anchos propios quedaban casi en
+     0% (los 4 anchos de arriba ya suman 100%). Misma especificidad que
+     la regla de 4 columnas (2 clases) — gana por venir DESPUÉS en el
+     archivo. */
+  .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif th:nth-child(1), .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif td:nth-child(1){width:16%;}
+  .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif th:nth-child(2), .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif td:nth-child(2){width:10%;}
+  .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif th:nth-child(3), .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif td:nth-child(3){width:24%;}
+  .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif th:nth-child(4), .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif td:nth-child(4){width:24%;}
+  .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif th:nth-child(5), .tabla-tarjeta-resumen.tabla-tarjeta-resumen-dif td:nth-child(5){width:26%;}
   .tabla-tarjeta-resumen th, .tabla-tarjeta-resumen td{
     padding:3px 6px; font-size:10.5px;
   }
@@ -1333,28 +1344,11 @@
           <div class="buscar-mas-filtrar" style="margin-bottom:0;">
             <div id="combo-consolidada-principal-wrap"></div>
             <div id="combo-consolidada-periodo-wrap"></div>
-            <button type="button" class="btn-primario" id="btn-consolidada-generar" disabled>Generar consolidada</button>
           </div>
           <div id="consolidada-resumen-header"></div>
         </div>
 
-        <div class="card">
-          <div class="liq-resumen-section-header">
-            <span class="liq-resumen-section-titulo">Detalle de liquidaciones</span>
-          </div>
-          <div class="tabla-scroll" style="margin-top:10px;">
-            <table class="tabla-detalle-liquidacion">
-              <thead>
-                <tr>
-                  <th>Cliente</th><th>Tipo</th><th>Estado</th><th class="col-num">Paquetes</th>
-                  <th class="col-num">Tarifa propia</th><th class="col-num">Tarifa de referencia</th>
-                  <th class="col-num">Importe bruto</th><th class="col-num">Diferencia</th><th class="col-num">Saldo consolidado</th>
-                </tr>
-              </thead>
-              <tbody id="tabla-consolidada-detalle"></tbody>
-            </table>
-          </div>
-        </div>
+        <div id="consolidada-cuentas-wrap"></div>
       </div>
 
       <!-- Pantalla completa (NO modal, pedido 2026-11-24) con el detalle

@@ -1,31 +1,27 @@
-// Liquidación Consolidada (pedido 2026-11-26, ver docs/liquidacion_
-// consolidada.md) — 2da vuelta. Una cuenta principal puede tener
-// subcuentas vinculadas (clientes_relaciones); la consolidada se arma
-// SOBRE las liquidaciones individuales YA generadas de cada una (nunca
-// las recalcula ni las modifica — regla de negocio 7 del documento) y
-// calcula la diferencia entre la tarifa propia "efectiva" de cada
-// subcuenta y la tarifa propia "efectiva" de la cuenta PRINCIPAL (la
-// referencia SIEMPRE es la tarifa de la principal, pedido 2026-11-26 —
-// ya no se pacta un valor aparte por subcuenta). Esa diferencia SIEMPRE
-// se resta del saldo de la principal, sin condición de signo: el
-// resultado sale solo a favor o en contra según el signo de la propia
-// diferencia.
+// Liquidación Consolidada (pedido 2026-11-26, 4ta vuelta — rediseño
+// completo). Ya NO es algo que se "genera/anula/marca pagada": es una
+// VISTA DE COMPARACIÓN EN VIVO, sin ningún registro propio — se
+// recalcula cada vez que se elige cuenta principal + período, contra la
+// RPC comparativa_liquidacion_consolidada() (ver migración 2026-11-26i).
+//
+// Objetivo: verificar el monto final que debe abonar la cuenta
+// principal. Por cada celda zona×tamaño con paquetes reales, se compara
+// el precio propio de cada subcuenta contra el precio de la PRINCIPAL en
+// esa misma celda (su propia grilla de precios_cliente_envio — nunca un
+// promedio). La diferencia de cada subcuenta se resta SIEMPRE del total
+// de la principal — la subcuenta nunca ve modificado lo que paga ella.
+//
+// Depende de que la liquidación INDIVIDUAL de cada cuenta (principal y
+// cada subcuenta) ya esté generada para el período — si a alguna le
+// falta, queda marcada "Pendiente" en su lugar y no entra en el cálculo
+// del monto final, pero no bloquea ver el resto (decisión confirmada con
+// el usuario — ya no hay un botón "Generar" que todo-o-nada).
 //
 // La vinculación cuenta principal <-> subcuenta (ABM de
 // clientes_relaciones) vive en Configuración (cargarAdminRelacionesClientes,
 // exportada acá pero montada desde el sidebar de Configuración en
-// index.html) — esta pantalla (cargarLiquidacionConsolidada) es la que en
-// el futuro también va a poder ver la propia cuenta principal, así que no
-// puede traer acciones de administración de vínculos.
-//
-// Simplificación documentada (a validar con el usuario, no asumir que es
-// definitiva): la "tarifa propia efectiva" de una cuenta sale de dividir
-// monto_a_pagar de su liquidación individual por sus paquetes liquidados
-// (envíos + turbo) — un promedio implícito, no el precio real por
-// tamaño/cordón (que puede variar envío a envío). Para el caso de uso
-// descripto en el documento (tarifa única por paquete) es exacto; si en
-// la práctica hay mezcla de tamaños con precios distintos, esto da un
-// promedio ponderado, no una comparación por tamaño.
+// index.html) — esta pantalla no tiene ninguna acción de administración
+// de vínculos, un usuario tipo cliente (cuenta principal) también la usa.
 import { sb } from "../core/supabase.js";
 import { tituloTexto, formatearMoneda, formatearFecha } from "../core/formato.js";
 import { crearComboGenerico } from "../ui/combos.js";
@@ -68,11 +64,13 @@ function esUsuarioCliente(){
   return !!(stateSesion.perfil && stateSesion.perfil.tipo_usuario === "cliente");
 }
 
-function labelEstadoConsolidada(estado){
-  if(estado === "generada") return { texto: "Generada", clase: "verde" };
-  if(estado === "pagada") return { texto: "Pagada", clase: "dorado" };
-  if(estado === "anulada") return { texto: "Anulada", clase: "gris" };
-  return { texto: estado, clase: "gris" };
+// Pedido 2026-11-26 (4ta vuelta): ya no hay estados de ciclo de vida
+// (generada/pagada/anulada) — cada cuenta dentro de la comparativa solo
+// puede estar "generada" (su liquidación individual ya existe, entra en
+// el cálculo) o "pendiente" (todavía no se generó, se muestra igual pero
+// sin números, y no afecta el monto final).
+function labelEstadoCuenta(estado){
+  return estado === "generada" ? { texto: "Generada", clase: "verde" } : { texto: "Pendiente", clase: "amarillo" };
 }
 
 async function asegurarCatalogoClientes(){
@@ -235,21 +233,21 @@ document.getElementById("modal-vincular-guardar").addEventListener("click", asyn
   await cargarAdminRelacionesClientes();
 });
 
-// ===================== Pantalla "Liquidación Consolidada" (cabecera única + detalle siempre visible) =====================
-// Pedido 2026-11-26 (3ra vuelta): sin una card aparte para "generar" — el
-// selector de cuenta principal, el de semana y el botón "Generar" viven
-// en la MISMA cabecera; y en vez de un historial de corridas pasadas, la
-// tabla de abajo ("Detalle de liquidaciones") siempre muestra las
-// cuentas asociadas al período elegido — antes de generar, a modo de
-// checklist (qué cuenta ya tiene su liquidación individual lista); después
-// de generar, con los números reales ya calculados.
+
+// ===================== Pantalla "Liquidación Consolidada" (vista de comparación en vivo) =====================
+// Pedido 2026-11-26 (4ta vuelta): sin botones de generar/anular/marcar
+// pagada — la cabecera solo tiene cuenta principal + período, y un
+// ítem destacado con el monto final a pagar. El "detalle" es, para cada
+// cuenta (principal primero, después cada subcuenta), su propia grilla
+// de zona×tamaño (mismo formato que Liquidación Clientes/Mis
+// Liquidaciones) — a las subcuentas se les agrega una columna
+// "Diferencia" contra la celda equivalente de la principal.
 
 const stateConsolidada = {
   didPrincipal: null,
   servicio: "ultima_milla",
   fechaReferencia: null,
   clientes: [], // clientes disponibles para el selector de cuenta principal (admin: todos; cliente: los suyos)
-  consolidadaActual: null, // row de liquidaciones_consolidadas para el período elegido, o null si no se generó
 };
 
 // Admin ve todas las cuentas en el selector; un usuario tipo_usuario=
@@ -287,7 +285,7 @@ async function repoblarComboPrincipal(){
     const { data: tipo } = await sb.rpc("tipo_servicio_cliente", { p_did_cliente: stateConsolidada.didPrincipal });
     stateConsolidada.servicio = tipo || "ultima_milla";
     repoblarComboPeriodo();
-    await cargarDetalleConsolidado();
+    await cargarComparativa();
   });
 }
 
@@ -312,149 +310,150 @@ function repoblarComboPeriodo(){
   `;
   crearComboGenerico("combo-consolidada-periodo", async (valor)=>{
     stateConsolidada.fechaReferencia = valor;
-    await cargarDetalleConsolidado();
+    await cargarComparativa();
   });
 }
 
-function renderFilaDetalle(f){
-  const esPrincipal = f.tipo === "principal";
-  return `
-    <tr>
-      <td>${tituloTexto(f.nombre_fantasia)}</td>
-      <td><span class="badge-zona-detalle ${esPrincipal ? "dorado" : "gris"}">${esPrincipal ? "Principal" : "Subcuenta"}</span></td>
-      <td>${f.estadoHtml}</td>
-      <td class="col-num">${f.cantidad_paquetes ?? "—"}</td>
-      <td class="col-num">${f.tarifa_propia != null ? formatearMoneda(f.tarifa_propia) : "—"}</td>
-      <td class="col-num">${f.tarifa_referencia != null ? formatearMoneda(f.tarifa_referencia) : "—"}</td>
-      <td class="col-num">${f.importe_bruto != null ? formatearMoneda(f.importe_bruto) : "—"}</td>
-      <td class="col-num${(Number(f.diferencia) || 0) < 0 ? " monto-negativo" : ""}">${esPrincipal || f.diferencia == null ? "—" : formatearMoneda(f.diferencia)}</td>
-      <td class="col-num">${f.saldo_consolidado != null ? `<strong>${formatearMoneda(f.saldo_consolidado)}</strong>` : "—"}</td>
-    </tr>
-  `;
-}
-
-function renderResumenHeader(){
+function renderResumenHeader(comparativa){
   const cont = document.getElementById("consolidada-resumen-header");
-  const c = stateConsolidada.consolidadaActual;
-  if(!c){ cont.innerHTML = ""; return; }
-  const estado = labelEstadoConsolidada(c.estado);
-  cont.innerHTML = `
-    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-top:14px;">
-      <div class="liquidacion-header-resumen-total">
-        <div class="liquidacion-header-resumen-dato">
-          <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="package"></i></span>
-          <span class="liquidacion-header-resumen-dato-texto">
-            <span class="liquidacion-header-resumen-label">Total paquetes</span>
-            <span class="liquidacion-header-resumen-valor">${c.total_paquetes ?? 0}</span>
-          </span>
-        </div>
-        <div class="liquidacion-header-resumen-dato liquidacion-header-resumen-destacado">
-          <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="circle-dollar-sign"></i></span>
-          <span class="liquidacion-header-resumen-dato-texto">
-            <span class="liquidacion-header-resumen-label">Monto neto</span>
-            <span class="liquidacion-header-resumen-valor">${formatearMoneda(c.monto_neto)}</span>
-          </span>
-        </div>
+  if(!comparativa){ cont.innerHTML = ""; return; }
+  const p = comparativa.principal;
+  if(p.estado !== "generada"){
+    cont.innerHTML = `
+      <div class="tarjeta-resumen-aviso" style="margin-top:14px;">
+        <i data-lucide="alert-triangle"></i><span class="tarjeta-resumen-aviso-texto">Falta generar la liquidación individual de la cuenta principal para este período — el monto final no se puede calcular todavía.</span>
       </div>
-      <span class="badge-zona-detalle ${estado.clase}">${estado.texto}</span>
-      ${c.estado === "generada" ? `
-        <button type="button" class="btn-secundario-modal" id="btn-consolidada-anular">Anular</button>
-        <button type="button" class="btn-primario" id="btn-consolidada-pagar">Marcar pagada</button>
-      ` : ""}
+    `;
+    lucide.createIcons();
+    return;
+  }
+  cont.innerHTML = `
+    <div class="liquidacion-header-resumen-total" style="margin-top:14px;">
+      <div class="liquidacion-header-resumen-dato">
+        <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="receipt"></i></span>
+        <span class="liquidacion-header-resumen-dato-texto">
+          <span class="liquidacion-header-resumen-label">Monto propio de la principal</span>
+          <span class="liquidacion-header-resumen-valor">${formatearMoneda(p.monto_a_pagar)}</span>
+        </span>
+      </div>
+      <div class="liquidacion-header-resumen-dato liquidacion-header-resumen-destacado">
+        <span class="liquidacion-header-resumen-dato-icono"><i data-lucide="circle-dollar-sign"></i></span>
+        <span class="liquidacion-header-resumen-dato-texto">
+          <span class="liquidacion-header-resumen-label">Monto total a pagar</span>
+          <span class="liquidacion-header-resumen-valor">${formatearMoneda(comparativa.monto_final_principal)}</span>
+        </span>
+      </div>
     </div>
   `;
   lucide.createIcons();
-  if(c.estado === "generada"){
-    document.getElementById("btn-consolidada-anular").addEventListener("click", async ()=>{
-      if(!(await mostrarConfirmacion("¿Anular esta liquidación consolidada?"))) return;
-      const { error } = await sb.rpc("anular_liquidacion_consolidada", { p_id: c.id });
-      if(error){ await mostrarAviso(error.message || "No se pudo anular."); return; }
-      await cargarDetalleConsolidado();
-    });
-    document.getElementById("btn-consolidada-pagar").addEventListener("click", async ()=>{
-      if(!(await mostrarConfirmacion("¿Marcar esta liquidación consolidada como pagada?"))) return;
-      const { error } = await sb.rpc("marcar_pagada_liquidacion_consolidada", { p_id: c.id });
-      if(error){ await mostrarAviso(error.message || "No se pudo marcar como pagada."); return; }
-      await cargarDetalleConsolidado();
-    });
-  }
 }
 
-// Único punto de carga: decide solo si ya existe una consolidada
-// generada para el período elegido (muestra sus números reales,
-// congelados) o si todavía no (muestra el checklist de qué cuenta está
-// lista para consolidar) — misma tabla en los dos casos.
-async function cargarDetalleConsolidado(){
-  const tbody = document.getElementById("tabla-consolidada-detalle");
-  const btnGenerar = document.getElementById("btn-consolidada-generar");
+// Una tarjeta por zona (igual formato que Liquidación Clientes/Mis
+// Liquidaciones) — a las subcuentas se les agrega la columna
+// "Diferencia" (celda a celda contra la principal).
+function tarjetaZonaComparativa(zona, filas, esSubcuenta){
+  const total = filas.reduce((acc, f) => acc + (Number(f.cantidad) || 0), 0);
+  const subtotal = filas.reduce((acc, f) => acc + (Number(f.total) || 0), 0);
+  const diferenciaZona = filas.reduce((acc, f) => acc + (Number(f.diferencia) || 0), 0);
+  return `
+    <article class="tarjeta-resumen-liquidacion">
+      <div class="tarjeta-resumen-header">
+        <span class="tarjeta-resumen-titulo"><span class="tarjeta-resumen-bullet"></span>${zona}</span>
+        <span class="tarjeta-resumen-total-chico">${total} paq.</span>
+      </div>
+      <table class="tabla-tarjeta-resumen${esSubcuenta ? " tabla-tarjeta-resumen-dif" : ""}">
+        <thead><tr><th>Tamaño</th><th class="col-num">Cant.</th><th class="col-num">Precio</th><th class="col-num">Total</th>${esSubcuenta ? '<th class="col-num">Diferencia</th>' : ""}</tr></thead>
+        <tbody>
+          ${filas.map(f => `
+            <tr>
+              <td>${f.tamano}</td>
+              <td class="col-num">${f.cantidad}</td>
+              <td class="col-num">${f.precio == null ? "—" : formatearMoneda(f.precio)}</td>
+              <td class="col-num">${formatearMoneda(f.total)}</td>
+              ${esSubcuenta ? `<td class="col-num${(Number(f.diferencia) || 0) < 0 ? " monto-negativo" : ""}">${f.diferencia == null ? "—" : formatearMoneda(f.diferencia)}</td>` : ""}
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div class="tarjeta-resumen-pie">
+        <span class="tarjeta-resumen-pie-izq">Subtotal <span class="tarjeta-resumen-pie-chip">${total}</span></span>
+        <span>${formatearMoneda(subtotal)}${esSubcuenta ? ` <span class="texto-muted" style="font-weight:600;">(dif. ${formatearMoneda(diferenciaZona)})</span>` : ""}</span>
+      </div>
+    </article>
+  `;
+}
+
+function tarjetaCuenta(cuenta, esPrincipal){
+  const estado = labelEstadoCuenta(cuenta.estado);
+  if(cuenta.estado !== "generada"){
+    return `
+      <div class="card">
+        <div class="liq-resumen-section-header">
+          <span class="liq-resumen-section-titulo">${tituloTexto(cuenta.nombre_fantasia)}${esPrincipal ? " (Principal)" : ""}</span>
+          <span class="badge-zona-detalle ${estado.clase}">${estado.texto}</span>
+        </div>
+        <p class="sin-datos">Todavía no se generó la liquidación individual de esta cuenta para el período elegido.</p>
+      </div>
+    `;
+  }
+  // Agrupa las filas (ya vienen ordenadas por zona desde la RPC) — mismo
+  // criterio que agruparFilasResumen() de liquidacion-vista.js, pero
+  // local acá porque el shape de columnas es distinto (zona/tamano en
+  // vez de grupo/item).
+  const porZona = [];
+  (cuenta.filas || []).forEach(f => {
+    const ultimo = porZona[porZona.length - 1];
+    if(ultimo && ultimo.zona === f.zona) ultimo.filas.push(f);
+    else porZona.push({ zona: f.zona, filas: [f] });
+  });
+  return `
+    <div class="card">
+      <div class="liq-resumen-section-header">
+        <span class="liq-resumen-section-titulo">${tituloTexto(cuenta.nombre_fantasia)}${esPrincipal ? " (Principal)" : ""}</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+          ${!esPrincipal ? `<span class="texto-muted">Diferencia total: <strong class="${(Number(cuenta.diferencia_total) || 0) < 0 ? "monto-negativo" : ""}">${formatearMoneda(cuenta.diferencia_total)}</strong></span>` : ""}
+          <span class="badge-zona-detalle ${estado.clase}">${estado.texto}</span>
+        </div>
+      </div>
+      <div class="tarjetas-resumen-liquidacion-wrap">
+        <div class="tarjetas-resumen-liquidacion-fila">
+          ${porZona.map(g => tarjetaZonaComparativa(g.zona, g.filas, !esPrincipal)).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function cargarComparativa(){
+  const cont = document.getElementById("consolidada-cuentas-wrap");
   if(!stateConsolidada.didPrincipal){
-    tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">Elegí una cuenta principal.</td></tr>`;
-    btnGenerar.disabled = true;
-    stateConsolidada.consolidadaActual = null;
-    renderResumenHeader();
+    cont.innerHTML = "";
+    renderResumenHeader(null);
     return;
   }
-  tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">Cargando…</td></tr>`;
+  cont.innerHTML = `<div class="card"><p class="sin-datos">Cargando…</p></div>`;
   const p = periodoPara(stateConsolidada.servicio, stateConsolidada.fechaReferencia);
-
-  const { data: existente, error: errExistente } = await sb.from("liquidaciones_consolidadas")
-    .select("id,estado,total_paquetes,monto_neto")
-    .eq("did_principal", stateConsolidada.didPrincipal).eq("fecha_inicio", p.inicio).eq("fecha_fin", p.fin)
-    .neq("estado", "anulada").maybeSingle();
-  if(errExistente){ console.error("Error consultando liquidación consolidada:", errExistente); tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">Error al cargar: ${errExistente.message || "revisá la consola"}.</td></tr>`; return; }
-
-  if(existente){
-    const { data, error } = await sb.rpc("obtener_liquidacion_consolidada", { p_id: existente.id });
-    if(error || !data || !data.length){ console.error("Error cargando consolidada:", error); tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">Error al cargar: ${error?.message || "revisá la consola"}.</td></tr>`; return; }
-    const c = data[0];
-    stateConsolidada.consolidadaActual = c;
-    const filas = (c.detalle || []).map(f => ({ ...f, estadoHtml: '<span class="badge-zona-detalle verde">Generada</span>' }));
-    tbody.innerHTML = filas.map(renderFilaDetalle).join("") || `<tr><td colspan="9" class="sin-datos">Sin cuentas en esta consolidada.</td></tr>`;
-    btnGenerar.disabled = true;
-    renderResumenHeader();
-    return;
-  }
-
-  stateConsolidada.consolidadaActual = null;
-  renderResumenHeader();
-  const [{ data: subcuentas, error: errSub }, { data: liqPrincipal, error: errPrincipal }] = await Promise.all([
-    sb.rpc("subcuentas_para_consolidar", { p_did_principal: stateConsolidada.didPrincipal, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin }),
-    sb.from("liquidaciones_clientes").select("id,estado").eq("did_cliente", stateConsolidada.didPrincipal).eq("fecha_inicio", p.inicio).eq("fecha_fin", p.fin).maybeSingle(),
-  ]);
-  if(errSub || errPrincipal){
-    console.error("Error armando el checklist de la consolidada:", errSub || errPrincipal);
-    tbody.innerHTML = `<tr><td colspan="9" class="sin-datos">Error al cargar: ${(errSub || errPrincipal).message || "revisá la consola"}.</td></tr>`;
-    return;
-  }
-  const estadoHtml = (lista) => lista
-    ? '<span class="badge-zona-detalle verde">Lista</span>'
-    : '<span class="badge-zona-detalle amarillo">Falta generar su liquidación</span>';
-  const principalLista = !!(liqPrincipal && liqPrincipal.estado === "generada");
-  const filas = [
-    { tipo: "principal", nombre_fantasia: tituloTexto(nombreCliente(stateConsolidada.clientes.find(c => c.did === stateConsolidada.didPrincipal) || {})), estadoHtml: estadoHtml(principalLista) },
-    ...(subcuentas || []).map(s => ({ tipo: "subcuenta", nombre_fantasia: s.nombre_fantasia, estadoHtml: estadoHtml(s.liquidacion_estado === "generada") })),
-  ];
-  tbody.innerHTML = filas.map(renderFilaDetalle).join("");
-  const todasListas = principalLista && (subcuentas || []).every(s => s.liquidacion_estado === "generada") && !!(subcuentas || []).length;
-  btnGenerar.disabled = !todasListas;
-}
-
-async function generarConsolidada(){
-  const btn = document.getElementById("btn-consolidada-generar");
-  btn.disabled = true;
-  const p = periodoPara(stateConsolidada.servicio, stateConsolidada.fechaReferencia);
-  const { error } = await sb.rpc("generar_liquidacion_consolidada", {
+  const { data, error } = await sb.rpc("comparativa_liquidacion_consolidada", {
     p_did_principal: stateConsolidada.didPrincipal, p_fecha_inicio: p.inicio, p_fecha_fin: p.fin,
   });
-  if(error){ console.error("Error generando consolidada:", error); await mostrarAviso(error.message || "No se pudo generar la liquidación consolidada."); btn.disabled = false; return; }
-  await mostrarAviso("Liquidación consolidada generada.");
-  await cargarDetalleConsolidado();
+  if(error){
+    console.error("Error cargando comparativa consolidada:", error);
+    cont.innerHTML = `<div class="card"><p class="sin-datos">Error al cargar: ${error.message || "revisá la consola"}.</p></div>`;
+    renderResumenHeader(null);
+    return;
+  }
+  renderResumenHeader(data);
+  const tarjetas = [
+    tarjetaCuenta({ ...data.principal, nombre_fantasia: nombreCliente(stateConsolidada.clientes.find(c => c.did === stateConsolidada.didPrincipal) || {}) }, true),
+    ...(data.subcuentas || []).map(s => tarjetaCuenta(s, false)),
+  ];
+  cont.innerHTML = tarjetas.join("");
+  lucide.createIcons();
 }
-document.getElementById("btn-consolidada-generar").addEventListener("click", generarConsolidada);
 
 export async function cargarLiquidacionConsolidada(){
   await repoblarComboPrincipal();
   if(!stateConsolidada.fechaReferencia) stateConsolidada.fechaReferencia = fechaART(0);
   repoblarComboPeriodo();
-  if(stateConsolidada.didPrincipal) await cargarDetalleConsolidado();
+  if(stateConsolidada.didPrincipal) await cargarComparativa();
 }
