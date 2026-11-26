@@ -413,6 +413,15 @@
      la propia cuenta principal) muestran un guión apagado — nunca $0,00
      ni vacío, pedido explícito ("no se vea mal"). */
   .tabla-detalle-liquidacion td.celda-na{color:#bbb;}
+  /* Liquidación Consolidada (pedido 2026-11-26, 6ta vuelta): tabla propia
+     (no comparte .tabla-detalle-liquidacion, que fuerza width:100% y
+     tiene una regla de la 5ta columna pensada para OTRA pantalla — acá
+     la 5ta es "Cantidad", no una Dirección larga) — ancho ajustado al
+     contenido (no estira columnas angostas a lo pavote) y valores
+     centrados en vez de alineados a la derecha. */
+  .tabla-consolidada-grilla{width:auto; table-layout:auto;}
+  .tabla-consolidada-grilla th, .tabla-consolidada-grilla td{text-align:center; white-space:nowrap; padding:8px 14px;}
+  .tabla-consolidada-grilla td.celda-na{color:#bbb;}
   .tarjeta-resumen-pie{
     display:flex; justify-content:space-between; align-items:center; gap:8px;
     padding:8px 10px; font-weight:800; border-top:1px solid var(--borde);
@@ -1349,7 +1358,7 @@
           <div class="buscar-mas-filtrar" style="margin-bottom:0;">
             <div id="combo-consolidada-principal-wrap"></div>
             <div id="combo-consolidada-periodo-wrap"></div>
-            <div id="consolidada-resumen-header"></div>
+            <div id="consolidada-resumen-header" style="margin-left:auto;"></div>
           </div>
         </div>
 
@@ -1378,13 +1387,13 @@
             </div>
           </div>
           <div class="tabla-scroll">
-            <table class="tabla-detalle-liquidacion">
+            <table class="tabla-consolidada-grilla">
               <thead>
                 <tr>
-                  <th>Cliente</th><th>Tipo</th><th>Zona</th><th>Tamaño</th><th class="col-num">Cantidad</th>
-                  <th class="col-num">Precio propio</th><th class="col-num">Total propio</th>
-                  <th class="col-num">Precio referencia</th><th class="col-num">Total a ref.</th>
-                  <th class="col-num">Diferencia</th><th class="col-num">Total diferencia</th>
+                  <th>Cliente</th><th>Tipo</th><th>Zona</th><th>Tamaño</th><th>Cantidad</th>
+                  <th>Precio propio</th><th>Total propio</th>
+                  <th>Precio referencia</th><th>Total a ref.</th>
+                  <th>Diferencia</th><th>Total diferencia</th>
                 </tr>
               </thead>
               <tbody id="tabla-consolidada-detalle"></tbody>
