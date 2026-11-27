@@ -328,6 +328,7 @@ async function asegurarVistaLiqClienteMontada(){
     conAcciones: true,
     zonas: abmCordones.obtenerActivosConId().map(c => c.texto),
   });
+  estadoDetalleLiqCliente.onEditar = abrirModalCorregirEnvio;
   document.getElementById("liq-cliente-btn-pdf-descargar").addEventListener("click", ()=> abrirOGenerarPdf("descargar"));
   document.getElementById("liq-cliente-btn-guardar-borrador").addEventListener("click", async ()=>{
     const btn = document.getElementById("liq-cliente-btn-guardar-borrador");
@@ -377,6 +378,10 @@ async function abrirPantallaLiquidacionCliente(periodo){
   document.getElementById("liq-cliente-estado").textContent = "";
   document.getElementById("liq-cliente-btn-guardar-borrador").hidden = !!periodo.soloLectura;
   document.getElementById("liq-cliente-btn-confirmar").hidden = !!periodo.soloLectura;
+  // Corrección de Cordón/Tamaño por envío: solo con el período todavía
+  // pendiente/borrador, nunca sobre una liquidación ya "generada" (eso ya
+  // es un monto congelado -- ver nota en renderResumenMatrizLiquidacion).
+  estadoDetalleLiqCliente.soloLectura = !!periodo.soloLectura;
 
   const reg = periodo.registroExistente;
   periodo.pallets = reg ? (reg.cantidad_pallets || 0) : 0;
@@ -400,6 +405,37 @@ async function cargarDetalleItemizadoLiquidacion(){
   if(error){ console.error("Error cargando detalle de liquidación:", error); periodo.detalleFilas = []; }
   else periodo.detalleFilas = data || [];
   cargarFilasDetalle("liq-cliente", estadoDetalleLiqCliente, periodo.detalleFilas);
+}
+
+// Pedido 2026-11-27: corrección manual de Cordón/Tamaño de un envío
+// puntual -- mitigación para envíos que llegan de Lightdata sin
+// localidad/CP (no hay con qué cruzar un cordón automáticamente, ver
+// fn_resolver_cordon_envio en 2026-11-23_mapeo_localidad_cordon.sql) o que
+// simplemente quedaron mal clasificados. Vía RPC (corregir_cordon_tamano_
+// envio, scripts/migraciones/2026-11-27_liquidacion_sin_cordon_editable.sql)
+// -- `envios` sigue de solo lectura para el navegador fuera de esto.
+async function abrirModalCorregirEnvio(fila){
+  const periodo = liquidacionClienteAbriendo;
+  if(!periodo || periodo.soloLectura) return;
+  const cordonActual = abmCordones.obtenerActivosConId().find(c => c.texto === fila.zona);
+  abrirModalAbm("Corregir envío", [
+    { clave: "cordon_id", label: "Cordón", tipo: "select", opciones: abmCordones.obtenerActivosConId() },
+    { clave: "tamano", label: "Tamaño", tipo: "select", opciones: ["Pequeño", "Mediano", "Grande"] },
+  ], {
+    cordon_id: cordonActual ? cordonActual.valor : "",
+    tamano: fila.tamano_real || "",
+  }, async (vals)=>{
+    const { error } = await sb.rpc("corregir_cordon_tamano_envio", {
+      p_id_interno: fila.id_interno,
+      p_cordon_id: vals.cordon_id ? Number(vals.cordon_id) : null,
+      p_tamano: vals.tamano || null,
+    });
+    if(error){ console.error("Error corrigiendo envío:", error); await mostrarAviso("No se pudo corregir el envío."); return false; }
+    // Mismo Promise.all que el resto de la pantalla (ver nota en
+    // abrirPantallaLiquidacionCliente): refresca tarjetas + total + detalle
+    // de una, sin recargar la página.
+    await Promise.all([cargarResumenMatrizLiquidacion(), cargarDetalleItemizadoLiquidacion()]);
+  });
 }
 
 async function cargarResumenMatrizLiquidacion(){

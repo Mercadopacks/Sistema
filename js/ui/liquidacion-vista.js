@@ -141,6 +141,15 @@ export function crearEstadoDetalle(){
   return {
     filas: [], filtradas: [], pagina: 0, tamanoPagina: 25,
     busqueda: "", fecha: "", zona: "", tamano: "", tipo: "",
+    // Pedido 2026-11-27: corrección manual de Cordón/Tamaño por envío,
+    // desde Liquidación Clientes (Mis Liquidaciones no setea `onEditar`,
+    // así que para esa pantalla esto queda inerte). `conEdicion` decide si
+    // existe la columna "Opciones" (se fija una sola vez al montar la
+    // vista, ver montarVistaLiquidacion); `soloLectura` decide si el ícono
+    // de cada fila está habilitado (una liquidación ya "generada" no se
+    // toca — se actualiza en cada apertura de período, ver
+    // abrirPantallaLiquidacionCliente en liquidacion-clientes.js).
+    conEdicion: false, soloLectura: false, onEditar: null,
   };
 }
 
@@ -194,8 +203,12 @@ function renderDetalle(prefijo, estado){
   const desde = estado.pagina * tam;
   const pagina = estado.filtradas.slice(desde, desde + tam);
   const ordenZonas = [...new Set(estado.filas.map(f => f.zona).filter(Boolean))];
+  const colspan = 10 + (estado.conEdicion ? 1 : 0);
+  // Solo Envío/Turbo tienen un envío real detrás para corregir -- las
+  // filas de Extras (Adicionales/Descuentos/Colectas) no.
+  const puedeEditarFila = f => estado.conEdicion && (f.tipo === "Envío" || f.tipo === "Turbo");
   tbody.innerHTML = !pagina.length
-    ? `<tr><td colspan="10" class="sin-datos">${total ? "Sin resultados para el filtro." : "Sin envíos ni extras en este período."}</td></tr>`
+    ? `<tr><td colspan="${colspan}" class="sin-datos">${total ? "Sin resultados para el filtro." : "Sin envíos ni extras en este período."}</td></tr>`
     : pagina.map((f, i) => `
         <tr>
           <td>${desde + i + 1}</td>
@@ -208,8 +221,12 @@ function renderDetalle(prefijo, estado){
           <td>${f.zona ? `<span class="badge-zona-detalle ${colorZona(f.zona, ordenZonas)}">${f.zona}</span>` : "—"}</td>
           <td>${f.tamano || "—"}</td>
           <td class="col-num">${formatearMoneda(f.monto)}</td>
+          ${estado.conEdicion ? `<td class="col-num">${puedeEditarFila(f) ? `
+            <button type="button" class="btn-icono-chico editar" data-id-interno="${f.id_interno || ""}" ${estado.soloLectura ? "disabled" : ""} title="Corregir cordón/tamaño"><i data-lucide="pencil"></i></button>
+          ` : ""}</td>` : ""}
         </tr>
       `).join("");
+  if(estado.conEdicion && typeof lucide !== "undefined") lucide.createIcons();
   const desdeFila = total ? desde + 1 : 0;
   const hastaFila = Math.min(total, desde + tam);
   document.getElementById(`${prefijo}-detalle-resumen`).textContent =
@@ -289,6 +306,18 @@ function vincularDetalle(prefijo, estado, zonasDisponibles){
   });
   document.getElementById(`${prefijo}-btn-detalle-limpiar`).addEventListener("click", ()=>{
     cargarFilasDetalle(prefijo, estado, estado.filas);
+  });
+  // Delegado una sola vez acá (no en renderDetalle, que se llama en cada
+  // filtro/página) -- igual criterio que el resto de los listeners de esta
+  // función. `estado.onEditar` lo setea liquidacion-clientes.js; en Mis
+  // Liquidaciones queda null y el click simplemente no hace nada (tampoco
+  // debería haber botones ahí, conEdicion queda false).
+  document.getElementById(`${prefijo}-tabla-detalle`).addEventListener("click", (e)=>{
+    const btn = e.target.closest(".btn-icono-chico.editar");
+    if(!btn || btn.disabled || !estado.onEditar) return;
+    const idInterno = btn.dataset.idInterno;
+    const fila = estado.filas.find(f => f.id_interno === idInterno);
+    if(fila) estado.onEditar(fila);
   });
 }
 
@@ -393,7 +422,7 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
       </div>
       <div class="tabla-scroll">
         <table class="tabla-detalle-liquidacion">
-          <thead><tr>${COLUMNAS_DETALLE.map((c, i) => `<th${i === 0 || i === COLUMNAS_DETALLE.length - 1 ? ' class="col-num"' : ""}>${c}</th>`).join("")}</tr></thead>
+          <thead><tr>${COLUMNAS_DETALLE.map((c, i) => `<th${i === 0 || i === COLUMNAS_DETALLE.length - 1 ? ' class="col-num"' : ""}>${c}</th>`).join("")}${opciones.conAcciones ? '<th class="col-num">Opciones</th>' : ""}</tr></thead>
           <tbody id="${prefijo}-tabla-detalle"></tbody>
         </table>
       </div>
@@ -415,6 +444,7 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
     </div>
   `;
   const estadoDetalle = crearEstadoDetalle();
+  estadoDetalle.conEdicion = !!opciones.conAcciones;
   vincularDetalle(prefijo, estadoDetalle, opciones.zonas);
   lucide.createIcons();
   return estadoDetalle;

@@ -654,3 +654,40 @@ Reglas de negocio confirmadas con el usuario (2026-11-16):
    buscaba el elemento por ese id no lo encontraba y fallaba en silencio.
    Se cambió a un `<span>` simple (nunca tocado por Lucide), mismo
    criterio que ya usan el resto de los `nav-contador` del sistema.
+
+---
+
+## Changelog 2026-11-27 — Liquidación Clientes: Detalle no coincidía con el Resumen/Total
+
+Bug reportado: en Liquidación Clientes, la grilla de "Detalle de
+liquidación" no coincidía con las tarjetas de resumen ni con "Total
+envíos"/"Monto total a pagar" de arriba.
+
+Causa real: `detalle_liquidacion_cliente()` arranca desde `envios`
+(cualquier envío entregado del período entra), pero
+`resumen_matriz_liquidacion_cliente()` arrancaba desde
+`precios_cliente_envio` (la tabla de precios por cordón) — un envío sin
+`cordon_id` no tenía con qué cruzar y desaparecía en silencio del resumen
+y del total, aunque siguiera en el detalle. Confirmado contra producción:
+111 envíos entregados (Mix Store/Diaz Home/Núcleo, 17→26 nov) sin
+`localidad` NI `cp` — hueco de datos real y puntual de Lightdata (~1.4%
+de los envíos "ML" de ese período, no un bug sistemático de ingesta), que
+ni siquiera llega a encolarse para clasificar a mano en Configuración →
+Localidades (esa cola requiere un CP real).
+
+Fix (`scripts/migraciones/2026-11-27_liquidacion_sin_cordon_editable.sql`):
+
+1. `resumen_matriz_liquidacion_cliente()` pasa a arrancar desde `envios`
+   (como ya hacía `detalle_liquidacion_cliente`) — un envío sin cordón cae
+   en un grupo nuevo "Sin cordón asignar" con precio null, que el aviso
+   de tarifa $0,00 que ya existía en el frontend detecta sin cambios.
+2. `detalle_liquidacion_cliente()` ahora expone `id_interno` (identifica
+   la fila) y `tamano_real` (el Pequeño/Mediano/Grande crudo, no el
+   bucket Pequeños/Grandes que ya se mostraba).
+3. Nueva RPC `corregir_cordon_tamano_envio()` (`security definer`,
+   autorizado a cualquier `tipo_usuario <> 'cliente'`) + columna
+   "Opciones" en el Detalle de Liquidación Clientes (ícono lápiz, oculto
+   para filas de Extras y para una liquidación ya "generada") — permite
+   corregir el Cordón/Tamaño de un envío puntual sin salir de la
+   pantalla, mientras el período siga pendiente/borrador. `envios` sigue
+   de solo lectura para el navegador fuera de esta RPC puntual.
