@@ -156,21 +156,18 @@
     border-bottom:1px solid #2a2a2a; height:64px; box-sizing:border-box;
   }
   .sidebar-header img{width:28px; height:28px; flex-shrink:0;}
-  /* Pedido 2026-11-27 (2da vuelta): "By: <Cliente>" pasa de ir apilado
-     abajo de "Mercado Packs" a compartir la misma fila, empujado al
-     borde derecho (antes del botón de colapsar) -- más visible que
-     metido abajo en chico. */
-  .sidebar-header .marca-texto{
-    display:flex; align-items:center; justify-content:space-between;
-    flex:1; min-width:0; gap:8px;
-  }
-  .sidebar-header .marca-nombre{font-size:16px; white-space:nowrap; flex-shrink:0;}
+  /* Pedido 2026-11-27 (3ra vuelta): compartir la fila con "Mercado Packs"
+     lo recortaba ("By...") cuando el nombre del cliente no era corto --
+     vuelve a ir en su propia línea abajo, pero esa línea alineada a la
+     derecha (no a la izquierda como en el primer intento). */
+  .sidebar-header .marca-texto{display:flex; flex-direction:column; min-width:0; line-height:1.15;}
+  .sidebar-header .marca-nombre{font-size:16px; white-space:nowrap;}
   .sidebar-header .mercado{color:#fff;}
   /* Solo para usuarios tipo_usuario="cliente" -- ver actualizarMarcaCliente()
      en sesion.js. Para el resto (administrativo/repartidor/admin) este
      elemento queda hidden y el sidebar se ve igual que siempre. */
   .sidebar-header .marca-cliente{
-    font-size:12px; font-weight:800; color:#fff; text-align:right;
+    display:block; font-size:12px; font-weight:800; color:#fff; text-align:right;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .sidebar-toggle{
