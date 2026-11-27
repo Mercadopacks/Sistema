@@ -92,11 +92,13 @@ import { sb } from "./supabase.js";
   // debajo cuando quien está logueado es un usuario tipo_usuario="cliente"
   // (perfiles_usuario.clientes_lightdata_ids) -- el resto de los roles
   // (administrativo/repartidor/admin) no tiene un cliente propio, así que
-  // el elemento queda oculto y el sidebar se ve como siempre. Si el
-  // usuario cliente tiene más de un did_cliente asociado (caso real:
-  // alguien con acceso a varias tiendas) se listan los nombres separados
-  // por "/". Es best-effort: un error de red acá no debe romper el login,
-  // simplemente el sidebar se queda sin la leyenda.
+  // el elemento queda oculto y el sidebar se ve como siempre. Pedido
+  // 2026-11-27 (2da vuelta): si el usuario cliente tiene más de un
+  // did_cliente asociado, mostrar SOLO el primero (el "principal" --
+  // no hay un flag explícito para esto en la tabla, se toma el primer id
+  // del array tal como está guardado en clientes_lightdata_ids), no la
+  // lista completa. Es best-effort: un error de red acá no debe romper
+  // el login, simplemente el sidebar se queda sin la leyenda.
   export async function actualizarMarcaCliente(){
     const el = document.getElementById("marca-cliente");
     if(!el) return;
@@ -105,11 +107,10 @@ import { sb } from "./supabase.js";
     if(!ids.length){ el.hidden = true; el.textContent = ""; return; }
     try{
       const { data, error } = await sb.from("lightdata_clientes")
-        .select("did,nombre_fantasia").in("did", ids);
+        .select("did,nombre_fantasia").eq("did", ids[0]).maybeSingle();
       if(error) throw error;
-      const nombres = (data || []).map(c => c.nombre_fantasia).filter(Boolean);
-      if(!nombres.length){ el.hidden = true; el.textContent = ""; return; }
-      el.textContent = `By: ${nombres.join(" / ")}`;
+      if(!data || !data.nombre_fantasia){ el.hidden = true; el.textContent = ""; return; }
+      el.textContent = `By: ${data.nombre_fantasia}`;
       el.hidden = false;
     }catch(error){
       console.error("Error cargando nombre de cliente para el sidebar:", error);
