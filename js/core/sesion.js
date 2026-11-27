@@ -89,16 +89,25 @@ import { sb } from "./supabase.js";
   }
 
   // Pedido 2026-11-27: el sidebar muestra "Mercado Packs" + "By: <Cliente>"
-  // debajo cuando quien está logueado es un usuario tipo_usuario="cliente"
+  // cuando quien está logueado es un usuario tipo_usuario="cliente"
   // (perfiles_usuario.clientes_lightdata_ids) -- el resto de los roles
   // (administrativo/repartidor/admin) no tiene un cliente propio, así que
-  // el elemento queda oculto y el sidebar se ve como siempre. Pedido
-  // 2026-11-27 (2da vuelta): si el usuario cliente tiene más de un
-  // did_cliente asociado, mostrar SOLO el primero (el "principal" --
-  // no hay un flag explícito para esto en la tabla, se toma el primer id
-  // del array tal como está guardado en clientes_lightdata_ids), no la
-  // lista completa. Es best-effort: un error de red acá no debe romper
-  // el login, simplemente el sidebar se queda sin la leyenda.
+  // el elemento queda oculto y el sidebar se ve como siempre.
+  //
+  // Pedido 2026-11-27 (3ra vuelta): "mostrar solo el primero del array"
+  // (ids[0]) estaba MAL -- ese array no tiene ningún orden con significado
+  // ("principal" vs "subcuenta"), es solo el orden en que quedaron
+  // guardados los clientes tildados en el combo de Usuarios (en la
+  // práctica, el orden alfabético del catálogo). La cuenta principal real
+  // vive en `clientes_relaciones` (pantalla Configuración → Liquidaciones
+  // Vinculadas, ver scripts/migraciones/2026-11-26b_liquidacion_consolidada.sql):
+  // did_principal / did_subcuenta. Entonces: si alguno de los dids de este
+  // usuario aparece como SUBCUENTA de una relación activa, el principal a
+  // mostrar es el did_principal de esa relación (no el propio did de la
+  // subcuenta). Si ninguno de sus dids es subcuenta de nadie (caso normal,
+  // sin cuentas vinculadas), no hay ambigüedad real y se usa su propio
+  // primer did. Es best-effort: un error de red acá no debe romper el
+  // login, simplemente el sidebar se queda sin la leyenda.
   export async function actualizarMarcaCliente(){
     const el = document.getElementById("marca-cliente");
     if(!el) return;
@@ -106,8 +115,14 @@ import { sb } from "./supabase.js";
     const ids = p && p.tipo_usuario === "cliente" ? (p.clientes_lightdata_ids || []) : [];
     if(!ids.length){ el.hidden = true; el.textContent = ""; return; }
     try{
+      let didPrincipal = ids[0];
+      const { data: relacion, error: errorRelacion } = await sb.from("clientes_relaciones")
+        .select("did_principal").eq("activo", true).in("did_subcuenta", ids).limit(1).maybeSingle();
+      if(errorRelacion) throw errorRelacion;
+      if(relacion) didPrincipal = relacion.did_principal;
+
       const { data, error } = await sb.from("lightdata_clientes")
-        .select("did,nombre_fantasia").eq("did", ids[0]).maybeSingle();
+        .select("did,nombre_fantasia").eq("did", didPrincipal).maybeSingle();
       if(error) throw error;
       if(!data || !data.nombre_fantasia){ el.hidden = true; el.textContent = ""; return; }
       el.textContent = `By: ${data.nombre_fantasia}`;
