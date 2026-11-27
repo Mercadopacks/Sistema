@@ -437,6 +437,19 @@ async function abrirModalCorregirEnvio(fila){
     // de una, sin recargar la página.
     await Promise.all([cargarResumenMatrizLiquidacion(), cargarDetalleItemizadoLiquidacion()]);
   });
+  // Pedido 2026-11-27 (seguimiento): el modal no traía ningún dato para
+  // identificar DE QUÉ envío se trataba -- se agrega un bloque de solo
+  // lectura (dirección/localidad/fecha/cuenta/ID venta) arriba de los
+  // combos. abrirModalAbm no tiene un tipo de campo "solo texto", así que
+  // se inserta a mano en el contenedor que acaba de armar, en vez de
+  // tocar ese componente compartido para un caso de uso tan puntual.
+  const cont = document.getElementById("modal-abm-campos");
+  cont.insertAdjacentHTML("afterbegin", `
+    <div class="campo-span-completo" style="margin-bottom:14px; padding:10px 12px; background:var(--fondo); border-radius:8px; font-size:13px; line-height:1.5;">
+      <div><strong>${tituloTexto(fila.direccion) || "Sin dirección"}</strong>${fila.localidad ? ` · ${tituloTexto(fila.localidad)}` : ""}</div>
+      <div class="texto-muted">${formatearFecha(fila.fecha)} · ${fila.cuenta || "—"}${fila.id_venta ? ` · ID Venta ${fila.id_venta}` : ""}</div>
+    </div>
+  `);
 }
 
 async function cargarResumenMatrizLiquidacion(){
