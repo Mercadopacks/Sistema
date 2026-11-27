@@ -464,16 +464,21 @@
   .tabla-tarjeta-resumen-extras th:nth-child(1), .tabla-tarjeta-resumen-extras td:nth-child(1){width:40%;}
   .tabla-tarjeta-resumen-extras th:nth-child(2), .tabla-tarjeta-resumen-extras td:nth-child(2){width:16%;}
   .tabla-tarjeta-resumen-extras th:nth-child(3), .tabla-tarjeta-resumen-extras td:nth-child(3){width:44%;}
-  /* Fulfillment (pedido 2026-11-27, 2da vuelta): sus conceptos
-     ("Almacenamiento (pallets)", "Armado (Última Milla/Correo)") son
-     mucho más largos que "Pequeños"/"Grandes" -- con el 20% de la regla
-     de zona de arriba quedaban amontonados incluso ya envolviendo en
-     varias líneas. Más ancho para Concepto, menos para Precio/Total
-     (montos cortos acá, no necesitan tanto). */
-  .tabla-tarjeta-resumen-fulfillment th:nth-child(1), .tabla-tarjeta-resumen-fulfillment td:nth-child(1){width:38%;}
+  /* Fulfillment (pedido 2026-11-27, 3ra vuelta): el precio de depósito
+     puede ser un monto grande ("$ 540.000,00", 12 caracteres) -- con
+     22% de 310px (~68px) ni siquiera un monto así entraba en una línea
+     y se partía "$" / "540.000,00" en 2 renglones, pisándose visualmente
+     con la fila de al lado. La tarjeta de Fulfillment pasa a tener su
+     PROPIO ancho (más ancha que el resto, ver .tarjeta-fulfillment más
+     abajo) y columnas con más aire para Precio/Total. */
+  .tabla-tarjeta-resumen-fulfillment th:nth-child(1), .tabla-tarjeta-resumen-fulfillment td:nth-child(1){width:30%;}
   .tabla-tarjeta-resumen-fulfillment th:nth-child(2), .tabla-tarjeta-resumen-fulfillment td:nth-child(2){width:18%;}
-  .tabla-tarjeta-resumen-fulfillment th:nth-child(3), .tabla-tarjeta-resumen-fulfillment td:nth-child(3){width:22%;}
-  .tabla-tarjeta-resumen-fulfillment th:nth-child(4), .tabla-tarjeta-resumen-fulfillment td:nth-child(4){width:22%;}
+  .tabla-tarjeta-resumen-fulfillment th:nth-child(3), .tabla-tarjeta-resumen-fulfillment td:nth-child(3){width:26%;}
+  .tabla-tarjeta-resumen-fulfillment th:nth-child(4), .tabla-tarjeta-resumen-fulfillment td:nth-child(4){width:26%;}
+  /* Mismo flex fijo que el resto de las tarjetas, pero más ancha --
+     necesita más lugar para Precio/Total (montos de 6-7 cifras) que una
+     tarjeta de zona/extras. */
+  .tarjeta-resumen-liquidacion.tarjeta-fulfillment{flex:0 0 420px; width:420px;}
   /* Liquidación Consolidada (pedido 2026-11-26, 4ta vuelta): las tarjetas
      de una SUBCUENTA agregan una 5ta columna "Diferencia" — con
      table-layout:fixed, 5 columnas sin anchos propios quedaban casi en

@@ -538,7 +538,7 @@ function renderResumenMatrizLiquidacion(){
   // correcto.
   if(esFulfillment){
     document.getElementById("liq-cliente-tarjetas").insertAdjacentHTML("beforeend", `
-      <div class="tarjeta-resumen-liquidacion">
+      <div class="tarjeta-resumen-liquidacion tarjeta-fulfillment">
         <div class="tarjeta-resumen-header"><span>Servicio de Fulfillment</span></div>
         <table class="tabla-tarjeta-resumen tabla-tarjeta-resumen-fulfillment">
           <thead><tr><th>Concepto</th><th class="col-num">Cantidad</th><th class="col-num">Precio</th><th class="col-num">Total</th></tr></thead>
