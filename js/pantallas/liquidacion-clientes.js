@@ -8,6 +8,7 @@ import { crearComboGenerico, crearPopoverGenerico } from "../ui/combos.js";
 import { fechaART, lunesDeSemana } from "../core/fechas.js";
 import { navegarA } from "../core/navegacion.js";
 import { abmCordones } from "../admin/abm-simple.js";
+import { abrirModalAbm } from "../ui/modal-abm.js";
 import { montarVistaLiquidacion, renderResumenLiquidacion, cargarFilasDetalle, generarPdfLiquidacion } from "../ui/liquidacion-vista.js";
 
 // Bug real 2026-11-26 (seguimiento): "Monto total a pagar" y las
