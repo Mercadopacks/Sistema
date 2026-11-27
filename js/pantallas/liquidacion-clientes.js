@@ -2,7 +2,7 @@
 // guardar/confirmar/anular) — sacado de index.html en la Etapa 7b de
 // migración a ES Modules (2026-11-25).
 import { sb, rpcTodasLasFilas } from "../core/supabase.js";
-import { formatearFecha, formatearMoneda, parsearMoneda, tituloTexto } from "../core/formato.js";
+import { formatearFecha, formatearMoneda, tituloTexto } from "../core/formato.js";
 import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { crearComboGenerico, crearPopoverGenerico } from "../ui/combos.js";
 import { fechaART, lunesDeSemana } from "../core/fechas.js";
@@ -308,11 +308,16 @@ document.getElementById("tabla-liquidacion-clientes").addEventListener("click", 
     if(errMatriz || errPrecios){ console.error("Error calculando totales de liquidación:", errMatriz || errPrecios); await mostrarAviso("No se pudo calcular la liquidación."); return; }
     const t = totalesDesdeMatriz(matrizFilas);
     periodo.pallets = pallets || 0;
-    periodo.precioDespacho = (fila.registro && fila.registro.precio_despacho_periodo != null) ? fila.registro.precio_despacho_periodo : (precios?.precio_despacho_envio || 0);
-    periodo.precioDeposito = (fila.registro && fila.registro.precio_deposito_periodo != null) ? fila.registro.precio_deposito_periodo : (precios?.precio_deposito_pallet || 0);
-    const montoDespachoOverride = ((t.cantidad_envios || 0) + (t.cantidad_turbo || 0)) * periodo.precioDespacho;
-    const montoDepositoOverride = periodo.pallets * periodo.precioDeposito;
-    periodo.montoTotalCalculado = matrizFilas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0) + montoDepositoOverride + montoDespachoOverride;
+    // Pedido 2026-11-27: precio siempre el configurado (ya no editable
+    // por liquidación); cantidadCorreo viene del borrador ya cargado
+    // (mismo criterio que pallets -- para Fulfillment hace falta haber
+    // pasado por "Editar" al menos una vez).
+    periodo.cantidadCorreo = (fila.registro && fila.registro.cantidad_despacho_correo) || 0;
+    periodo.precioDespacho = precios?.precio_despacho_envio || 0;
+    periodo.precioDeposito = precios?.precio_deposito_pallet || 0;
+    const montoDespachoCalc = ((t.cantidad_envios || 0) + (t.cantidad_turbo || 0) + periodo.cantidadCorreo) * periodo.precioDespacho;
+    const montoDepositoCalc = periodo.pallets * periodo.precioDeposito;
+    periodo.montoTotalCalculado = matrizFilas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0) + montoDepositoCalc + montoDespachoCalc;
     const ok = await guardarTotalesLiquidacionCliente(periodo, t, "generada");
     if(ok) cargarLiquidacionClientes();
     return;
@@ -402,8 +407,12 @@ async function abrirPantallaLiquidacionCliente(periodo){
 
   const reg = periodo.registroExistente;
   periodo.pallets = reg ? (reg.cantidad_pallets || 0) : 0;
-  periodo.precioDespacho = reg && reg.precio_despacho_periodo != null ? reg.precio_despacho_periodo : null;
-  periodo.precioDeposito = reg && reg.precio_deposito_periodo != null ? reg.precio_deposito_periodo : null;
+  // Pedido 2026-11-27: Precio ya NO es editable por liquidación -- sale
+  // siempre de Precios por Cliente (periodo.precioDespachoConfigurado/
+  // precioDepositoConfigurado, ver cargarConfigPreciosLiquidacion()).
+  // cantidadCorreo: envíos despachados por Correo en el período -- no
+  // viene de Lightdata (que solo reporta ML), se carga a mano.
+  periodo.cantidadCorreo = reg ? (reg.cantidad_despacho_correo || 0) : 0;
 
   // Bug real 2026-11-24: cargarConfigPreciosLiquidacion() (precios de
   // Fulfillment) y cargarResumenMatrizLiquidacion() (filas) corren en
@@ -478,14 +487,21 @@ async function cargarResumenMatrizLiquidacion(){
   renderResumenMatrizLiquidacion();
 }
 
-// Pedido 2026-11-24: Almacenamiento/Despacho Unitario de Fulfillment se
-// arman acá (no vienen del RPC) porque su Precio (y opcionalmente su
-// Cantidad, para Almacenamiento) son editables POR LIQUIDACIÓN — varían
-// cada mes, no toman el precio fijo configurado en Precios por Cliente.
+// Pedido 2026-11-24: Almacenamiento/Despacho de Fulfillment se arman acá
+// (no vienen del RPC) porque sus Cantidades varían cada mes (pallets,
+// envíos despachados por Correo) y no se pueden calcular solas.
+// Pedido 2026-11-27 (seguimiento): el Precio deja de ser editable por
+// liquidación -- sale siempre de Precios por Cliente. "Despacho Unitario"
+// se separa en 2 filas: "Armado (Última Milla)" (cantidad automática,
+// sale de los envíos/turbo del período, igual que antes) y "Armado
+// (Correo)" (cantidad editable a mano -- Lightdata hoy no informa envíos
+// por Correo, así que no hay de dónde calcularla sola).
 // Rediseño 2026-11-25: las tarjetas de zona/extras las pinta el módulo
-// compartido (renderResumenLiquidacion); acá solo se arma el panel
-// aparte de Fulfillment (no es una tarjeta más — tiene inputs editables
-// y vive siempre, tenga o no cordones configurados).
+// compartido (renderResumenLiquidacion); acá se arma el panel de
+// Fulfillment con el mismo estilo (clase .tabla-tarjeta-resumen sin
+// modificador propio, mismo encabezado Concepto/Cantidad/Precio/Total
+// que las tarjetas de zona) — vive siempre, tenga o no cordones
+// configurados.
 function renderResumenMatrizLiquidacion(){
   const periodo = liquidacionClienteAbriendo;
   if(!periodo || !periodo.matrizFilas) return;
@@ -500,51 +516,54 @@ function renderResumenMatrizLiquidacion(){
     .reduce((acc, f) => acc + (Number(f.cantidad) || 0), 0)
     + (periodo.matrizFilas.find(f => f.item === "Turbos")?.cantidad || 0);
 
-  if(periodo.precioDespacho == null) periodo.precioDespacho = periodo.precioDespachoConfigurado || 0;
-  if(periodo.precioDeposito == null) periodo.precioDeposito = periodo.precioDepositoConfigurado || 0;
-  const cantidadDespacho = (t.cantidad_envios || 0) + (t.cantidad_turbo || 0);
-  const montoDespacho = cantidadDespacho * periodo.precioDespacho;
-  const montoDeposito = periodo.pallets * periodo.precioDeposito;
+  const precioDespacho = periodo.precioDespachoConfigurado || 0;
+  const precioDeposito = periodo.precioDepositoConfigurado || 0;
+  const cantidadDespachoUltimaMilla = (t.cantidad_envios || 0) + (t.cantidad_turbo || 0);
+  const cantidadCorreo = periodo.cantidadCorreo || 0;
+  const montoDespachoUltimaMilla = cantidadDespachoUltimaMilla * precioDespacho;
+  const montoDespachoCorreo = cantidadCorreo * precioDespacho;
+  const montoDeposito = periodo.pallets * precioDeposito;
+  const subtotalFulfillment = montoDeposito + montoDespachoUltimaMilla + montoDespachoCorreo;
 
   renderResumenLiquidacion("liq-cliente", periodo.matrizFilas);
 
-  // Bug real 2026-11-27: esta tarjeta vivía en #liq-cliente-combos-extra,
-  // un contenedor pensado para una fila de controles chicos
-  // (.buscar-mas-filtrar: sin wrap ni scroll propio) -- con una tarjeta
-  // de verdad adentro (tabla + inputs), se salía del ancho de la
-  // pantalla sin ningún scroll para alcanzarla. Se agrega directo adentro
-  // de #liq-cliente-tarjetas (la fila de tarjetas de zona/extras), que
-  // YA tiene el overflow-x:auto correcto para este caso.
-  // flex:0 0 320px (antes 0 0 auto) + width:320px a propósito -- bug real
-  // 2026-11-27: con flex-basis "auto", el ancho de esta tarjeta queda
-  // circular (depende del contenido) y el contenido (una <table
-  // table-layout:fixed width:100%>) depende a su vez del ancho de la
-  // tarjeta -- Chromium resuelve esa dependencia circular con un "ancho
-  // disponible" sentinel de ~1.000.000px (tarjeta Y tabla se
-  // renderizaban gigantes, corridas bien afuera de la pantalla). Un
-  // flex-basis FIJO corta el círculo: el ancho de la tarjeta ya no
-  // depende de su contenido.
+  // Bug real 2026-11-27 (ya corregido, nota histórica): esta tarjeta
+  // vivía en #liq-cliente-combos-extra (pensado para una fila de
+  // controles chicos, sin wrap ni scroll) y con flex-basis "auto" creaba
+  // una dependencia circular de ancho con la <table table-layout:fixed>
+  // de adentro (Chromium la resolvía con un ancho sentinel de
+  // ~1.000.000px). Ahora usa el mismo estilo que el resto de las
+  // tarjetas (clase por defecto, sin overrides de ancho) — mismo
+  // contenedor #liq-cliente-tarjetas, que ya tiene el overflow-x:auto
+  // correcto.
   if(esFulfillment){
     document.getElementById("liq-cliente-tarjetas").insertAdjacentHTML("beforeend", `
-      <div class="tarjeta-resumen-liquidacion" style="flex:0 0 400px; width:400px;">
+      <div class="tarjeta-resumen-liquidacion">
         <div class="tarjeta-resumen-header"><span>Servicio de Fulfillment</span></div>
-        <table class="tabla-tarjeta-resumen tabla-tarjeta-resumen-fulfillment">
+        <table class="tabla-tarjeta-resumen">
+          <thead><tr><th>Concepto</th><th class="col-num">Cantidad</th><th class="col-num">Precio</th><th class="col-num">Total</th></tr></thead>
           <tbody>
             <tr>
               <td>Almacenamiento (pallets)</td>
-              <td class="col-num"><input type="number" min="0" step="1" class="cel-input" id="liq-cliente-input-pallets" value="${periodo.pallets}" ${soloLectura ? "disabled" : ""} style="width:70px; text-align:right;" /></td>
-              <td class="col-num"><input type="text" class="cel-input" id="liq-cliente-input-precio-deposito" value="${formatearMoneda(periodo.precioDeposito)}" ${soloLectura ? "disabled" : ""} style="width:100px; text-align:right;" /></td>
+              <td class="col-num"><input type="number" min="0" step="1" class="cel-input" id="liq-cliente-input-pallets" value="${periodo.pallets}" ${soloLectura ? "disabled" : ""} style="width:60px; text-align:right;" /></td>
+              <td class="col-num">${formatearMoneda(precioDeposito)}</td>
               <td class="col-num">${formatearMoneda(montoDeposito)}</td>
             </tr>
             <tr>
-              <td>Despacho Unitario</td>
-              <td class="col-num">${cantidadDespacho}</td>
-              <td class="col-num"><input type="text" class="cel-input" id="liq-cliente-input-precio-despacho" value="${formatearMoneda(periodo.precioDespacho)}" ${soloLectura ? "disabled" : ""} style="width:100px; text-align:right;" /></td>
-              <td class="col-num">${formatearMoneda(montoDespacho)}</td>
+              <td>Armado (Última Milla)</td>
+              <td class="col-num">${cantidadDespachoUltimaMilla}</td>
+              <td class="col-num">${formatearMoneda(precioDespacho)}</td>
+              <td class="col-num">${formatearMoneda(montoDespachoUltimaMilla)}</td>
+            </tr>
+            <tr>
+              <td>Armado (Correo)</td>
+              <td class="col-num"><input type="number" min="0" step="1" class="cel-input" id="liq-cliente-input-correo" value="${cantidadCorreo}" ${soloLectura ? "disabled" : ""} style="width:60px; text-align:right;" /></td>
+              <td class="col-num">${formatearMoneda(precioDespacho)}</td>
+              <td class="col-num">${formatearMoneda(montoDespachoCorreo)}</td>
             </tr>
           </tbody>
         </table>
-        <div class="tarjeta-resumen-pie"><span>Subtotal Fulfillment</span><span>${formatearMoneda(montoDeposito + montoDespacho)}</span></div>
+        <div class="tarjeta-resumen-pie"><span>Subtotal Fulfillment</span><span>${formatearMoneda(subtotalFulfillment)}</span></div>
       </div>
     `);
   }
@@ -571,22 +590,20 @@ function renderResumenMatrizLiquidacion(){
   // tarjetas (en vivo) hasta que se le arme un snapshot propio.
   const montoTotal = (soloLectura && periodo.registroExistente)
     ? (periodo.registroExistente.monto_a_pagar || 0)
-    : periodo.matrizFilas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0) + montoDeposito + montoDespacho;
+    : periodo.matrizFilas.reduce((acc, f) => acc + (Number(f.monto) || 0), 0) + subtotalFulfillment;
   document.getElementById("liq-cliente-total-paquetes").textContent = cantidadPaquetesEnvios;
   document.getElementById("liq-cliente-monto-a-pagar").textContent = formatearMoneda(montoTotal);
   periodo.montoTotalCalculado = montoTotal;
+  periodo.precioDespacho = precioDespacho;
+  periodo.precioDeposito = precioDeposito;
 
   if(!soloLectura && esFulfillment){
     document.getElementById("liq-cliente-input-pallets").addEventListener("change", (e)=>{
       periodo.pallets = Number(e.target.value) || 0;
       renderResumenMatrizLiquidacion();
     });
-    document.getElementById("liq-cliente-input-precio-deposito").addEventListener("change", (e)=>{
-      periodo.precioDeposito = parsearMoneda(e.target.value) || 0;
-      renderResumenMatrizLiquidacion();
-    });
-    document.getElementById("liq-cliente-input-precio-despacho").addEventListener("change", (e)=>{
-      periodo.precioDespacho = parsearMoneda(e.target.value) || 0;
+    document.getElementById("liq-cliente-input-correo").addEventListener("change", (e)=>{
+      periodo.cantidadCorreo = Number(e.target.value) || 0;
       renderResumenMatrizLiquidacion();
     });
   }
@@ -595,7 +612,9 @@ function renderResumenMatrizLiquidacion(){
 // Ya NO trae totales (eso sale de totalesDesdeMatriz(), ver arriba) —
 // solo la config de precios de Fulfillment (despacho/depósito), que no
 // está en resumen_matriz_liquidacion_cliente() porque no es un total,
-// es un valor de catálogo para prellenar los inputs editables.
+// es un valor de catálogo. Pedido 2026-11-27: estos precios dejaron de
+// ser editables por liquidación -- se usan tal cual vienen de Precios
+// por Cliente, siempre.
 async function cargarConfigPreciosLiquidacion(){
   const periodo = liquidacionClienteAbriendo;
   if(!periodo || periodo.tipo_servicio !== "fulfillment") return;
@@ -608,17 +627,21 @@ async function cargarConfigPreciosLiquidacion(){
 }
 
 async function guardarTotalesLiquidacionCliente(periodo, t, estado){
+  // precio_despacho_periodo/precio_deposito_periodo: ya no son editables
+  // (siempre el precio configurado), pero se siguen guardando como foto
+  // histórica del precio vigente al momento de generar -- útil si el
+  // precio configurado cambia más adelante.
   const payload = {
     did_cliente: periodo.did_cliente, tipo_servicio: periodo.tipo_servicio,
     fecha_inicio: periodo.fecha_inicio, fecha_fin: periodo.fecha_fin,
-    estado, cantidad_pallets: periodo.pallets,
+    estado, cantidad_pallets: periodo.pallets, cantidad_despacho_correo: periodo.cantidadCorreo || 0,
     precio_despacho_periodo: periodo.precioDespacho, precio_deposito_periodo: periodo.precioDeposito,
     total_envios: t.total_envios, cantidad_envios: t.cantidad_envios,
     total_turbo: t.total_turbo, cantidad_turbo: t.cantidad_turbo,
     total_adicional: t.total_adicional, cantidad_adicional: t.cantidad_adicional,
     total_descuento: t.total_descuento, cantidad_descuento: t.cantidad_descuento,
     total_deposito: periodo.pallets * periodo.precioDeposito,
-    total_despacho: ((t.cantidad_envios || 0) + (t.cantidad_turbo || 0)) * periodo.precioDespacho,
+    total_despacho: ((t.cantidad_envios || 0) + (t.cantidad_turbo || 0) + (periodo.cantidadCorreo || 0)) * periodo.precioDespacho,
     monto_a_pagar: periodo.montoTotalCalculado,
   };
   if(estado === "generada") payload.generado_en = new Date().toISOString();

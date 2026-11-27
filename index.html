@@ -452,26 +452,17 @@
      Precio/Total (las columnas con los números más largos) se lleven más
      ancho que Tamaño/Cant., consistente en las 4 tarjetas de zona. */
   .tabla-tarjeta-resumen{table-layout:fixed;}
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) th:nth-child(1),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) td:nth-child(1){width:20%;}
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) th:nth-child(2),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) td:nth-child(2){width:13%;}
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) th:nth-child(3),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) td:nth-child(3){width:33%;}
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) th:nth-child(4),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) td:nth-child(4){width:34%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(1),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(1){width:20%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(2),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(2){width:13%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(3),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(3){width:33%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(4),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(4){width:34%;}
   .tabla-tarjeta-resumen-extras th:nth-child(1), .tabla-tarjeta-resumen-extras td:nth-child(1){width:40%;}
   .tabla-tarjeta-resumen-extras th:nth-child(2), .tabla-tarjeta-resumen-extras td:nth-child(2){width:16%;}
   .tabla-tarjeta-resumen-extras th:nth-child(3), .tabla-tarjeta-resumen-extras td:nth-child(3){width:44%;}
-  /* Tarjeta de Fulfillment (pedido 2026-11-27): su 1ra columna son
-     etiquetas largas ("Almacenamiento (pallets)", "Despacho Unitario"),
-     no un "Tamaño" corto como las tarjetas de zona — con el 20% de la
-     regla de arriba quedaban truncadas ("Almacen…"). Anchos propios para
-     esta tabla, sin tocar los de zona/extras. */
-  .tabla-tarjeta-resumen-fulfillment td:nth-child(1){width:35%; white-space:normal;}
-  .tabla-tarjeta-resumen-fulfillment td:nth-child(2){width:20%;}
-  .tabla-tarjeta-resumen-fulfillment td:nth-child(3){width:28%;}
-  .tabla-tarjeta-resumen-fulfillment td:nth-child(4){width:17%;}
   /* Liquidación Consolidada (pedido 2026-11-26, 4ta vuelta): las tarjetas
      de una SUBCUENTA agregan una 5ta columna "Diferencia" — con
      table-layout:fixed, 5 columnas sin anchos propios quedaban casi en
