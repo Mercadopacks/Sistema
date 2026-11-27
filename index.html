@@ -419,16 +419,17 @@
   .tarjetas-resumen-liquidacion-fila{
     display:flex; align-items:stretch; gap:10px; overflow-x:auto; padding-bottom:2px;
   }
-  /* Bug real 2026-11-26: con 225px de mínimo, un monto grande (6-7 cifras,
-     ej. "$ 1.274.740,00") se cortaba con ellipsis en la columna Total —
-     se sube a 260px. Ya no alcanza para que las 5 tarjetas entren siempre
-     sin scroll, pero eso es preferible a un monto ilegible: el scroll
-     horizontal del contenedor (overflow-x:auto más abajo) cubre ese
-     caso. */
+  /* Pedido 2026-11-27: antes las tarjetas usaban flex:1 1 0 (crecen/se
+     achican según cuántas entren) — con 4 tarjetas en la fila (2 zonas +
+     Extras + Fulfillment) se achicaban por debajo de un ancho legible y
+     la info quedaba amontonada/cortada. Ancho FIJO (flex-basis fijo, sin
+     grow ni shrink): el estilo de cada tarjeta queda siempre igual, haya
+     1 tarjeta o 10 — si no entran todas, el contenedor ya tiene
+     overflow-x:auto para eso (scroll horizontal), nunca apretarlas. */
   .tarjeta-resumen-liquidacion{
     background:#fff; border:1px solid var(--borde); border-radius:10px;
     display:flex; flex-direction:column; overflow:hidden;
-    flex:1 1 0; min-width:280px;
+    flex:0 0 310px; width:310px;
   }
   /* La tabla ocupa todo el alto disponible (footer "Subtotal"/"Subtotal
      Extras" siempre pegado abajo, en vez de quedar flotando a mitad de
@@ -452,17 +453,27 @@
      Precio/Total (las columnas con los números más largos) se lleven más
      ancho que Tamaño/Cant., consistente en las 4 tarjetas de zona. */
   .tabla-tarjeta-resumen{table-layout:fixed;}
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(1),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(1){width:20%;}
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(2),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(2){width:13%;}
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(3),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(3){width:33%;}
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) th:nth-child(4),
-  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras) td:nth-child(4){width:34%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) th:nth-child(1),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) td:nth-child(1){width:20%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) th:nth-child(2),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) td:nth-child(2){width:13%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) th:nth-child(3),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) td:nth-child(3){width:33%;}
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) th:nth-child(4),
+  .tabla-tarjeta-resumen:not(.tabla-tarjeta-resumen-extras):not(.tabla-tarjeta-resumen-fulfillment) td:nth-child(4){width:34%;}
   .tabla-tarjeta-resumen-extras th:nth-child(1), .tabla-tarjeta-resumen-extras td:nth-child(1){width:40%;}
   .tabla-tarjeta-resumen-extras th:nth-child(2), .tabla-tarjeta-resumen-extras td:nth-child(2){width:16%;}
   .tabla-tarjeta-resumen-extras th:nth-child(3), .tabla-tarjeta-resumen-extras td:nth-child(3){width:44%;}
+  /* Fulfillment (pedido 2026-11-27, 2da vuelta): sus conceptos
+     ("Almacenamiento (pallets)", "Armado (Última Milla/Correo)") son
+     mucho más largos que "Pequeños"/"Grandes" -- con el 20% de la regla
+     de zona de arriba quedaban amontonados incluso ya envolviendo en
+     varias líneas. Más ancho para Concepto, menos para Precio/Total
+     (montos cortos acá, no necesitan tanto). */
+  .tabla-tarjeta-resumen-fulfillment th:nth-child(1), .tabla-tarjeta-resumen-fulfillment td:nth-child(1){width:38%;}
+  .tabla-tarjeta-resumen-fulfillment th:nth-child(2), .tabla-tarjeta-resumen-fulfillment td:nth-child(2){width:18%;}
+  .tabla-tarjeta-resumen-fulfillment th:nth-child(3), .tabla-tarjeta-resumen-fulfillment td:nth-child(3){width:22%;}
+  .tabla-tarjeta-resumen-fulfillment th:nth-child(4), .tabla-tarjeta-resumen-fulfillment td:nth-child(4){width:22%;}
   /* Liquidación Consolidada (pedido 2026-11-26, 4ta vuelta): las tarjetas
      de una SUBCUENTA agregan una 5ta columna "Diferencia" — con
      table-layout:fixed, 5 columnas sin anchos propios quedaban casi en
@@ -479,13 +490,18 @@
   }
   /* Bug real 2026-11-26: con `text-overflow:ellipsis` un monto grande
      ("$ 1.882.400,00") se cortaba a "$ 1.882.40…" — recortar un número de
-     plata es engañoso, nunca aceptable, a diferencia de recortar texto
-     (nombre de tamaño/concepto, donde un "…" no cambia el significado).
-     Las columnas de moneda (Precio/Total/Importe/Cant.) pueden envolver a
-     una 2da línea en vez de perder dígitos; solo la 1ra columna (texto)
-     sigue con nowrap+ellipsis. */
+     plata es engañoso, nunca aceptable. Las columnas de moneda (Precio/
+     Total/Importe/Cant.) envuelven a una 2da línea en vez de perder
+     dígitos.
+     Pedido 2026-11-27: la 1ra columna (texto) TAMBIÉN deja el
+     nowrap+ellipsis de antes -- esa regla asumía que acá solo iban
+     palabras cortas tipo "Pequeños"/"Grandes" (donde un "…" no cambia el
+     significado), pero la tarjeta de Fulfillment agregó conceptos largos
+     ("Almacenamiento (pallets)") que SÍ perdían significado al
+     truncarse ("Almace…"). Ahora envuelve a varias líneas, igual que las
+     columnas de moneda -- consistente para cualquier texto, corto o largo. */
   .tabla-tarjeta-resumen td:not(.col-num), .tabla-tarjeta-resumen th:not(.col-num){
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    white-space:normal; word-break:break-word; line-height:1.25;
   }
   .tabla-tarjeta-resumen td.col-num{white-space:normal; word-break:break-word; line-height:1.25;}
   .tabla-tarjeta-resumen th{
