@@ -175,9 +175,18 @@
   /* Solo para usuarios tipo_usuario="cliente" -- ver actualizarMarcaCliente()
      en sesion.js. Para el resto (administrativo/repartidor/admin) este
      elemento queda hidden y el sidebar se ve igual que siempre. */
+  /* Causa real del "se corta la E final" (reportado 2 veces): es texto
+     en cursiva -- el tilde/trazo final de una letra itálica pinta tinta
+     un poco más allá de su ancho de avance lógico (scrollWidth medía
+     IGUAL que clientWidth, osea el layout no detectaba overflow alguno,
+     pero el recorte visual de overflow:hidden igual se comía ese
+     "desborde" de tinta de la itálica). El margin-right del bloque de
+     afuera no alcanza porque el recorte pasa DENTRO de esta misma caja
+     -- hace falta padding-right (adentro del propio overflow:hidden)
+     para darle margen a ese desborde antes del borde de recorte. */
   .sidebar-header .marca-cliente{
     display:block; font-size:12px; font-weight:800; font-style:italic; color:#fff; text-align:right;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; padding-right:6px;
   }
   .sidebar-toggle{
     background:transparent; color:#aaa; padding:8px; margin-left:auto; flex-shrink:0;
