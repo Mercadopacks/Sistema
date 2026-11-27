@@ -365,14 +365,16 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
               </span>
             </div>
           </div>
+          ${opciones.conAcciones ? `
+            <button type="button" class="btn-icono" id="${prefijo}-btn-guardar-borrador" data-tip="Guardar borrador" hidden><i data-lucide="save"></i></button>
+            <button type="button" class="btn-icono btn-icono-dorado" id="${prefijo}-btn-confirmar" data-tip="Confirmar liquidación" hidden><i data-lucide="check-check"></i></button>
+          ` : ""}
           <button type="button" class="btn-icono btn-icono-dorado" id="${prefijo}-btn-pdf-descargar" data-tip="Descargar PDF"><i data-lucide="download"></i></button>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <div id="${prefijo}-combos-extra" class="buscar-mas-filtrar" style="margin-bottom:10px;"></div>
-
       <div class="liq-resumen-section-header">
         <span class="liq-resumen-section-titulo">Resumen por zonas y extras</span>
         <span class="tarjeta-resumen-aviso" id="${prefijo}-aviso-cero" hidden>
@@ -382,13 +384,6 @@ export function montarVistaLiquidacion(contenedorId, prefijo, opciones){
       <div class="tarjetas-resumen-liquidacion-wrap">
         <div class="tarjetas-resumen-liquidacion-fila" id="${prefijo}-tarjetas"></div>
       </div>
-
-      ${opciones.conAcciones ? `
-        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-          <button type="button" class="btn-secundario-modal" id="${prefijo}-btn-guardar-borrador" hidden>Guardar borrador</button>
-          <button type="button" class="btn-primario" id="${prefijo}-btn-confirmar" hidden>Confirmar liquidación</button>
-        </div>
-      ` : ""}
     </div>
 
     <div class="card">
@@ -485,42 +480,153 @@ function armarDetalleDiarioPdf(filasDetalle, zonas){
   });
 }
 
+// Paleta de marca (Manual de Marca Mercado Packs, ver index.html --dorado/
+// --negro) en RGB para jsPDF, que no entiende variables CSS ni hex directo
+// en todas sus APIs.
+const PDF_DORADO = [245, 177, 6];   // #F5B106
+const PDF_NEGRO = [17, 17, 17];     // #111
+const PDF_NEGRO_SOFT = [40, 40, 40];
+const PDF_GRIS_TEXTO = [110, 110, 110];
+const PDF_GRIS_CLARO = [239, 239, 239]; // #EFEFEF, fondo secundario del manual
+
+// El logo es un <img> normal del propio index.html (misma imagen que usa
+// el sidebar) — se espera a que termine de cargar (puede no estarlo
+// todavía si el PDF se pide apenas se entra a la pantalla) antes de
+// pasárselo a doc.addImage(), que necesita el elemento ya resuelto.
+function cargarLogoPdf(){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = "assets/logo-mp.png";
+  });
+}
+
+// Encabezado de marca + pie de página, iguales en todas las páginas del
+// PDF — se registra como callback de autoTable (`didDrawPage`) en vez de
+// dibujarse una sola vez al final, porque el detalle diario puede ocupar
+// más de una página y cada una necesita su propio encabezado/pie.
+function dibujarMarcoPagina(doc, logo, cliente, servicio, fechaInicio, fechaFin){
+  const anchoPagina = doc.internal.pageSize.getWidth();
+  const altoPagina = doc.internal.pageSize.getHeight();
+
+  // Banda superior (igual altura/estilo en toda página) con logo +
+  // nombre de marca a la izquierda, tipo de liquidación a la derecha.
+  doc.setFillColor(...PDF_NEGRO);
+  doc.roundedRect(10, 8, anchoPagina - 20, 20, 2, 2, "F");
+  if(logo) doc.addImage(logo, "PNG", 14, 11.5, 13, 13);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont(undefined, "bold"); doc.setFontSize(13);
+  doc.text("MERCADO", 31, 16.5);
+  doc.setTextColor(...PDF_DORADO);
+  doc.text("PACKS", 31 + doc.getTextWidth("MERCADO "), 16.5);
+  doc.setTextColor(200, 200, 200);
+  doc.setFont(undefined, "normal"); doc.setFontSize(7);
+  doc.text("Av. San Juan Bautista de la Salle 2262, CABA · (+54) 9 11 3305 1991", 31, 21.5);
+
+  const tipoLabel = servicio === "fulfillment" ? "Liquidación Mensual" : "Liquidación Semanal";
+  doc.setFont(undefined, "bold"); doc.setFontSize(10);
+  doc.setTextColor(...PDF_DORADO);
+  doc.text(tipoLabel.toUpperCase(), anchoPagina - 14, 16, { align: "right" });
+  doc.setTextColor(200, 200, 200); doc.setFont(undefined, "normal"); doc.setFontSize(8);
+  doc.text(`${formatearFecha(fechaInicio)} a ${formatearFecha(fechaFin)}`, anchoPagina - 14, 21.5, { align: "right" });
+
+  // Pie de página: nombre del cliente (repetido, útil si se imprime
+  // suelta una hoja del medio) + número de página.
+  const pagina = doc.internal.getNumberOfPages();
+  doc.setFontSize(7.5); doc.setTextColor(...PDF_GRIS_TEXTO); doc.setFont(undefined, "normal");
+  doc.text(`Mercado Packs · Liquidación ${tituloTexto(cliente) || ""}`, 10, altoPagina - 7);
+  doc.text(`Página ${pagina}`, anchoPagina - 10, altoPagina - 7, { align: "right" });
+}
+
 export async function generarPdfLiquidacion({ cliente, servicio, fechaInicio, fechaFin, filasResumen, filasDetalle, totalPaquetes, montoAPagar, accion }){
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  // Pedido 2026-11-27: formato vertical en vez de horizontal -- la tabla
+  // de detalle diario (la que más columnas tiene, 2 por cordón) es la que
+  // más sufre el cambio, pero con fuente chica (6.5pt) entra igual hasta
+  // 4-5 cordones; si el cliente tuviera más, autoTable sigue el salto de
+  // página solo (su comportamiento de siempre), nunca recorta contenido.
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const anchoPagina = doc.internal.pageSize.getWidth();
   const zonas = agruparFilasResumen(filasResumen || []).filter(g => g.grupo !== "Extras").map(g => g.grupo);
+  const logo = await cargarLogoPdf();
+  const dibujarMarco = () => dibujarMarcoPagina(doc, logo, cliente, servicio, fechaInicio, fechaFin);
 
-  doc.setFontSize(14); doc.setFont(undefined, "bold");
-  doc.text("Mercadopacks S.R.L", 10, 12);
-  doc.setFontSize(8); doc.setFont(undefined, "normal");
-  doc.text("Av. San Juan Bautista de la Salle 2262, CABA. · Tel. (+54) 9 11 33051991", 10, 17);
+  dibujarMarco();
 
-  doc.setFontSize(9);
-  doc.text(`Fecha Inicio: ${formatearFecha(fechaInicio)}`, 200, 12);
-  doc.text(`Fecha Fin: ${formatearFecha(fechaFin)}`, 240, 12);
-  doc.setFont(undefined, "bold");
-  doc.text(`Cliente: ${tituloTexto(cliente) || ""}`, 200, 18);
-  doc.setFont(undefined, "normal");
+  // Línea "Cliente" + chip de servicio, debajo de la banda de marca.
+  doc.setTextColor(...PDF_NEGRO);
+  doc.setFont(undefined, "bold"); doc.setFontSize(13);
+  doc.text(tituloTexto(cliente) || "", 10, 36);
+  doc.setFont(undefined, "normal"); doc.setFontSize(9);
+  doc.setTextColor(...PDF_GRIS_TEXTO);
+  doc.text(servicio === "fulfillment" ? "Servicio de Fulfillment" : "Servicio de Última Milla", 10, 41);
 
-  doc.setFontSize(11); doc.setFont(undefined, "bold");
-  const tipoLabel = servicio === "fulfillment" ? "MENSUAL" : "SEMANAL";
-  doc.text(`LIQUIDACION ${tipoLabel} - DETALLE DIARIO`, 148.5, 26, { align: "center" });
-  doc.setFont(undefined, "normal");
+  // Las mismas 2 tarjetas destacadas que ya se ven en pantalla (Total
+  // envíos / Monto total a pagar), mismo criterio visual (fondo negro,
+  // número en dorado) — para que el PDF se sienta igual que la pantalla
+  // de la que sale.
+  const anchoTarjeta = (anchoPagina - 20 - 6) / 2;
+  const yTarjetas = 45;
+  [
+    { label: "TOTAL ENVÍOS", valor: String(totalPaquetes || 0) },
+    { label: "MONTO TOTAL A PAGAR", valor: formatearMoneda(montoAPagar || 0) },
+  ].forEach((t, i) => {
+    const x = 10 + i * (anchoTarjeta + 6);
+    doc.setFillColor(...PDF_NEGRO_SOFT);
+    doc.roundedRect(x, yTarjetas, anchoTarjeta, 16, 2, 2, "F");
+    doc.setTextColor(200, 200, 200); doc.setFont(undefined, "bold"); doc.setFontSize(7.5);
+    doc.text(t.label, x + 5, yTarjetas + 6);
+    doc.setTextColor(...PDF_DORADO); doc.setFont(undefined, "bold"); doc.setFontSize(13);
+    doc.text(t.valor, x + 5, yTarjetas + 12.5);
+  });
+
+  let y = yTarjetas + 16 + 8;
+  doc.setTextColor(...PDF_NEGRO); doc.setFont(undefined, "bold"); doc.setFontSize(10);
+  doc.text("RESUMEN POR ZONAS Y EXTRAS", 10, y);
+  y += 4;
+
+  // "Grupo" combinado con rowSpan real (no texto vacío repetido) — una
+  // sola celda alta por grupo, igual que antes.
+  const filasResumenPdf = [];
+  agruparFilasResumen(filasResumen || []).forEach(g => {
+    g.filas.forEach((f, i) => {
+      const fila = [f.item, f.cantidad == null ? "-" : f.cantidad, f.precio == null ? "-" : formatearMoneda(f.precio), formatearMoneda(f.monto)];
+      if(i === 0) fila.unshift({ content: g.grupo, rowSpan: g.filas.length, styles: { valign: "middle", fontStyle: "bold" } });
+      filasResumenPdf.push(fila);
+    });
+  });
+  doc.autoTable({
+    startY: y,
+    margin: { top: 32, bottom: 14, left: 10, right: 10 },
+    head: [["Grupo", "Item", "Cant.", "Precio Unit.", "Monto"]],
+    body: filasResumenPdf,
+    styles: { fontSize: 8, cellPadding: 2.2, textColor: PDF_NEGRO },
+    headStyles: { fillColor: PDF_DORADO, textColor: PDF_NEGRO, fontStyle: "bold" },
+    alternateRowStyles: { fillColor: PDF_GRIS_CLARO },
+    theme: "grid",
+    didDrawPage: dibujarMarco,
+  });
+
+  y = (doc.lastAutoTable ? doc.lastAutoTable.finalY : y) + 10;
+  doc.setTextColor(...PDF_NEGRO); doc.setFont(undefined, "bold"); doc.setFontSize(10);
+  doc.text("DETALLE DIARIO", 10, y);
+  y += 4;
 
   const diario = armarDetalleDiarioPdf(filasDetalle || [], zonas);
-  // "Pequeños"/"Grandes" van con colSpan/rowSpan reales (igual que el
-  // PDF de referencia: "PEQUEÑOS" ocupa una sola celda ancha arriba de
-  // sus zonas, no se repite por cada una).
+  // "Pequeños"/"Grandes" van con colSpan/rowSpan reales -- una sola celda
+  // ancha arriba de sus zonas, no se repite por cada una.
   doc.autoTable({
-    startY: 30,
+    startY: y,
+    margin: { top: 32, bottom: 14, left: 10, right: 10 },
     head: [
       [
         { content: "Fecha", rowSpan: 2 },
         { content: "Pequeños", colSpan: zonas.length, styles: { halign: "center" } },
         { content: "Grandes", colSpan: zonas.length, styles: { halign: "center" } },
-        { content: "Total Paq.", rowSpan: 2 },
+        { content: "Total", rowSpan: 2 },
         { content: "Turbo", rowSpan: 2 },
-        { content: "Adicional ($)", rowSpan: 2 },
+        { content: "Adicional", rowSpan: 2 },
       ],
       [...zonas, ...zonas],
     ],
@@ -532,44 +638,12 @@ export async function generarPdfLiquidacion({ cliente, servicio, fechaInicio, fe
       d.turbo || "",
       d.adicional ? formatearMoneda(d.adicional) : "",
     ]),
-    styles: { fontSize: 7, cellPadding: 1.5, halign: "center" },
+    styles: { fontSize: 6.5, cellPadding: 1.3, halign: "center", textColor: PDF_NEGRO },
     columnStyles: { 0: { halign: "left" } },
-    headStyles: { fillColor: [246, 190, 5], textColor: [17, 17, 17], halign: "center" },
+    headStyles: { fillColor: PDF_DORADO, textColor: PDF_NEGRO, halign: "center", fontStyle: "bold" },
+    alternateRowStyles: { fillColor: PDF_GRIS_CLARO },
     theme: "grid",
-  });
-
-  let y = (doc.lastAutoTable ? doc.lastAutoTable.finalY : 60) + 10;
-  doc.setFontSize(11); doc.setFont(undefined, "bold");
-  doc.text("RESUMEN", 148.5, y, { align: "center" });
-  doc.setFont(undefined, "normal");
-  y += 4;
-
-  // "Grupo" combinado con rowSpan real (no texto vacío repetido) — una
-  // sola celda alta por grupo, igual que el PDF de referencia.
-  const filasResumenPdf = [];
-  agruparFilasResumen(filasResumen || []).forEach(g => {
-    g.filas.forEach((f, i) => {
-      const fila = [f.item, f.cantidad == null ? "-" : f.cantidad, f.precio == null ? "-" : formatearMoneda(f.precio), formatearMoneda(f.monto)];
-      if(i === 0) fila.unshift({ content: g.grupo, rowSpan: g.filas.length, styles: { valign: "middle", fontStyle: "bold" } });
-      filasResumenPdf.push(fila);
-    });
-  });
-  doc.autoTable({
-    startY: y,
-    head: [["Grupo", "Item", "Total Período", "Precio Unitario", "Monto Total"]],
-    body: filasResumenPdf,
-    styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [246, 190, 5], textColor: [17, 17, 17] },
-    theme: "grid",
-  });
-
-  y = (doc.lastAutoTable ? doc.lastAutoTable.finalY : y) + 6;
-  doc.autoTable({
-    startY: y,
-    body: [["TOTAL PAQUETES", String(totalPaquetes || 0), "TOTAL A PAGAR", formatearMoneda(montoAPagar || 0)]],
-    styles: { fontSize: 10, fontStyle: "bold", cellPadding: 3 },
-    bodyStyles: { fillColor: [246, 190, 5], textColor: [17, 17, 17] },
-    theme: "grid",
+    didDrawPage: dibujarMarco,
   });
 
   const nombreArchivo = `Liquidacion ${tituloTexto(cliente) || ""} ${fechaInicio} a ${fechaFin}.pdf`;

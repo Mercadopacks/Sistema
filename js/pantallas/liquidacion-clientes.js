@@ -508,29 +508,46 @@ function renderResumenMatrizLiquidacion(){
 
   renderResumenLiquidacion("liq-cliente", periodo.matrizFilas);
 
-  const contCombosExtra = document.getElementById("liq-cliente-combos-extra");
-  contCombosExtra.innerHTML = !esFulfillment ? "" : `
-    <div class="tarjeta-resumen-liquidacion" style="flex:0 0 auto; min-width:320px;">
-      <div class="tarjeta-resumen-header"><span>Servicio de Fulfillment</span></div>
-      <table class="tabla-tarjeta-resumen">
-        <tbody>
-          <tr>
-            <td>Almacenamiento (pallets)</td>
-            <td class="col-num"><input type="number" min="0" step="1" class="cel-input" id="liq-cliente-input-pallets" value="${periodo.pallets}" ${soloLectura ? "disabled" : ""} style="width:70px; text-align:right;" /></td>
-            <td class="col-num"><input type="text" class="cel-input" id="liq-cliente-input-precio-deposito" value="${formatearMoneda(periodo.precioDeposito)}" ${soloLectura ? "disabled" : ""} style="width:100px; text-align:right;" /></td>
-            <td class="col-num">${formatearMoneda(montoDeposito)}</td>
-          </tr>
-          <tr>
-            <td>Despacho Unitario</td>
-            <td class="col-num">${cantidadDespacho}</td>
-            <td class="col-num"><input type="text" class="cel-input" id="liq-cliente-input-precio-despacho" value="${formatearMoneda(periodo.precioDespacho)}" ${soloLectura ? "disabled" : ""} style="width:100px; text-align:right;" /></td>
-            <td class="col-num">${formatearMoneda(montoDespacho)}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="tarjeta-resumen-pie"><span>Subtotal Fulfillment</span><span>${formatearMoneda(montoDeposito + montoDespacho)}</span></div>
-    </div>
-  `;
+  // Bug real 2026-11-27: esta tarjeta vivía en #liq-cliente-combos-extra,
+  // un contenedor pensado para una fila de controles chicos
+  // (.buscar-mas-filtrar: sin wrap ni scroll propio) -- con una tarjeta
+  // de verdad adentro (tabla + inputs), se salía del ancho de la
+  // pantalla sin ningún scroll para alcanzarla. Se agrega directo adentro
+  // de #liq-cliente-tarjetas (la fila de tarjetas de zona/extras), que
+  // YA tiene el overflow-x:auto correcto para este caso.
+  // flex:0 0 320px (antes 0 0 auto) + width:320px a propósito -- bug real
+  // 2026-11-27: con flex-basis "auto", el ancho de esta tarjeta queda
+  // circular (depende del contenido) y el contenido (una <table
+  // table-layout:fixed width:100%>) depende a su vez del ancho de la
+  // tarjeta -- Chromium resuelve esa dependencia circular con un "ancho
+  // disponible" sentinel de ~1.000.000px (tarjeta Y tabla se
+  // renderizaban gigantes, corridas bien afuera de la pantalla). Un
+  // flex-basis FIJO corta el círculo: el ancho de la tarjeta ya no
+  // depende de su contenido.
+  if(esFulfillment){
+    document.getElementById("liq-cliente-tarjetas").insertAdjacentHTML("beforeend", `
+      <div class="tarjeta-resumen-liquidacion" style="flex:0 0 400px; width:400px;">
+        <div class="tarjeta-resumen-header"><span>Servicio de Fulfillment</span></div>
+        <table class="tabla-tarjeta-resumen tabla-tarjeta-resumen-fulfillment">
+          <tbody>
+            <tr>
+              <td>Almacenamiento (pallets)</td>
+              <td class="col-num"><input type="number" min="0" step="1" class="cel-input" id="liq-cliente-input-pallets" value="${periodo.pallets}" ${soloLectura ? "disabled" : ""} style="width:70px; text-align:right;" /></td>
+              <td class="col-num"><input type="text" class="cel-input" id="liq-cliente-input-precio-deposito" value="${formatearMoneda(periodo.precioDeposito)}" ${soloLectura ? "disabled" : ""} style="width:100px; text-align:right;" /></td>
+              <td class="col-num">${formatearMoneda(montoDeposito)}</td>
+            </tr>
+            <tr>
+              <td>Despacho Unitario</td>
+              <td class="col-num">${cantidadDespacho}</td>
+              <td class="col-num"><input type="text" class="cel-input" id="liq-cliente-input-precio-despacho" value="${formatearMoneda(periodo.precioDespacho)}" ${soloLectura ? "disabled" : ""} style="width:100px; text-align:right;" /></td>
+              <td class="col-num">${formatearMoneda(montoDespacho)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="tarjeta-resumen-pie"><span>Subtotal Fulfillment</span><span>${formatearMoneda(montoDeposito + montoDespacho)}</span></div>
+      </div>
+    `);
+  }
 
   // Bug real 2026-11-26: "Monto total a pagar" salía de calcular_totales_
   // liquidacion_cliente() — una consulta SQL independiente de la que arma
