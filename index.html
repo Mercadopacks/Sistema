@@ -99,7 +99,39 @@
      contenido (bug real reportado 2026-11-16). Ver #contenido y main más
      abajo para el scroll interno real. */
   html, body{height:100%;}
-  #app-view{display:flex; height:100vh; overflow:hidden;}
+  #app-view{display:flex; height:100vh; overflow:hidden; opacity:0; transition:opacity .2s ease;}
+  #app-view.visible{opacity:1;}
+
+  /* Pedido 2026-11-27: antes, entre cerrar el login y mostrar la app, no
+     había NADA en pantalla (fondo liso) mientras se esperaba el perfil del
+     usuario — se sentía "roto"/lento aunque tardara poco. Este loader se
+     muestra en ese hueco (y en la carga inicial de la página, mientras se
+     decide si hay sesión activa) y desaparece con un fade cuando #app-view
+     ya está listo para mostrarse (o cuando se vuelve al login). */
+  #boot-loader{
+    position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:14px; background:var(--fondo); z-index:50;
+  }
+  #boot-loader img{width:56px; height:56px; animation:boot-pulso 1.1s ease-in-out infinite;}
+  #boot-loader.oculto{display:none;}
+  @keyframes boot-pulso{
+    0%, 100%{opacity:.45; transform:scale(.94);}
+    50%{opacity:1; transform:scale(1);}
+  }
+
+  /* Skeleton genérico (shimmer) para contenido que todavía no llegó —
+     pedido 2026-11-27: antes las tarjetas del dashboard quedaban con el
+     cuerpo vacío (blanco) hasta que los datos resolvían y "aparecían" de
+     golpe; esto da una señal de carga en vez de un vacío sin explicación. */
+  .skeleton-linea{
+    height:14px; border-radius:6px; margin:6px 0;
+    background:linear-gradient(90deg, #e9e7e1 25%, #f3f1ec 37%, #e9e7e1 63%);
+    background-size:400% 100%; animation:skeleton-shimmer 1.4s ease infinite;
+  }
+  @keyframes skeleton-shimmer{
+    0%{background-position:100% 50%;}
+    100%{background-position:0 50%;}
+  }
 
   .sidebar{
     width:var(--sidebar-w); flex-shrink:0; background:var(--negro); color:#fff;
@@ -956,6 +988,8 @@
 </head>
 <body>
 
+<div id="boot-loader"><img src="assets/logo-mp.png" alt="Mercado Packs" /></div>
+
 <div id="login-view">
   <div class="caja">
     <div class="marca-row">
@@ -1072,7 +1106,15 @@
           </span>
         </div>
 
-        <div class="mini-kpis" id="mini-kpis"></div>
+        <div class="mini-kpis" id="mini-kpis">
+          <!-- Pedido 2026-11-27: skeleton de arranque -- cargarResumenEnvios()
+               pisa esto entero con innerHTML en cuanto resuelve, así que no
+               hace falta limpiarlo "a mano". -->
+          <div class="mini-kpi"><div class="skeleton-linea" style="width:60%;"></div><div class="skeleton-linea" style="width:40%; height:22px;"></div></div>
+          <div class="mini-kpi"><div class="skeleton-linea" style="width:60%;"></div><div class="skeleton-linea" style="width:40%; height:22px;"></div></div>
+          <div class="mini-kpi"><div class="skeleton-linea" style="width:60%;"></div><div class="skeleton-linea" style="width:40%; height:22px;"></div></div>
+          <div class="mini-kpi"><div class="skeleton-linea" style="width:60%;"></div><div class="skeleton-linea" style="width:40%; height:22px;"></div></div>
+        </div>
 
         <div class="chips" id="report-tabs-envios">
           <button class="chip activo" data-tab="horas">Entregas por hora</button>
@@ -1084,7 +1126,9 @@
         <div class="card" id="panel-horas">
           <h3 style="margin-top:0;" id="titulo-chart-horas">Entregas por hora</h3>
           <p class="mini-sub" id="sub-chart-horas"></p>
-          <div id="chart-horas"></div>
+          <div id="chart-horas">
+            <div class="skeleton-linea" style="width:100%; height:180px; border-radius:10px;"></div>
+          </div>
         </div>
 
         <div class="card" id="panel-cruce" hidden>
@@ -2676,6 +2720,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
   const loginForm = document.getElementById("login-form");
   const loginError = document.getElementById("login-error");
   const logoutBtn = document.getElementById("logout-btn");
+  const bootLoader = document.getElementById("boot-loader");
 
   // Supabase devuelve mensajes en inglés y, a propósito, no distingue
   // "no existe el usuario" de "contraseña incorrecta" (evita que alguien
@@ -2717,6 +2762,17 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
   // perfil, y mostraba el sidebar completo de una, sin esperar nada.
   let cargaInicialPromise = null;
 
+  // Pedido 2026-11-27: mientras se espera sesión/perfil (getSession() al
+  // abrir la página, o cargarPerfilSesion() al loguearse) ya no queda la
+  // pantalla sin nada — bootLoader (logo pulsando, mismo fondo de marca)
+  // cubre ese hueco. Se oculta recién cuando login o app quedan listos
+  // para mostrarse, con un fade en vez de un corte seco.
+  function mostrarAppView(){
+    appView.hidden = false;
+    bootLoader.classList.add("oculto");
+    requestAnimationFrame(()=> appView.classList.add("visible"));
+  }
+
   async function mostrarApp(session){
     loginView.hidden = true;
     if(!appYaMostrada){
@@ -2724,7 +2780,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
       cargaInicialPromise = (async () => {
         await cargarPerfilSesion(session);
         if(stateSesion.bloqueado) return; // cargarPerfilSesion ya deslogueó
-        appView.hidden = false;
+        mostrarAppView();
         actualizarIndicadorUsuario(session && session.user ? session.user.email : "—");
         seleccionarVista(primeraVistaPermitida());
         // Vehículos/Zonas/Turnos/Localidades se usan en los modales de
@@ -2740,14 +2796,16 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
     } else {
       if(cargaInicialPromise) await cargaInicialPromise;
       if(stateSesion.bloqueado) return;
-      appView.hidden = false;
+      mostrarAppView();
       actualizarIndicadorUsuario(session && session.user ? session.user.email : "—");
     }
   }
 
   function mostrarLogin(){
     appView.hidden = true;
+    appView.classList.remove("visible");
     loginView.hidden = false;
+    bootLoader.classList.add("oculto");
     appYaMostrada = false;
   }
 
@@ -2756,8 +2814,20 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
     loginError.textContent = "";
     const email = document.getElementById("login-email").value.trim();
     const password = document.getElementById("login-password").value;
+    // Pedido 2026-11-27: desde que se envía el login hasta que aplicarPermisosVistas()
+    // termina (signInWithPassword + cargarPerfilSesion), antes no había
+    // ningún indicador — loginView ya se oculta en mostrarApp() pero
+    // appView todavía no se muestra, así que quedaba una pantalla sin
+    // nada. bootLoader cubre ese tramo también.
+    loginView.hidden = true;
+    bootLoader.classList.remove("oculto");
     const { data: loginData, error } = await sb.auth.signInWithPassword({ email, password });
-    if(error){ loginError.textContent = mensajeErrorLogin(error); return; }
+    if(error){
+      bootLoader.classList.add("oculto");
+      loginView.hidden = false;
+      loginError.textContent = mensajeErrorLogin(error);
+      return;
+    }
     mostrarApp(loginData.session);
   });
 
