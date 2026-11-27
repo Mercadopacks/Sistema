@@ -6,7 +6,7 @@
 import { sb } from "../core/supabase.js";
 import { tituloTexto, formatearMoneda, parsearMoneda } from "../core/formato.js";
 import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
-import { crearComboGenerico, crearMultiSelectGenerico } from "../ui/combos.js";
+import { crearComboGenerico, crearMultiSelectGenerico, crearPopoverGenerico } from "../ui/combos.js";
 import { abmCordones, abmTamanosPaquete } from "./abm-simple.js";
 import { abmTurnos } from "./abm-turnos.js";
 import { nombreCliente } from "../core/catalogos.js";
@@ -18,6 +18,8 @@ import { nombreCliente } from "../core/catalogos.js";
   // cargar para no pedir las cuentas de vuelta en cada "Ver detalle".
   let adminClientesData = [];
   let adminClientesBusqueda = "";
+  // Pedido 2026-11-27: botón "Filtrar" (mismo estilo/funcionalidad que Repartidores).
+  let filtroHabilitado = "", filtroTipoServicio = "";
   // Solo la CANTIDAD de cuentas por cliente se carga de entrada (columna
   // liviana, un solo `did_cliente` por fila) — las 496 filas completas
   // (con las 7 columnas de IDs externos) se piden recién al abrir el
@@ -75,6 +77,13 @@ import { nombreCliente } from "../core/catalogos.js";
         (c.codigo || "").toLowerCase().includes(q)
       );
     }
+    if(filtroHabilitado) filas = filas.filter(c => (filtroHabilitado === "si") === !!c.habilitado);
+    if(filtroTipoServicio){
+      filas = filas.filter(c => {
+        const cab = preciosClienteCabeceraPorDid[c.did];
+        return filtroTipoServicio === "sin-configurar" ? !cab : (cab && cab.tipo_servicio === filtroTipoServicio);
+      });
+    }
     const tbody = document.getElementById("tabla-admin-clientes");
     if(!filas.length){
       tbody.innerHTML = `<tr><td colspan="7" class="sin-datos">Sin clientes cargados — ¿corrió ya sincronizar_clientes_lightdata.py?</td></tr>`;
@@ -107,6 +116,9 @@ import { nombreCliente } from "../core/catalogos.js";
     adminClientesBusqueda = e.target.value.trim().toLowerCase();
     renderAdminClientes();
   });
+  crearPopoverGenerico("popover-filtros-admin-clientes");
+  crearComboGenerico("combo-habilitado-admin-clientes", (valor)=>{ filtroHabilitado = valor; renderAdminClientes(); });
+  crearComboGenerico("combo-tipo-servicio-admin-clientes", (valor)=>{ filtroTipoServicio = valor; renderAdminClientes(); });
 
   async function abrirDetalleCliente(did){
     const c = adminClientesData.find(x => String(x.did) === String(did));

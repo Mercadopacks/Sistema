@@ -4,6 +4,7 @@
 import { sb } from "../core/supabase.js";
 import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { abrirModalAbm } from "../ui/modal-abm.js";
+import { crearComboGenerico, crearPopoverGenerico } from "../ui/combos.js";
 
   // ABM de Tipos de extra/descuento (pedido 2026-11-23, liquidación de
   // clientes): casi igual a crearAbmSimple pero con un campo extra
@@ -14,6 +15,8 @@ import { abrirModalAbm } from "../ui/modal-abm.js";
     let datos = [];
     let busqueda = "";
     let cargado = false;
+    // Pedido 2026-11-27: botón "Filtrar" (mismo estilo/funcionalidad que Repartidores).
+    let filtroSigno = "", filtroAplicaA = "", filtroActivo = "";
 
     async function cargar(forzar){
       if(cargado && !forzar) return;
@@ -27,6 +30,9 @@ import { abrirModalAbm } from "../ui/modal-abm.js";
     function render(){
       let filas = datos;
       if(busqueda) filas = filas.filter(f => (f.nombre || "").toLowerCase().includes(busqueda));
+      if(filtroSigno) filas = filas.filter(f => f.signo === filtroSigno);
+      if(filtroAplicaA) filas = filas.filter(f => f.aplica_a === filtroAplicaA);
+      if(filtroActivo) filas = filas.filter(f => (filtroActivo === "si") === !!f.activo);
       const tbody = document.getElementById("tabla-admin-tipos-extra");
       if(!filas.length){
         tbody.innerHTML = `<tr><td colspan="7" class="sin-datos">Sin tipos cargados.</td></tr>`;
@@ -117,6 +123,10 @@ import { abrirModalAbm } from "../ui/modal-abm.js";
       busqueda = e.target.value.toLowerCase();
       render();
     });
+    crearPopoverGenerico("popover-filtros-admin-tipos-extra");
+    crearComboGenerico("combo-signo-admin-tipos-extra", (valor)=>{ filtroSigno = valor; render(); });
+    crearComboGenerico("combo-aplica-a-admin-tipos-extra", (valor)=>{ filtroAplicaA = valor; render(); });
+    crearComboGenerico("combo-activo-admin-tipos-extra", (valor)=>{ filtroActivo = valor; render(); });
     document.getElementById("btn-agregar-tipo-extra").addEventListener("click", abrirAlta);
     document.getElementById("tabla-admin-tipos-extra").addEventListener("click", (e)=>{
       const btnEditar = e.target.closest(".btn-icono-chico.editar");

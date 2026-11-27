@@ -5,11 +5,23 @@
 import { sb } from "../core/supabase.js";
 import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { abrirModalAbm } from "../ui/modal-abm.js";
+import { crearComboGenerico, crearPopoverGenerico } from "../ui/combos.js";
 
   // ----- Fábrica de ABM simple (id + nombre + activo): Vehículos, Zonas, Localidades -----
   function crearAbmSimple({ tabla, tbodyId, buscarId, btnAgregarId, titulo, orden }){
     let datos = [];
     let busqueda = "";
+    // Pedido 2026-11-27: botón "Filtrar" (mismo estilo/funcionalidad que
+    // Repartidores, ver choferes.js) en todos los módulos de Configuración.
+    // Los 5 ABMs que usan esta factory comparten la misma forma (nombre +
+    // activo), así que un solo filtro "Activo" acá cubre los 5 de una —
+    // los ids del popover/combo se derivan de buscarId ("buscar-admin-X"
+    // -> "popover-filtros-admin-X" / "combo-activo-admin-X") para no tener
+    // que agregar un parámetro nuevo a cada instanciación.
+    let filtroActivo = "";
+    const slug = buscarId.replace(/^buscar-/, "");
+    const popoverId = `popover-filtros-${slug}`;
+    const comboActivoId = `combo-activo-${slug}`;
     // Regla de consultas (2026-11-21, ver reglas_de_negocio.md sección 1):
     // estas tablas de parámetros son chicas y cambian poco — se piden UNA
     // vez por sesión, no cada vez que se entra a la pantalla. Antes,
@@ -33,6 +45,7 @@ import { abrirModalAbm } from "../ui/modal-abm.js";
     function render(){
       let filas = datos;
       if(busqueda) filas = filas.filter(f => (f.nombre || "").toLowerCase().includes(busqueda));
+      if(filtroActivo) filas = filas.filter(f => (filtroActivo === "si") === !!f.activo);
       const tbody = document.getElementById(tbodyId);
       if(!filas.length){
         tbody.innerHTML = `<tr><td colspan="3" class="sin-datos">Sin ${titulo.toLowerCase()} cargados.</td></tr>`;
@@ -93,6 +106,8 @@ import { abrirModalAbm } from "../ui/modal-abm.js";
       busqueda = e.target.value.toLowerCase();
       render();
     });
+    crearPopoverGenerico(popoverId);
+    crearComboGenerico(comboActivoId, (valor)=>{ filtroActivo = valor; render(); });
     document.getElementById(btnAgregarId).addEventListener("click", abrirAlta);
     document.getElementById(tbodyId).addEventListener("click", (e)=>{
       const btnEditar = e.target.closest(".btn-icono-chico.editar");

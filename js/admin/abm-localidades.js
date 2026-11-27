@@ -7,6 +7,7 @@ import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { abrirModalAbm } from "../ui/modal-abm.js";
 import { abmCordones } from "./abm-simple.js";
 import { pendientesConfigState, actualizarIconoPendientesConfig } from "./pendientes-config.js";
+import { crearComboGenerico, crearPopoverGenerico, agregarOpcionesCombo } from "../ui/combos.js";
 
   // ----- ABM de Localidad con CP/Cordón/Zona por FK (pedido 2026-11-20,
   // revertido parcialmente el 2026-11-21: la Zona vuelve a ser su propio
@@ -23,8 +24,14 @@ import { pendientesConfigState, actualizarIconoPendientesConfig } from "./pendie
     let datosCps = [];        // parametros_localidad_cps + nombre de localidad embebido
     let localidadesPorNombre = {}; // nombre normalizado -> { id, nombre } (para buscar/crear localidad al guardar)
     let busqueda = "";
-    let soloPendientes = false;
+    // Pedido 2026-11-27: el botón toggle "Ver solo pendientes" se
+    // reemplaza por el popover "Filtrar" estándar (mismo estilo que el
+    // resto de Configuración) — "sin-clasificar" es la misma funcionalidad
+    // de antes (cordon_id == null), + un valor por cada cordón real para
+    // poder filtrar por uno puntual, cosa que el toggle no permitía.
+    let filtroCordon = "";
     let cargado = false;
+    let comboCordonPoblado = false;
 
     function normalizarNombre(s){
       return (s || "").trim().toUpperCase();
@@ -32,6 +39,14 @@ import { pendientesConfigState, actualizarIconoPendientesConfig } from "./pendie
 
     async function cargar(forzar){
       await abmCordones.cargar();
+      if(!comboCordonPoblado){
+        // Las opciones del combo "Cordón" dependen del catálogo de
+        // Cordones (recién disponible después de abmCordones.cargar()) —
+        // mismo patrón que el combo de Zona en liquidacion-vista.js:
+        // agregarOpcionesCombo SIEMPRE antes de crearComboGenerico.
+        agregarOpcionesCombo("combo-cordon-admin-localidades", abmCordones.obtenerActivosConId());
+        comboCordonPoblado = true;
+      }
       if(cargado && !forzar) return;
       const [{ data: cps, error: errCps }, { data: localidades, error: errLoc }] = await Promise.all([
         sb.from("parametros_localidad_cps").select("id,cp,cordon_id,localidad_id,parametros_localidades(nombre)").order("cp"),
@@ -58,14 +73,15 @@ import { pendientesConfigState, actualizarIconoPendientesConfig } from "./pendie
 
     function render(){
       let filas = datosCps;
-      if(soloPendientes) filas = filas.filter(f => f.cordon_id == null);
+      if(filtroCordon === "sin-clasificar") filas = filas.filter(f => f.cordon_id == null);
+      else if(filtroCordon) filas = filas.filter(f => String(f.cordon_id) === filtroCordon);
       if(busqueda) filas = filas.filter(f =>
         nombreDe(f).toLowerCase().includes(busqueda) ||
         (f.cp || "").toLowerCase().includes(busqueda)
       );
       const tbody = document.getElementById("tabla-admin-localidades");
       if(!filas.length){
-        tbody.innerHTML = `<tr><td colspan="4" class="sin-datos">${soloPendientes ? "Sin pendientes de clasificar." : "Sin localidades cargadas."}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" class="sin-datos">${filtroCordon ? "Sin resultados para este filtro." : "Sin localidades cargadas."}</td></tr>`;
         return;
       }
       tbody.innerHTML = filas.map(f => {
@@ -151,15 +167,8 @@ import { pendientesConfigState, actualizarIconoPendientesConfig } from "./pendie
       busqueda = e.target.value.toLowerCase();
       render();
     });
-    document.getElementById("btn-ver-solo-pendientes-localidades").addEventListener("click", (e)=>{
-      soloPendientes = !soloPendientes;
-      e.currentTarget.setAttribute("aria-expanded", String(soloPendientes));
-      e.currentTarget.innerHTML = soloPendientes
-        ? '<i data-lucide="x"></i>Ver todos'
-        : '<i data-lucide="filter"></i>Ver solo pendientes';
-      lucide.createIcons();
-      render();
-    });
+    crearPopoverGenerico("popover-filtros-admin-localidades");
+    crearComboGenerico("combo-cordon-admin-localidades", (valor)=>{ filtroCordon = valor; render(); });
     document.getElementById("btn-agregar-localidad").addEventListener("click", abrirAlta);
     document.getElementById("btn-resincronizar-cordones").addEventListener("click", async (e)=>{
       const btn = e.currentTarget;

@@ -6,6 +6,7 @@
 import { sb, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "../core/supabase.js";
 import { mostrarAviso } from "../ui/dialogos.js";
 import { abrirModalAbm } from "../ui/modal-abm.js";
+import { crearComboGenerico, crearPopoverGenerico } from "../ui/combos.js";
 import { catalogos, labelCliente } from "../core/catalogos.js";
 import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermisosVistas, actualizarIndicadorUsuario, actualizarMarcaCliente } from "../core/sesion.js";
 
@@ -14,6 +15,8 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
   // ======================================================================
   let adminUsuariosData = [];
   let adminUsuariosBusqueda = "";
+  // Pedido 2026-11-27: botón "Filtrar" (mismo estilo/funcionalidad que Repartidores).
+  let filtroTipoUsuario = "", filtroEsAdmin = "", filtroActivoUsuario = "";
   // Listas cerradas usadas por el ABM de Usuarios (pedido 2026-11-20):
   // sectores (para tipo_usuario="administrativo") y clientes de Lightdata
   // (para tipo_usuario="cliente", ver docs/lightdata_api_clientes.md y
@@ -134,6 +137,9 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
         descripcionTipoUsuario(u).toLowerCase().includes(q)
       );
     }
+    if(filtroTipoUsuario) filas = filas.filter(u => (u.tipo_usuario || "administrativo") === filtroTipoUsuario);
+    if(filtroEsAdmin) filas = filas.filter(u => (filtroEsAdmin === "si") === !!u.es_admin);
+    if(filtroActivoUsuario) filas = filas.filter(u => (filtroActivoUsuario === "si") === !!u.activo);
     const tbody = document.getElementById("tabla-admin-usuarios");
     if(!filas.length){
       tbody.innerHTML = `<tr><td colspan="7" class="sin-datos">Sin usuarios cargados.</td></tr>`;
@@ -158,6 +164,10 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
     lucide.createIcons();
   }
 
+  crearPopoverGenerico("popover-filtros-admin-usuarios");
+  crearComboGenerico("combo-tipo-usuario-admin-usuarios", (valor)=>{ filtroTipoUsuario = valor; renderAdminUsuarios(); });
+  crearComboGenerico("combo-es-admin-admin-usuarios", (valor)=>{ filtroEsAdmin = valor; renderAdminUsuarios(); });
+  crearComboGenerico("combo-activo-admin-usuarios", (valor)=>{ filtroActivoUsuario = valor; renderAdminUsuarios(); });
   document.getElementById("buscar-admin-usuarios").addEventListener("input", (e)=>{
     adminUsuariosBusqueda = e.target.value.trim().toLowerCase();
     renderAdminUsuarios();

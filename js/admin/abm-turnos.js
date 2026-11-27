@@ -4,9 +4,12 @@
 import { sb } from "../core/supabase.js";
 import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { abrirModalAbm } from "../ui/modal-abm.js";
+import { crearComboGenerico, crearPopoverGenerico } from "../ui/combos.js";
 
   // Turnos usa "hora" en vez de "nombre" como valor principal — formulario propio, mismo patrón de modal.
   let adminTurnosData = [];
+  // Pedido 2026-11-27: botón "Filtrar" (mismo estilo/funcionalidad que Repartidores).
+  let filtroActivoTurnos = "";
   async function cargarAdminTurnosReal(){
     const { data, error } = await sb.from("parametros_turnos").select("*").order("hora");
     if(error){ console.error("Error cargando parametros_turnos:", error); return; }
@@ -14,9 +17,11 @@ import { abrirModalAbm } from "../ui/modal-abm.js";
     renderAdminTurnosReal();
   }
   function renderAdminTurnosReal(){
+    let filas = adminTurnosData;
+    if(filtroActivoTurnos) filas = filas.filter(t => (filtroActivoTurnos === "si") === !!t.activo);
     const tbody = document.getElementById("tabla-admin-turnos");
-    if(!adminTurnosData.length){ tbody.innerHTML = `<tr><td colspan="3" class="sin-datos">Sin turnos cargados.</td></tr>`; return; }
-    tbody.innerHTML = adminTurnosData.map(t => `
+    if(!filas.length){ tbody.innerHTML = `<tr><td colspan="3" class="sin-datos">Sin turnos cargados.</td></tr>`; return; }
+    tbody.innerHTML = filas.map(t => `
       <tr class="${t.activo ? "" : "fila-inactiva"}" data-id="${t.id}">
         <td>${t.hora ? t.hora.slice(0,5) : "—"}${t.activo ? "" : '<span class="badge-inactivo">Inactivo</span>'}</td>
         <td>${t.activo ? "Sí" : "No"}</td>
@@ -31,6 +36,8 @@ import { abrirModalAbm } from "../ui/modal-abm.js";
     lucide.createIcons();
   }
   document.getElementById("buscar-admin-turnos").addEventListener("input", renderAdminTurnosReal); // los turnos no se filtran por texto, campo queda para consistencia visual
+  crearPopoverGenerico("popover-filtros-admin-turnos");
+  crearComboGenerico("combo-activo-admin-turnos", (valor)=>{ filtroActivoTurnos = valor; renderAdminTurnosReal(); });
   document.getElementById("btn-agregar-turno").addEventListener("click", ()=>{
     abrirModalAbm("Agregar turno", [
       { clave: "hora", label: "Hora", tipo: "time" },

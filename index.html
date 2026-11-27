@@ -2100,6 +2100,23 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-vehiculos" class="buscador" placeholder="Buscar vehículo…" />
+              <div class="combo-filtro" id="popover-filtros-admin-vehiculos">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Activo
+                    <div class="combo-filtro" id="combo-activo-admin-vehiculos">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-vehiculo"><i data-lucide="plus"></i>Agregar vehículo</button>
             </div>
             <div class="tabla-scroll">
@@ -2118,6 +2135,23 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-zonas" class="buscador" placeholder="Buscar zona…" />
+              <div class="combo-filtro" id="popover-filtros-admin-zonas">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Activo
+                    <div class="combo-filtro" id="combo-activo-admin-zonas">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-zona"><i data-lucide="plus"></i>Agregar zona</button>
             </div>
             <div class="tabla-scroll">
@@ -2133,6 +2167,23 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-turnos" class="buscador" placeholder="Buscar turno…" />
+              <div class="combo-filtro" id="popover-filtros-admin-turnos">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Activo
+                    <div class="combo-filtro" id="combo-activo-admin-turnos">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-turno"><i data-lucide="plus"></i>Agregar turno</button>
             </div>
             <div class="tabla-scroll">
@@ -2156,7 +2207,22 @@
             </p>
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-localidades" class="buscador" placeholder="Buscar localidad o CP…" />
-              <button type="button" class="btn-filtrar" id="btn-ver-solo-pendientes-localidades" aria-expanded="false"><i data-lucide="filter"></i>Ver solo pendientes</button>
+              <div class="combo-filtro" id="popover-filtros-admin-localidades">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Cordón
+                    <div class="combo-filtro" id="combo-cordon-admin-localidades">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="sin-clasificar">Sin clasificar</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-resincronizar-cordones" title="Busca otra vez el cordón de todos los envíos que quedaron sin clasificar (por si el cruce automático falló para alguno)"><i data-lucide="refresh-cw"></i>Resincronizar envíos</button>
               <button type="button" class="btn-filtrar" id="btn-agregar-localidad"><i data-lucide="plus"></i>Agregar localidad</button>
             </div>
@@ -2173,6 +2239,23 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-tamanos-paquete" class="buscador" placeholder="Buscar tamaño…" />
+              <div class="combo-filtro" id="popover-filtros-admin-tamanos-paquete">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Activo
+                    <div class="combo-filtro" id="combo-activo-admin-tamanos-paquete">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-tamano-paquete"><i data-lucide="plus"></i>Agregar tamaño</button>
             </div>
             <div class="tabla-scroll">
@@ -2188,6 +2271,23 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-cordones" class="buscador" placeholder="Buscar cordón…" />
+              <div class="combo-filtro" id="popover-filtros-admin-cordones">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Activo
+                    <div class="combo-filtro" id="combo-activo-admin-cordones">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-cordon"><i data-lucide="plus"></i>Agregar cordón</button>
             </div>
             <div class="tabla-scroll">
@@ -2207,6 +2307,44 @@
             </p>
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-tipos-extra" class="buscador" placeholder="Buscar tipo…" />
+              <div class="combo-filtro" id="popover-filtros-admin-tipos-extra">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Signo
+                    <div class="combo-filtro" id="combo-signo-admin-tipos-extra">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="adicional">Adicional</li>
+                        <li data-valor="descuento">Descuento</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Aplica a
+                    <div class="combo-filtro" id="combo-aplica-a-admin-tipos-extra">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="cliente">Cliente</li>
+                        <li data-valor="repartidor">Repartidor</li>
+                        <li data-valor="ambos">Ambos</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Activo
+                    <div class="combo-filtro" id="combo-activo-admin-tipos-extra">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-tipo-extra"><i data-lucide="plus"></i>Agregar tipo</button>
             </div>
             <div class="tabla-scroll">
@@ -2230,6 +2368,33 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-fallidos-mapeo" class="buscador" placeholder="Buscar estado…" />
+              <div class="combo-filtro" id="popover-filtros-admin-fallidos-mapeo">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Tipo
+                    <div class="combo-filtro" id="combo-tipo-admin-fallidos-mapeo">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="Fallido">Fallido</li>
+                        <li data-valor="Cambio">Cambio</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Destino
+                    <div class="combo-filtro" id="combo-destino-admin-fallidos-mapeo">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="Vuelve a salir">Vuelve a salir</li>
+                        <li data-valor="Devolver a tienda">Devolver a tienda</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-fallidos-mapeo"><i data-lucide="plus"></i>Agregar estado</button>
             </div>
             <p class="mini-sub">Qué significa cada "Estado" que trae Lightdata para los Fallidos: si vuelve a salir o se devuelve a la tienda. Los Cambios NO se detectan por este mapeo — entran solos a la lista cuando Lightdata trae algo cargado en "Logistica Inversa" o la palabra "cambio" en "Observaciones", sin importar el Estado (el Estado describe el paquete nuevo entregado, no si el repartidor ya devolvió el original).</p>
@@ -2257,6 +2422,23 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-sectores" class="buscador" placeholder="Buscar sector…" />
+              <div class="combo-filtro" id="popover-filtros-admin-sectores">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Activo
+                    <div class="combo-filtro" id="combo-activo-admin-sectores">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-sector"><i data-lucide="plus"></i>Agregar sector</button>
             </div>
             <div class="tabla-scroll">
@@ -2276,6 +2458,34 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-clientes" class="buscador" placeholder="Buscar por nombre o código…" />
+              <div class="combo-filtro" id="popover-filtros-admin-clientes">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Habilitado
+                    <div class="combo-filtro" id="combo-habilitado-admin-clientes">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Tipo de servicio
+                    <div class="combo-filtro" id="combo-tipo-servicio-admin-clientes">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="ultima_milla">Última milla</li>
+                        <li data-valor="fulfillment">Fulfillment</li>
+                        <li data-valor="sin-configurar">Sin configurar</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="tabla-scroll">
               <table>
@@ -2332,6 +2542,44 @@
           <div class="card">
             <div class="buscar-mas-filtrar">
               <input id="buscar-admin-usuarios" class="buscador" placeholder="Buscar por nombre, email, sector o cliente…" />
+              <div class="combo-filtro" id="popover-filtros-admin-usuarios">
+                <button type="button" class="btn-filtrar" aria-haspopup="true" aria-expanded="false">
+                  <i data-lucide="sliders-horizontal"></i>Filtrar
+                </button>
+                <div class="panel-filtros-ruta" hidden>
+                  <div class="panel-filtros-ruta-campo">Tipo de usuario
+                    <div class="combo-filtro" id="combo-tipo-usuario-admin-usuarios">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="administrativo">Administrativo</li>
+                        <li data-valor="cliente">Cliente</li>
+                        <li data-valor="repartidor">Repartidor</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Admin
+                    <div class="combo-filtro" id="combo-es-admin-admin-usuarios">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="panel-filtros-ruta-campo">Activo
+                    <div class="combo-filtro" id="combo-activo-admin-usuarios">
+                      <button type="button" class="combo-filtro-btn" aria-haspopup="listbox" aria-expanded="false">Todos</button>
+                      <ul class="combo-filtro-lista" role="listbox" hidden>
+                        <li data-valor="" aria-selected="true">Todos</li>
+                        <li data-valor="si">Sí</li>
+                        <li data-valor="no">No</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn-filtrar" id="btn-agregar-usuario"><i data-lucide="user-plus"></i>Agregar usuario</button>
             </div>
             <div class="tabla-scroll">

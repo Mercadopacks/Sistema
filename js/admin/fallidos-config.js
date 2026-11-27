@@ -5,10 +5,13 @@
 import { sb } from "../core/supabase.js";
 import { mostrarAviso, mostrarConfirmacion } from "../ui/dialogos.js";
 import { abrirModalAbm } from "../ui/modal-abm.js";
+import { crearComboGenerico, crearPopoverGenerico } from "../ui/combos.js";
 
   // ----- Administración: mapeo Estado->Tipo/Destino y umbrales de días -----
   let adminFallidosMapeoData = [];
   let adminFallidosMapeoSearch = "";
+  // Pedido 2026-11-27: botón "Filtrar" (mismo estilo/funcionalidad que Repartidores).
+  let filtroTipoFallido = "", filtroDestinoFallido = "";
   const OPCIONES_TIPO_FALLIDO = ["Fallido", "Cambio"];
   const OPCIONES_DESTINO_FALLIDO = ["Vuelve a salir", "Devolver a tienda"];
 
@@ -21,6 +24,8 @@ import { abrirModalAbm } from "../ui/modal-abm.js";
   function renderAdminFallidosMapeo(){
     let filas = adminFallidosMapeoData;
     if(adminFallidosMapeoSearch) filas = filas.filter(f => f.estado.toLowerCase().includes(adminFallidosMapeoSearch));
+    if(filtroTipoFallido) filas = filas.filter(f => f.tipo === filtroTipoFallido);
+    if(filtroDestinoFallido) filas = filas.filter(f => f.destino === filtroDestinoFallido);
     const tbody = document.getElementById("tabla-admin-fallidos-mapeo");
     if(!filas.length){ tbody.innerHTML = `<tr><td colspan="4" class="sin-datos">Sin estados mapeados.</td></tr>`; return; }
     tbody.innerHTML = filas.map(f => `
@@ -49,6 +54,9 @@ import { abrirModalAbm } from "../ui/modal-abm.js";
     adminFallidosMapeoSearch = e.target.value.toLowerCase();
     renderAdminFallidosMapeo();
   });
+  crearPopoverGenerico("popover-filtros-admin-fallidos-mapeo");
+  crearComboGenerico("combo-tipo-admin-fallidos-mapeo", (valor)=>{ filtroTipoFallido = valor; renderAdminFallidosMapeo(); });
+  crearComboGenerico("combo-destino-admin-fallidos-mapeo", (valor)=>{ filtroDestinoFallido = valor; renderAdminFallidosMapeo(); });
   document.getElementById("btn-agregar-fallidos-mapeo").addEventListener("click", ()=>{
     abrirFormularioMapeoFallido("Agregar estado", { tipo: "Fallido", destino: "Vuelve a salir" }, async (vals)=>{
       if(!vals.estado || !vals.tipo || !vals.destino){ await mostrarAviso("Completá los 3 campos."); return false; }
