@@ -193,7 +193,13 @@ async function cargarLiquidacionClientes(){
     // envíos entregados en el período no tiene nada para liquidar —no
     // debe aparecer en la grilla (antes se listaban los ~300 clientes
     // del servicio siempre, la mayoría sin nada que hacer ese período).
-    .filter(f => f.registro || f.cantidadEnvios > 0);
+    // Bug real 2026-11-27: esta regla aplicaba también a Fulfillment, pero
+    // ahí se factura por pallets cargados A MANO (Depósito/Despacho), sin
+    // relación con la cantidad de envíos del período — un cliente de
+    // Fulfillment recién configurado, con 0 envíos ese mes, desaparecía
+    // de la grilla por completo y no había forma de abrirlo para cargar
+    // los pallets por primera vez. Fulfillment queda exento de este filtro.
+    .filter(f => f.registro || f.cantidadEnvios > 0 || stateLiquidacionClientes.servicio === "fulfillment");
   renderLiquidacionClientes();
 }
 
