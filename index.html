@@ -2703,25 +2703,45 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
   // la pantalla "saltaba sola" a Seguimiento de Envíos cada tanto tiempo
   // mientras alguien miraba otra sección).
   let appYaMostrada = false;
+  // Pedido 2026-11-27: antes se mostraba el sidebar completo (appView.hidden
+  // = false) ANTES de que cargarPerfilSesion() terminara de traer el perfil,
+  // así que un usuario no-admin veía por un instante todas las secciones y
+  // recién unos segundos después se achicaba a sus accesos reales. El
+  // "primer mostrarApp" queda registrado en esta promesa para que CUALQUIER
+  // llamada a mostrarApp (hay 2 casi simultáneas al loguearse: la del
+  // submit del form y la de sb.auth.onAuthStateChange("SIGNED_IN")) espere
+  // a que el perfil y sus permisos ya estén aplicados antes de mostrar
+  // appView — si solo se chequeaba `appYaMostrada` (booleano, se pone en
+  // true ANTES del primer await), la segunda llamada entraba por la rama
+  // de "ya mostrada" mientras la primera todavía estaba esperando el
+  // perfil, y mostraba el sidebar completo de una, sin esperar nada.
+  let cargaInicialPromise = null;
 
   async function mostrarApp(session){
     loginView.hidden = true;
-    appView.hidden = false;
-    actualizarIndicadorUsuario(session && session.user ? session.user.email : "—");
     if(!appYaMostrada){
       appYaMostrada = true;
-      await cargarPerfilSesion(session);
-      if(stateSesion.bloqueado) return; // cargarPerfilSesion ya deslogueó
+      cargaInicialPromise = (async () => {
+        await cargarPerfilSesion(session);
+        if(stateSesion.bloqueado) return; // cargarPerfilSesion ya deslogueó
+        appView.hidden = false;
+        actualizarIndicadorUsuario(session && session.user ? session.user.email : "—");
+        seleccionarVista(primeraVistaPermitida());
+        // Vehículos/Zonas/Turnos/Localidades se usan en los modales de
+        // "Agregar/Editar chofer" de Asistencia, aunque el usuario nunca
+        // haya entrado a Administración.
+        abmVehiculos.cargar();
+        abmZonas.cargar();
+        abmTurnos.cargar();
+        abmCordones.cargar();
+        abmLocalidades.cargar();
+      })();
+      await cargaInicialPromise;
+    } else {
+      if(cargaInicialPromise) await cargaInicialPromise;
+      if(stateSesion.bloqueado) return;
+      appView.hidden = false;
       actualizarIndicadorUsuario(session && session.user ? session.user.email : "—");
-      seleccionarVista(primeraVistaPermitida());
-      // Vehículos/Zonas/Turnos/Localidades se usan en los modales de
-      // "Agregar/Editar chofer" de Asistencia, aunque el usuario nunca
-      // haya entrado a Administración.
-      abmVehiculos.cargar();
-      abmZonas.cargar();
-      abmTurnos.cargar();
-      abmCordones.cargar();
-      abmLocalidades.cargar();
     }
   }
 
