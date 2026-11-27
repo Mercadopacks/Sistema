@@ -8,6 +8,7 @@
 // abajo apuntan a index.html.
 
 import { sb } from "./supabase.js";
+import { primeraMayuscula } from "./formato.js";
 
   // Claves válidas = keys del objeto `vistas` (ver más abajo). Debe
   // mantenerse sincronizado a mano si se agrega una vista nueva — no hay
@@ -125,7 +126,7 @@ import { sb } from "./supabase.js";
         .select("did,nombre_fantasia").eq("did", didPrincipal).maybeSingle();
       if(error) throw error;
       if(!data || !data.nombre_fantasia){ el.hidden = true; el.textContent = ""; return; }
-      el.textContent = `By: ${data.nombre_fantasia}`;
+      el.textContent = `By: ${primeraMayuscula(data.nombre_fantasia)}`;
       el.hidden = false;
     }catch(error){
       console.error("Error cargando nombre de cliente para el sidebar:", error);

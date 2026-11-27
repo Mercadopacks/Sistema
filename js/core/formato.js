@@ -39,6 +39,20 @@ export function tituloTexto(s){
 }
 export function tituloNombre(s){ return tituloTexto(s); }
 
+// Pedido 2026-11-27: distinto de tituloTexto() a propósito -- tituloTexto
+// pone mayúscula a la PRIMERA letra de CADA palabra ("Indumentaria Y
+// Calzado", con la "y" también mayúscula), y para razones sociales de
+// cliente eso se ve mal con conectores ("y", "de"). Esta pasa todo a
+// minúscula y solo sube la primera letra de la CADENA entera
+// ("Indumentaria y calzado"). Usada en el "By: <Cliente>" del sidebar
+// (ver actualizarMarcaCliente() en sesion.js) para no mostrar
+// lightdata_clientes.nombre_fantasia tal cual viene (a veces TODO EN
+// MAYÚSCULAS en el origen).
+export function primeraMayuscula(s){
+  const t = (s || "").toLowerCase();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}
+
 // Formato moneda AR ($ 0.000,00) para los inputs de precios (pedido
 // 2026-11-21, módulo de Precios por Cliente) — los inputs son type="text"
 // (un type="number" nativo no puede mostrar separador de miles ni "$",
