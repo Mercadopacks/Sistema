@@ -7,7 +7,7 @@ import { sb, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "../core/supabase.js"
 import { mostrarAviso } from "../ui/dialogos.js";
 import { abrirModalAbm } from "../ui/modal-abm.js";
 import { catalogos, labelCliente } from "../core/catalogos.js";
-import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermisosVistas } from "../core/sesion.js";
+import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermisosVistas, actualizarIndicadorUsuario } from "../core/sesion.js";
 
   // ======================================================================
   // Administración > Usuarios (alta + permisos por vista, 2026-11-16)
@@ -287,6 +287,7 @@ import { TIPOS_USUARIO_OPCIONES, VISTAS_DISPONIBLES, stateSesion, aplicarPermiso
       if(stateSesion.perfil && stateSesion.perfil.id === usuario.id){
         stateSesion.perfil = { ...stateSesion.perfil, ...payload };
         aplicarPermisosVistas();
+        actualizarIndicadorUsuario();
       }
     });
   });

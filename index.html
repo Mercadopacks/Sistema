@@ -4,6 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Mercado Packs - Sistemas</title>
+<!-- Pedido 2026-11-27: antes no había ningún favicon declarado, así que
+     el navegador mostraba su ícono genérico ("el mundo"). -->
+<link rel="icon" type="image/png" href="assets/logo-mp.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -2619,7 +2622,7 @@ import { cargarEnviosListado, inicializarFiltrosEnviosListado, reiniciarFiltrosE
 // Etapa 5a: Configuración > Clientes (detalle, colectas y precios) en js/.
 import { cargarAdminClientes } from "./js/admin/clientes.js";
 // Etapa 5b: sesión y permisos por vista (constantes/estado que Usuarios comparte con el login) en js/.
-import { VISTAS_DISPONIBLES, stateSesion, puedeVerVista, aplicarPermisosVistas } from "./js/core/sesion.js";
+import { VISTAS_DISPONIBLES, stateSesion, puedeVerVista, aplicarPermisosVistas, actualizarIndicadorUsuario } from "./js/core/sesion.js";
 // Etapa 5c: Configuración > Usuarios en js/.
 
 // Etapa 6: Extras y Descuentos (Clientes/Repartidores) en js/.
@@ -2704,11 +2707,12 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
   async function mostrarApp(session){
     loginView.hidden = true;
     appView.hidden = false;
-    document.getElementById("usuario-email").textContent = session && session.user ? session.user.email : "—";
+    actualizarIndicadorUsuario(session && session.user ? session.user.email : "—");
     if(!appYaMostrada){
       appYaMostrada = true;
       await cargarPerfilSesion(session);
       if(stateSesion.bloqueado) return; // cargarPerfilSesion ya deslogueó
+      actualizarIndicadorUsuario(session && session.user ? session.user.email : "—");
       seleccionarVista(primeraVistaPermitida());
       // Vehículos/Zonas/Turnos/Localidades se usan en los modales de
       // "Agregar/Editar chofer" de Asistencia, aunque el usuario nunca

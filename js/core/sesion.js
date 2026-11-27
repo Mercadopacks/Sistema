@@ -57,7 +57,7 @@
     // le dé acceso a una sin la otra.
     { clave: "extras-liquidacion-clientes", label: "Adicionales (Clientes)" },
     { clave: "extras-liquidacion-repartidores", label: "Adicionales (Repartidores)" },
-    { clave: "admin", label: "Administración" },
+    { clave: "admin", label: "Configuración" },
   ];
 
   export const stateSesion = { perfil: null, bloqueado: false };
@@ -72,6 +72,20 @@
   // Oculta del sidebar los nav-item/nav-subitem cuya vista no está
   // permitida. Solo esconde el botón — no hay routing por hash en este
   // sistema, así que no hace falta bloquear nada más aparte de esto.
+  // Pedido 2026-11-27: el indicador de "quién está logueado" del header
+  // pasa a mostrar nombre y apellido (perfiles_usuario) en vez del email
+  // — el email queda de fallback mientras el perfil todavía no terminó
+  // de cargar, o si por algún motivo no se encontró. Exportada (no vive
+  // solo en index.html) para que usuarios.js también la pueda llamar
+  // cuando el usuario logueado se edita a sí mismo.
+  export function actualizarIndicadorUsuario(emailFallback){
+    const el = document.getElementById("usuario-email");
+    if(!el) return;
+    const p = stateSesion.perfil;
+    const nombreCompleto = p ? `${p.nombre || ""} ${p.apellido || ""}`.trim() : "";
+    el.textContent = nombreCompleto || emailFallback || "—";
+  }
+
   export function aplicarPermisosVistas(){
     document.querySelectorAll("[data-vista]").forEach(btn=>{
       btn.hidden = !puedeVerVista(btn.dataset.vista);

@@ -7,7 +7,7 @@ import { formatearFechaHora, tituloTexto } from "../core/formato.js";
 import { crearComboGenerico, crearPopoverGenerico, agregarOpcionesCombo } from "../ui/combos.js";
 import { abmCordones } from "../admin/abm-simple.js";
 import { abmLocalidades } from "../admin/abm-localidades.js";
-import { fechaART, limiteDiaART, diaSiguienteStr } from "../core/fechas.js";
+import { fechaART, limiteDiaART, diaSiguienteStr, lunesDeSemana } from "../core/fechas.js";
 import { stateFallidos, tieneLogisticaInversaReal, cargarNombresPorLightdataId, nombreRepartidorFallido, direccionDe, cordonDe } from "./fallidos.js";
 import { catalogos, nombreCliente } from "../core/catalogos.js";
 import { stateSesion } from "../core/sesion.js";
@@ -44,9 +44,12 @@ import { stateSesion } from "../core/sesion.js";
 
   // Pedido 2026-11-22: por defecto se filtra solo la última semana (antes
   // traía 30 días) para no cargar tantos datos en pantalla de entrada.
+  // Pedido 2026-11-27: "última semana" pasa a ser la semana EN CURSO
+  // (lunes a hoy), no los últimos 7 días corridos — si hoy es viernes,
+  // arranca el lunes de esta semana, no el viernes pasado.
   const stateEnviosListado = {
     busqueda: "", estado: "", origen: "", tamano: "", cliente: "", localidad: "", cordon: "", repartidor: "",
-    desde: fechaART(-6), hasta: fechaART(0),
+    desde: lunesDeSemana(fechaART(0)), hasta: fechaART(0),
     filas: [], paginaActual: 0, tamanoPagina: 10, total: 0, cargando: false,
   };
 
@@ -220,7 +223,7 @@ import { stateSesion } from "../core/sesion.js";
   document.getElementById("envios-listado-desde").value = stateEnviosListado.desde;
   document.getElementById("envios-listado-hasta").value = stateEnviosListado.hasta;
   document.getElementById("envios-listado-desde").addEventListener("change", (e)=>{
-    stateEnviosListado.desde = e.target.value || fechaART(-6);
+    stateEnviosListado.desde = e.target.value || lunesDeSemana(fechaART(0));
     cargarEnviosListado(true);
   });
   document.getElementById("envios-listado-hasta").addEventListener("change", (e)=>{
@@ -316,7 +319,7 @@ import { stateSesion } from "../core/sesion.js";
     stateEnviosListado.busqueda = ""; stateEnviosListado.estado = ""; stateEnviosListado.origen = "";
     stateEnviosListado.tamano = ""; stateEnviosListado.localidad = ""; stateEnviosListado.cordon = "";
     stateEnviosListado.repartidor = "";
-    stateEnviosListado.desde = fechaART(-6); stateEnviosListado.hasta = fechaART(0);
+    stateEnviosListado.desde = lunesDeSemana(fechaART(0)); stateEnviosListado.hasta = fechaART(0);
     stateEnviosListado.paginaActual = 0; stateEnviosListado.tamanoPagina = 10;
     const buscador = document.getElementById("buscar-envios-listado");
     if(buscador) buscador.value = "";
