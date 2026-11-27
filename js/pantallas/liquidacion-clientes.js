@@ -377,7 +377,17 @@ async function abrirPantallaLiquidacionCliente(periodo){
   document.getElementById("liq-cliente-fecha-inicio").textContent = formatearFecha(periodo.fecha_inicio);
   document.getElementById("liq-cliente-fecha-fin").textContent = formatearFecha(periodo.fecha_fin);
   document.getElementById("liq-cliente-estado").textContent = "";
-  document.getElementById("liq-cliente-btn-guardar-borrador").hidden = !!periodo.soloLectura;
+  // Pedido 2026-11-27: "Guardar borrador" solo tiene algo real para
+  // persistir en Fulfillment (pallets/precio despacho/precio depósito,
+  // los únicos campos editables de esta pantalla) -- en Última milla no
+  // hay nada editable acá (las correcciones de Cordón/Tamaño ya se
+  // guardan solas, al toque, vía corregir_cordon_tamano_envio) y el
+  // snapshot de totales que guardaría tampoco se vuelve a leer al
+  // reabrir (el monto siempre se recalcula en vivo salvo que ya esté
+  // "Generada"), así que el botón quedaba sin ningún efecto real más
+  // que cambiar la etiqueta de la fila en la grilla.
+  document.getElementById("liq-cliente-btn-guardar-borrador").hidden =
+    !!periodo.soloLectura || periodo.tipo_servicio !== "fulfillment";
   document.getElementById("liq-cliente-btn-confirmar").hidden = !!periodo.soloLectura;
   // Corrección de Cordón/Tamaño por envío: solo con el período todavía
   // pendiente/borrador, nunca sobre una liquidación ya "generada" (eso ya
