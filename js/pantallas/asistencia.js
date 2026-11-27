@@ -448,8 +448,8 @@ import { stateFallidos, cargarFallidos, normEspaciosNombre, claveRepartidorEnvio
         .hoja{page-break-after:always; padding:48px;}
         .hoja:last-child{page-break-after:auto;}
         .marca{font-size:15px; font-weight:800; margin-bottom:24px;}
-        .marca-mercado{color:#1a1710;} .marca-packs{color:#F6BE05;}
-        h1{font-size:19px; border-bottom:3px solid #F6BE05; padding-bottom:12px; margin:0 0 20px;}
+        .marca-mercado{color:#1a1710;} .marca-packs{color:#F5B106;}
+        h1{font-size:19px; border-bottom:3px solid #F5B106; padding-bottom:12px; margin:0 0 20px;}
         .fila-dato{display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid #e3e0d6; font-size:15px;}
         .fila-dato .etiqueta{color:#777; text-transform:uppercase; font-size:12px; letter-spacing:.03em;}
         .fila-dato .valor{font-weight:700; font-size:17px;}

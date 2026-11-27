@@ -41,7 +41,7 @@ Puntos más fáciles de pasar por alto (resumen, no reemplazo de la lectura comp
    a mano por un usuario del sistema) se muestra pasado por `tituloTexto()`
    (Primera Letra Mayúscula) — nunca al valor usado para comparar/filtrar/
    agrupar, que sigue siendo el crudo de la base.
-7. Paleta fija: dorado `#F6BE05` + negro, fondo `#efeeea`, tarjetas blancas.
+7. Paleta fija: dorado `#F5B106` (Manual de Marca) + negro, fondo `#efeeea`, tarjetas blancas.
    Fuente Nunito, íconos Lucide (nunca emojis como ícono), sidebar lateral.
 8. Chips (pastilla, `border-radius:20px`) vs. campos de entrada (rectos,
    `border-radius:8px`, fondo blanco) — nunca mezclar los dos estilos. Filtro

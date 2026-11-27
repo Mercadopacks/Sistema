@@ -17,7 +17,18 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root{
-    --dorado:#F6BE05; --negro:#111; --fondo:#efeeea; --borde:#ddd9d0;
+    /* Pedido 2026-11-27: "Amarillo MP" del Manual de Marca es #F5B106 --
+       antes usábamos #F6BE05 (muy cercano, pero no el hex exacto). El
+       negro (#111) y el fondo (#efeeea) de esta app ya corresponden a los
+       tonos secundarios que el propio manual define para UI/dashboards
+       ("Negro soft #171717" y "Gris claro #EFEFEF"), así que no se tocan
+       -- el manual reserva el negro/blanco puros para piezas gráficas
+       (vehículos, packaging), no para el chrome de una app densa.
+       Tipografía: el manual pide Anton/Gotham/Bebas (fuentes de pieza
+       gráfica/marketing); se mantiene Nunito acá a propósito por
+       legibilidad en una UI operativa con tablas y texto denso -- ver
+       charla 2026-11-27. */
+    --dorado:#F5B106; --negro:#111; --fondo:#efeeea; --borde:#ddd9d0;
     --sidebar-w:264px; --sidebar-w-colapsado:68px;
   }
   *{box-sizing:border-box;}
@@ -145,8 +156,16 @@
     border-bottom:1px solid #2a2a2a; height:64px; box-sizing:border-box;
   }
   .sidebar-header img{width:28px; height:28px; flex-shrink:0;}
+  .sidebar-header .marca-texto{display:flex; flex-direction:column; min-width:0; line-height:1.15;}
   .sidebar-header .marca-nombre{font-size:16px; white-space:nowrap;}
   .sidebar-header .mercado{color:#fff;}
+  /* Pedido 2026-11-27: "By: <Cliente>" bajo el nombre de marca, solo para
+     usuarios tipo_usuario="cliente" -- ver actualizarMarcaCliente() en
+     sesion.js. Para el resto (administrativo/repartidor/admin) este
+     elemento queda hidden y el sidebar se ve igual que siempre. */
+  .sidebar-header .marca-cliente{
+    font-size:11px; color:#999; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
   .sidebar-toggle{
     background:transparent; color:#aaa; padding:8px; margin-left:auto; flex-shrink:0;
     display:flex; align-items:center; justify-content:center;
@@ -155,7 +174,7 @@
   .sidebar-toggle svg{width:18px; height:18px;}
   .sidebar.colapsado .sidebar-header{justify-content:center; padding:0;}
   .sidebar.colapsado .sidebar-header img,
-  .sidebar.colapsado .sidebar-header .marca-nombre{display:none;}
+  .sidebar.colapsado .sidebar-header .marca-texto{display:none;}
   .sidebar.colapsado .sidebar-toggle{margin-left:0;}
 
   .sidebar nav{display:flex; flex-direction:column; gap:4px; padding:12px 10px;}
@@ -1009,7 +1028,10 @@
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <img src="assets/logo-mp.png" alt="Mercado Packs" />
-      <span class="marca-nombre"><span class="mercado">Mercado</span> <span class="packs">Packs</span></span>
+      <span class="marca-texto">
+        <span class="marca-nombre"><span class="mercado">Mercado</span> <span class="packs">Packs</span></span>
+        <span class="marca-cliente" id="marca-cliente" hidden></span>
+      </span>
       <button class="sidebar-toggle" id="sidebar-toggle" title="Desplegar/ocultar menú">
         <i data-lucide="menu"></i>
       </button>
@@ -2666,7 +2688,7 @@ import { cargarEnviosListado, inicializarFiltrosEnviosListado, reiniciarFiltrosE
 // Etapa 5a: Configuración > Clientes (detalle, colectas y precios) en js/.
 import { cargarAdminClientes } from "./js/admin/clientes.js";
 // Etapa 5b: sesión y permisos por vista (constantes/estado que Usuarios comparte con el login) en js/.
-import { VISTAS_DISPONIBLES, stateSesion, puedeVerVista, aplicarPermisosVistas, actualizarIndicadorUsuario } from "./js/core/sesion.js";
+import { VISTAS_DISPONIBLES, stateSesion, puedeVerVista, aplicarPermisosVistas, actualizarIndicadorUsuario, actualizarMarcaCliente } from "./js/core/sesion.js";
 // Etapa 5c: Configuración > Usuarios en js/.
 
 // Etapa 6: Extras y Descuentos (Clientes/Repartidores) en js/.
@@ -2707,6 +2729,7 @@ import { cargarMisLiquidaciones } from "./js/pantallas/mis-liquidaciones.js";
       return;
     }
     aplicarPermisosVistas();
+    actualizarMarcaCliente(); // best-effort, no bloquea el login si falla
   }
 
   function primeraVistaPermitida(){

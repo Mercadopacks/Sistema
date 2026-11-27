@@ -181,7 +181,7 @@ producción, que no las usa):
 - Navegación: **sidebar lateral** desplegable/colapsable.
 - Botones de acción secundaria (ej. cerrar sesión): ícono solo, sin
   texto.
-- Paleta: dorado `#F6BE05` + negro, fondo `#efeeea`, tarjetas blancas.
+- Paleta: dorado `#F5B106` (Manual de Marca Mercado Packs) + negro, fondo `#efeeea`, tarjetas blancas.
 - **Campos de entrada vs. chips — nunca mezclar los dos estilos**:
   - **Chips** (opciones seleccionables, ej. Hoy/Ayer/Rango): forma de
     "pastilla", `border-radius:20px`.

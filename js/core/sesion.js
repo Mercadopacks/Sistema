@@ -7,6 +7,8 @@
 // Las menciones "más abajo" / "ver cargarPerfilSesion()" de los comentarios de
 // abajo apuntan a index.html.
 
+import { sb } from "./supabase.js";
+
   // Claves válidas = keys del objeto `vistas` (ver más abajo). Debe
   // mantenerse sincronizado a mano si se agrega una vista nueva — no hay
   // forma de derivarlo antes de que `vistas` exista en el script.
@@ -84,6 +86,36 @@
     const p = stateSesion.perfil;
     const nombreCompleto = p ? `${p.nombre || ""} ${p.apellido || ""}`.trim() : "";
     el.textContent = nombreCompleto || emailFallback || "—";
+  }
+
+  // Pedido 2026-11-27: el sidebar muestra "Mercado Packs" + "By: <Cliente>"
+  // debajo cuando quien está logueado es un usuario tipo_usuario="cliente"
+  // (perfiles_usuario.clientes_lightdata_ids) -- el resto de los roles
+  // (administrativo/repartidor/admin) no tiene un cliente propio, así que
+  // el elemento queda oculto y el sidebar se ve como siempre. Si el
+  // usuario cliente tiene más de un did_cliente asociado (caso real:
+  // alguien con acceso a varias tiendas) se listan los nombres separados
+  // por "/". Es best-effort: un error de red acá no debe romper el login,
+  // simplemente el sidebar se queda sin la leyenda.
+  export async function actualizarMarcaCliente(){
+    const el = document.getElementById("marca-cliente");
+    if(!el) return;
+    const p = stateSesion.perfil;
+    const ids = p && p.tipo_usuario === "cliente" ? (p.clientes_lightdata_ids || []) : [];
+    if(!ids.length){ el.hidden = true; el.textContent = ""; return; }
+    try{
+      const { data, error } = await sb.from("lightdata_clientes")
+        .select("did,nombre_fantasia").in("did", ids);
+      if(error) throw error;
+      const nombres = (data || []).map(c => c.nombre_fantasia).filter(Boolean);
+      if(!nombres.length){ el.hidden = true; el.textContent = ""; return; }
+      el.textContent = `By: ${nombres.join(" / ")}`;
+      el.hidden = false;
+    }catch(error){
+      console.error("Error cargando nombre de cliente para el sidebar:", error);
+      el.hidden = true;
+      el.textContent = "";
+    }
   }
 
   export function aplicarPermisosVistas(){
