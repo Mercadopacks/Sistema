@@ -126,7 +126,7 @@ import { primeraMayuscula } from "./formato.js";
         .select("did,nombre_fantasia").eq("did", didPrincipal).maybeSingle();
       if(error) throw error;
       if(!data || !data.nombre_fantasia){ el.hidden = true; el.textContent = ""; return; }
-      el.textContent = `By: ${primeraMayuscula(data.nombre_fantasia)}`;
+      el.textContent = `By ${primeraMayuscula(data.nombre_fantasia)}`;
       el.hidden = false;
     }catch(error){
       console.error("Error cargando nombre de cliente para el sidebar:", error);
