@@ -155,18 +155,21 @@
     display:flex; align-items:center; gap:12px; padding:0 16px;
     border-bottom:1px solid #2a2a2a; height:64px; box-sizing:border-box;
   }
-  /* Pedido 2026-11-27 (4ta vuelta): el logo se centraba contra el BLOQUE
-     entero de 2 líneas (nombre + "By:"), no contra el nombre -- quedaba
-     desalineado del texto "Mercado Packs". Se separa "logo + nombre" en
-     su propia fila (.marca-fila, alineada entre sí) de "By: cliente"
-     (2da línea, debajo); .marca-bloque sigue teniendo flex:1 para que
-     ocupe el espacio libre hasta el botón de colapsar -- sin esto volvía
-     el hueco de más entre el texto y el botón (bug real reportado).
-     "By:" en cursiva a pedido, para diferenciarlo visualmente del nombre
-     de marca. */
-  .sidebar-header .marca-bloque{display:flex; flex-direction:column; flex:1; min-width:0; line-height:1.15; gap:2px;}
-  .sidebar-header .marca-fila{display:flex; align-items:center; gap:12px; min-width:0;}
-  .sidebar-header .marca-fila img{width:28px; height:28px; flex-shrink:0;}
+  /* Pedido 2026-11-27 (5ta vuelta): el logo vuelve a ser hijo directo de
+     .sidebar-header (centrado por el align-items:center de la fila contra
+     TODO el bloque de texto, nombre + "By:" juntos) -- la vuelta anterior
+     lo había metido en una fila propia solo con el nombre, y terminaba
+     centrado contra la línea sola, no contra el conjunto de las 2 líneas.
+     .marca-bloque sigue con flex:1 para ocupar el espacio libre hasta el
+     botón de colapsar (si no, vuelve el hueco de más). */
+  .sidebar-header img{width:28px; height:28px; flex-shrink:0;}
+  /* margin-right chico: sin esto, el bloque de texto queda dimensionado
+     EXACTO al ancho disponible, sin ningún margen -- cualquier mínima
+     diferencia de fuente entre entornos (la fuente real tarda en cargar,
+     fallback temporal, hinting distinto) corta la última letra del
+     nombre del cliente contra el borde. Bug real reportado: "By: MIX
+     STORE" se veía cortado. */
+  .sidebar-header .marca-bloque{display:flex; flex-direction:column; flex:1; min-width:0; line-height:1.3; gap:2px; margin-right:6px;}
   .sidebar-header .marca-nombre{font-size:16px; white-space:nowrap;}
   .sidebar-header .mercado{color:#fff;}
   /* Solo para usuarios tipo_usuario="cliente" -- ver actualizarMarcaCliente()
@@ -174,7 +177,7 @@
      elemento queda hidden y el sidebar se ve igual que siempre. */
   .sidebar-header .marca-cliente{
     display:block; font-size:12px; font-weight:800; font-style:italic; color:#fff; text-align:right;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
   }
   .sidebar-toggle{
     background:transparent; color:#aaa; padding:8px; margin-left:auto; flex-shrink:0;
@@ -183,6 +186,7 @@
   .sidebar-toggle:hover{color:#fff;}
   .sidebar-toggle svg{width:18px; height:18px;}
   .sidebar.colapsado .sidebar-header{justify-content:center; padding:0;}
+  .sidebar.colapsado .sidebar-header img,
   .sidebar.colapsado .sidebar-header .marca-bloque{display:none;}
   .sidebar.colapsado .sidebar-toggle{margin-left:0;}
 
@@ -1036,11 +1040,9 @@
 <div id="app-view" hidden>
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
+      <img src="assets/logo-mp.png" alt="Mercado Packs" />
       <span class="marca-bloque">
-        <span class="marca-fila">
-          <img src="assets/logo-mp.png" alt="Mercado Packs" />
-          <span class="marca-nombre"><span class="mercado">Mercado</span> <span class="packs">Packs</span></span>
-        </span>
+        <span class="marca-nombre"><span class="mercado">Mercado</span> <span class="packs">Packs</span></span>
         <span class="marca-cliente" id="marca-cliente" hidden></span>
       </span>
       <button class="sidebar-toggle" id="sidebar-toggle" title="Desplegar/ocultar menú">
