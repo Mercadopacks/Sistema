@@ -57,7 +57,8 @@ jobs:
           LIGHTDATA_PASS: ${{ secrets.LIGHTDATA_PASS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python3 backfill_estado_fallidos_viejos.py
+          PYTHONUNBUFFERED: "1"
+        run: python3 -u backfill_estado_fallidos_viejos.py
 
       - name: Subir captura de pantalla si falló
         if: failure()

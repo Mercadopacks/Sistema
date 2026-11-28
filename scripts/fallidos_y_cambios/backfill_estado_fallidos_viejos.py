@@ -41,6 +41,7 @@ SUPABASE_SERVICE_ROLE_KEY (entorno o scripts/.env).
 import os
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from supabase import create_client
@@ -56,22 +57,55 @@ load_dotenv()
 
 LOTE_RPC = 500
 
+# Mismo valor que el default de RANGO_DIAS_LIVE en vincular_choferes_envios.py
+# (ese script ya refresca en vivo, cada 10 min, todo lo que caiga en esta
+# ventana) — no es una variable de entorno acá porque este cron no se corre
+# con otro valor, a diferencia del otro script.
+RANGO_DIAS_LIVE_REFERENCIA = 3
+
+
+def _fecha_art_hoy():
+    return (datetime.now(timezone.utc) + timedelta(hours=-3)).date()
+
 
 def obtener_candidatos(sb):
     mapeo = sb.table("parametros_fallidos_mapeo").select("estado").execute().data
     estados = [m["estado"] for m in mapeo if m["estado"] != "A retirar"]
 
-    por_estado = sb.table("envios").select("id_interno,tracking").in_("estado", estados).execute().data
-    por_logistica = sb.table("envios").select("id_interno,tracking").eq("logistica_inversa_real", True).execute().data
+    # Bug real 2026-11-28: esta función no filtraba por fecha — volvía a
+    # consultar en Lightdata TODOS los envíos en estado Fallido/Cambio o con
+    # logistica_inversa_real=true, incluidos los de hoy/ayer/anteayer que
+    # `vincular_choferes_envios.py` ya refresca solo cada 10 minutos. Medido
+    # en vivo: ~44% de los candidatos de un día cualquiera caían dentro de
+    # esa ventana — duplicaba consultas a Lightdata para nada y casi
+    # duplicaba el tiempo de corrida. Se agrega el mismo corte de fecha que
+    # ya usa el refresco en vivo, para que este backfill solo procese lo que
+    # de verdad quedó afuera de esa ventana.
+    limite_viejo = _fecha_art_hoy() - timedelta(days=RANGO_DIAS_LIVE_REFERENCIA - 1)
+
+    def _es_viejo(fecha_mercadopacks):
+        if not fecha_mercadopacks:
+            return True
+        fecha = datetime.strptime(fecha_mercadopacks[:10], "%Y-%m-%d").date()
+        return fecha < limite_viejo
+
+    por_estado = sb.table("envios").select("id_interno,tracking,fecha_mercadopacks").in_("estado", estados).execute().data
+    por_logistica = sb.table("envios").select("id_interno,tracking,fecha_mercadopacks").eq("logistica_inversa_real", True).execute().data
 
     seg_pendientes = sb.table("fallidos_seguimiento").select("id_interno").eq("estatus", "pendiente").execute().data
     ids_seguimiento = {s["id_interno"] for s in seg_pendientes}
     por_seguimiento = []
     if ids_seguimiento:
+        # Los casos con seguimiento manual pendiente se revisan siempre,
+        # sin importar la fecha: son casos puntuales que alguien marcó para
+        # volver a chequear, no el barrido general de Fallidos/Cambios.
         por_seguimiento = sb.table("envios").select("id_interno,tracking").in_("id_interno", list(ids_seguimiento)).execute().data
 
     candidatos = {}
-    for fila in por_estado + por_logistica + por_seguimiento:
+    for fila in por_estado + por_logistica:
+        if fila.get("tracking") and _es_viejo(fila.get("fecha_mercadopacks")):
+            candidatos[fila["id_interno"]] = fila["tracking"]
+    for fila in por_seguimiento:
         if fila.get("tracking"):
             candidatos[fila["id_interno"]] = fila["tracking"]
     return candidatos
