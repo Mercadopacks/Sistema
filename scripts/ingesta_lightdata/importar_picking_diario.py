@@ -37,9 +37,15 @@ Mismo criterio ya usado en importar_picking_historico.py.
 
 Uso:
     python importar_picking_diario.py [--fecha 2026-11-27] [--dry-run]
+    python importar_picking_diario.py --desde 2026-11-22 --hasta 2026-11-26
 
 --fecha: por si hay que correrlo a mano para un día puntual (reintento
 tras una falla, etc.) — por defecto, AYER en hora ART.
+--desde/--hasta: para backfillear varios días de una sola corrida (ej. el
+setup inicial del puente, o un hueco por una falla de varios días) — lee
+la hoja UNA sola vez y procesa cada día del rango por separado (mismo
+dedup por día que el modo de un solo día, no se mezclan escaneos de días
+distintos). No se puede combinar con --fecha.
 
 Necesita en el entorno (o scripts/.env):
   GOOGLE_SHEETS_CREDENTIALS_JSON  JSON completo de la service account de
@@ -143,21 +149,32 @@ def deduplicar(filas):
     return list(por_id.values()) + revisar_manual
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--fecha", help="YYYY-MM-DD -- por defecto, ayer en hora ART")
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+def _upsertear(conn, filas_finales):
+    import psycopg2.extras
 
-    fecha_objetivo = (
-        datetime.strptime(args.fecha, "%Y-%m-%d").date()
-        if args.fecha else fecha_art_hoy() - timedelta(days=1)
-    )
+    with conn:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(
+                cur,
+                """
+                insert into public.picking_tamanos
+                    (escaneo_crudo, tamano, id_normalizado, tipo_envio, creado_en)
+                values %s
+                on conflict (id_normalizado) where id_normalizado <> 'Revisar_Manual'
+                do update set
+                    escaneo_crudo = excluded.escaneo_crudo,
+                    tamano = excluded.tamano,
+                    tipo_envio = excluded.tipo_envio,
+                    creado_en = excluded.creado_en
+                where excluded.creado_en > picking_tamanos.creado_en
+                """,
+                [(f["escaneo_crudo"], f["tamano"], f["id_normalizado"], f["tipo_envio"], f["creado_en"])
+                 for f in filas_finales],
+            )
+
+
+def procesar_dia(filas_crudas, fecha_objetivo, conn, dry_run):
     print(f"Importando escaneos de Picking del {fecha_objetivo.isoformat()}...")
-
-    filas_crudas = leer_filas_sheet()
-    print(f"Filas totales leídas de la hoja '{SHEET_TAB}': {len(filas_crudas)}")
-
     filas_dia = filas_del_dia(filas_crudas, fecha_objetivo)
     print(f"Filas del {fecha_objetivo.isoformat()}: {len(filas_dia)}")
     if not filas_dia:
@@ -169,46 +186,64 @@ def main():
     print(f"Filas a upsertear tras deduplicar: {len(filas_finales)} ({reales} ids reales + "
           f"{len(filas_finales) - reales} Revisar_Manual)")
 
-    if args.dry_run:
+    if dry_run:
         print("(--dry-run: no se conecta a la base)")
         for f in filas_finales[:5]:
             print(f)
         return
 
-    url = os.environ.get("SUPABASE_DB_URL")
-    if not url:
-        sys.exit("Falta SUPABASE_DB_URL en el entorno (o scripts/.env).")
-
-    import psycopg2
-    import psycopg2.extras
-
-    conn = psycopg2.connect(url, connect_timeout=10)
     try:
-        with conn:
-            with conn.cursor() as cur:
-                psycopg2.extras.execute_values(
-                    cur,
-                    """
-                    insert into public.picking_tamanos
-                        (escaneo_crudo, tamano, id_normalizado, tipo_envio, creado_en)
-                    values %s
-                    on conflict (id_normalizado) where id_normalizado <> 'Revisar_Manual'
-                    do update set
-                        escaneo_crudo = excluded.escaneo_crudo,
-                        tamano = excluded.tamano,
-                        tipo_envio = excluded.tipo_envio,
-                        creado_en = excluded.creado_en
-                    where excluded.creado_en > picking_tamanos.creado_en
-                    """,
-                    [(f["escaneo_crudo"], f["tamano"], f["id_normalizado"], f["tipo_envio"], f["creado_en"])
-                     for f in filas_finales],
-                )
+        _upsertear(conn, filas_finales)
         print(f"Listo -- {len(filas_finales)} filas procesadas en picking_tamanos.")
     except Exception:
         conn.rollback()
         raise
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fecha", help="YYYY-MM-DD -- por defecto, ayer en hora ART")
+    parser.add_argument("--desde", help="YYYY-MM-DD -- primer día de un backfill de rango")
+    parser.add_argument("--hasta", help="YYYY-MM-DD -- último día (inclusive) de un backfill de rango")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+
+    if args.desde or args.hasta:
+        if args.fecha:
+            sys.exit("No se puede combinar --fecha con --desde/--hasta.")
+        if not (args.desde and args.hasta):
+            sys.exit("--desde y --hasta van juntos.")
+        fechas_objetivo = []
+        actual = datetime.strptime(args.desde, "%Y-%m-%d").date()
+        fin = datetime.strptime(args.hasta, "%Y-%m-%d").date()
+        if actual > fin:
+            sys.exit("--desde no puede ser posterior a --hasta.")
+        while actual <= fin:
+            fechas_objetivo.append(actual)
+            actual += timedelta(days=1)
+    else:
+        fechas_objetivo = [
+            datetime.strptime(args.fecha, "%Y-%m-%d").date()
+            if args.fecha else fecha_art_hoy() - timedelta(days=1)
+        ]
+
+    filas_crudas = leer_filas_sheet()
+    print(f"Filas totales leídas de la hoja '{SHEET_TAB}': {len(filas_crudas)}")
+
+    conn = None
+    if not args.dry_run:
+        url = os.environ.get("SUPABASE_DB_URL")
+        if not url:
+            sys.exit("Falta SUPABASE_DB_URL en el entorno (o scripts/.env).")
+        import psycopg2
+        conn = psycopg2.connect(url, connect_timeout=10)
+
+    try:
+        for fecha_objetivo in fechas_objetivo:
+            procesar_dia(filas_crudas, fecha_objetivo, conn, args.dry_run)
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 if __name__ == "__main__":

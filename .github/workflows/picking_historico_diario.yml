@@ -25,7 +25,13 @@ on:
   workflow_dispatch:
     inputs:
       fecha:
-        description: 'Fecha puntual a reimportar (YYYY-MM-DD) -- vacío = ayer'
+        description: 'Fecha puntual a reimportar (YYYY-MM-DD) -- vacío = ayer. No combinar con desde/hasta.'
+        required: false
+      desde:
+        description: 'Backfill de rango: primer día (YYYY-MM-DD) -- usar junto con "hasta"'
+        required: false
+      hasta:
+        description: 'Backfill de rango: último día inclusive (YYYY-MM-DD) -- usar junto con "desde"'
         required: false
 
 concurrency:
@@ -59,4 +65,7 @@ jobs:
           GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          python3 importar_picking_diario.py ${{ github.event.inputs.fecha && format('--fecha {0}', github.event.inputs.fecha) || '' }}
+          python3 importar_picking_diario.py \
+            ${{ github.event.inputs.fecha && format('--fecha {0}', github.event.inputs.fecha) || '' }} \
+            ${{ github.event.inputs.desde && format('--desde {0}', github.event.inputs.desde) || '' }} \
+            ${{ github.event.inputs.hasta && format('--hasta {0}', github.event.inputs.hasta) || '' }}
