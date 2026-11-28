@@ -691,3 +691,28 @@ Fix (`scripts/migraciones/2026-11-27_liquidacion_sin_cordon_editable.sql`):
    corregir el Cordón/Tamaño de un envío puntual sin salir de la
    pantalla, mientras el período siga pendiente/borrador. `envios` sigue
    de solo lectura para el navegador fuera de esta RPC puntual.
+
+---
+
+## Changelog 2026-11-28 — Puente temporal: Picking Medianos/Grandes desde Google Sheets
+
+Pedido del usuario: mientras la operación de Picking Medianos/Grandes
+siga haciéndose en la planilla vieja (no en la pantalla "Picking
+Tamaños" de este sistema), un proceso automático diario tiene que copiar
+los escaneos de cada día a `picking_tamanos`, para que la Liquidación de
+Repartidores (que ya depende de esa tabla) no se quede desactualizada.
+
+Agregado: `scripts/ingesta_lightdata/importar_picking_diario.py` (lee la
+hoja "Historico" de la planilla Picking_historia vía la API de Google
+Sheets, se queda con los escaneos de AYER en hora ART, deduplica por
+`id_normalizado` igual que el backfill manual ya existente
+—`importar_picking_historico.py`— y hace upsert en `picking_tamanos`) +
+`.github/workflows/picking_historico_diario.yml` (corre todos los días a
+las 02:00 ART, dos horas después de que el proceso externo vuelca el día
+a la planilla a medianoche).
+
+Documentación completa (setup de la service account de Google, secrets
+nuevos que hacen falta, y **cómo cortar este puente** el día que se
+migre la operación completa) en `docs/migracion_picking_historico.md` —
+es un puente explícitamente temporal, pensado para desarmarse solo
+(borrar 2-3 archivos) sin dejar nada enganchado al resto del sistema.

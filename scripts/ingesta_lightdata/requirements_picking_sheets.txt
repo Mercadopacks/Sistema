@@ -1,0 +1,7 @@
+# Dependencias exclusivas de importar_picking_diario.py (puente temporal,
+# ver docs/migracion_picking_historico.md) -- aparte de requirements.txt/
+# requirements_supabase.txt a propósito, para que al cortar este puente
+# alcance con borrar este archivo + el script + el workflow, sin tocar
+# las dependencias del resto de los scripts.
+google-api-python-client
+google-auth

@@ -1,0 +1,62 @@
+name: Importar Picking Medianos/Grandes (puente temporal)
+
+# PUENTE TEMPORAL (pedido 2026-11-28) — ver
+# docs/migracion_picking_historico.md para la explicación completa y,
+# sobre todo, cómo CORTAR este workflow el día que se migre la operación
+# de Picking a la pantalla "Picking Tamaños" de este sistema.
+#
+# El proceso de Picking (fuera de este repo) vuelca los escaneos del día
+# a la hoja "Historico" de Picking_historia (Google Sheets) todas las
+# noches a las 00:00 ART. Este workflow corre después de ese volcado y
+# sube los escaneos de AYER a `picking_tamanos`.
+#
+# Secrets nuevos que necesita (no los usa ningún otro workflow de este
+# repo todavía):
+#   GOOGLE_SHEETS_CREDENTIALS_JSON  service account con acceso de
+#                                   Lector a la planilla (ver el doc).
+#   SUPABASE_DB_URL                 conexión directa a Postgres (Connect >
+#                                   Session pooler > URI) -- hace falta
+#                                   para el UPDATE condicional del upsert,
+#                                   que el cliente REST no puede expresar.
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # 05:00 UTC = 02:00 ART (el schedule nativo de GitHub Actions puede atrasarse unas horas -- ver publicar_supabase.yml)
+  workflow_dispatch:
+    inputs:
+      fecha:
+        description: 'Fecha puntual a reimportar (YYYY-MM-DD) -- vacío = ayer'
+        required: false
+
+concurrency:
+  group: importar-picking-diario
+  cancel-in-progress: false
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/mercadopacks/mercadopacks-metricas-diarias/ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Descargar repo
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias
+        working-directory: scripts
+        run: |
+          pip install -r requirements_supabase.txt
+          pip install -r ingesta_lightdata/requirements_picking_sheets.txt
+
+      - name: Importar escaneos de Picking de ayer
+        working-directory: scripts/ingesta_lightdata
+        env:
+          GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          python3 importar_picking_diario.py ${{ github.event.inputs.fecha && format('--fecha {0}', github.event.inputs.fecha) || '' }}

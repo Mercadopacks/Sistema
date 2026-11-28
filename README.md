@@ -63,12 +63,18 @@ a `../ingesta_lightdata`).
 - **`.github/workflows/publicar_supabase.yml`**: automatiza el pipeline
   de ingesta (disparado por cron-job.org, no por `schedule:` nativo de
   GitHub Actions — ver el workflow para por qué). **`backfill_fallidos_diario.yml`**:
-  corre la reconciliación diaria de Fallidos/Cambios.
+  corre la reconciliación diaria de Fallidos/Cambios. **`picking_historico_diario.yml`**:
+  puente TEMPORAL que importa los escaneos de Picking Medianos/Grandes
+  desde Google Sheets (`scripts/ingesta_lightdata/importar_picking_diario.py`)
+  mientras esa operación no esté 100% migrada a este sistema — ver
+  `docs/migracion_picking_historico.md` para el setup y cómo cortarlo.
 - **`docs/`**: `reglas_de_negocio.md` (reglas de negocio, esquema de BD,
   arquitectura — leer antes de tocar cualquier cosa), `diccionario_de_datos.md`
   (columnas del export crudo de LightData), `integracion_usuarios_lightdata.md`,
-  `lightdata_api_envios.md` (referencia técnica del endpoint interno) y
-  `qa_fallidos_estado.md` (batería de test de esa sección).
+  `lightdata_api_envios.md` (referencia técnica del endpoint interno),
+  `qa_fallidos_estado.md` (batería de test de esa sección) y
+  `migracion_picking_historico.md` (puente temporal Google Sheets ->
+  `picking_tamanos`, con el setup y cómo cortarlo).
 - **`.claude/skills/`**: skills de Claude Code propios de este repo
   (reglas de UI, cómo levantar el entorno local).
 
